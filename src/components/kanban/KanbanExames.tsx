@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import {
     DndContext,
@@ -11,7 +11,7 @@ import {
     useSensors,
     PointerSensor,
     DragOverlay,
-    useDroppable
+    useDroppable,
 } from "@dnd-kit/core"
 import {
     SortableContext,
@@ -23,11 +23,12 @@ import { CSS } from "@dnd-kit/utilities"
 
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Textarea } from "@/components/ui/textarea"
+import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
+import { Stethoscope, Activity, Trash2, Loader2, Link2 } from "lucide-react"
 
 // ================= TYPES =================
 
@@ -38,7 +39,8 @@ type Exame = {
     tempo_execucao_segundos: number
     observacao?: string
     ordem?: number
-    dependencia_id?: string | null
+    dependencia_id?: string
+    depende_de_exame_id?: string
 }
 
 type Especialidade = {
@@ -47,100 +49,87 @@ type Especialidade = {
     exames: Exame[]
 }
 
-// ================= DRAG ITEM =================
+// ================= COMPONENTS =================
 
 function SortableItem({ id, children }: { id: string; children: React.ReactNode }) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
-    const style = { transform: CSS.Transform.toString(transform), transition }
+    const style = {
+        transform: CSS.Translate.toString(transform),
+        transition,
+        opacity: isDragging ? 0.3 : 1
+    }
     return (
         <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-            <div className={`transition-shadow ${isDragging ? "shadow-2xl" : ""}`}>
-                {children}
-            </div>
+            {children}
         </div>
     )
 }
 
-function getColorTempo(segundos: number) {
-    if (segundos <= 120) return "bg-green-500 text-white"
-    if (segundos <= 300) return "bg-yellow-500 text-white"
-    return "bg-red-500 text-white"
+function DroppableColumn({ id, children }: { id: string, children: React.ReactNode }) {
+    const { setNodeRef } = useDroppable({ id })
+    return <div ref={setNodeRef} className="flex flex-col gap-2 min-h-[150px]">{children}</div>
 }
 
 export default function KanbanExames() {
     const [data, setData] = useState<Especialidade[]>([])
     const [loading, setLoading] = useState(true)
-
     const [openModal, setOpenModal] = useState(false)
     const [tipoModal, setTipoModal] = useState<"especialidade" | "exame">("exame")
-    const [editandoEspecialidade, setEditandoEspecialidade] = useState<string | null>(null)
+
     const [editandoExame, setEditandoExame] = useState<Exame | null>(null)
-
+    const [editandoEspecialidade, setEditandoEspecialidade] = useState<string | null>(null)
     const [form, setForm] = useState<any>({})
-    const [activeId, setActiveId] = useState<string | null>(null)
+    const [activeExame, setActiveExame] = useState<Exame | null>(null)
 
-    const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
+    const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
+
+    const allExames = data.flatMap(esp => esp.exames)
 
     async function fetchData() {
-        const { data, error } = await supabase
+        setLoading(true)
+        const { data: rawData, error: errorExames } = await supabase
             .from("especialidades")
-            .select(`
-                    id,
-                    nome,
-                    exames (
-                    *,
-                    exame_dependencias!exame_dependencias_exame_id_fkey (
-                        depende_de_exame_id
-                    )
-                    )
-                `)
+            .select(`id, nome, exames (*)`)
 
-        if (error) {
-            console.error(error)
-            toast.error("Erro ao carregar")
+        const { data: depsData, error: errorDeps } = await supabase
+            .from("exame_dependencias")
+            .select("*")
+
+        if (errorExames || errorDeps) {
+            toast.error("Erro ao carregar dados")
             return
         }
 
-        // ordenar por ordem
-        const ordered = (data || []).map((c: any) => ({
+        const ordered = (rawData || []).map((c: any) => ({
             ...c,
-            exames: (c.exames || []).map((e: any) => ({
-                ...e,
-                dependencia_id: e.exame_dependencias?.[0]?.depende_de_exame_id || null
-            })).sort((a: Exame, b: Exame) => (a.ordem ?? 0) - (b.ordem ?? 0)),
+            exames: (c.exames || [])
+                .map((exame: any) => {
+                    const dep = depsData?.find(d => d.exame_id === exame.id)
+                    return {
+                        ...exame,
+                        depende_de_exame_id: dep?.depende_de_exame_id,
+                        dependencia_id: dep?.id
+                    }
+                })
+                .sort((a: Exame, b: Exame) => (a.ordem ?? 0) - (b.ordem ?? 0)),
         }))
 
         setData(ordered)
         setLoading(false)
     }
 
-    useEffect(() => {
-        fetchData()
-    }, [])
+    useEffect(() => { fetchData() }, [])
 
-    // helpers
-    const findColumnByItem = (itemId: string) => {
-        return data.find((col) => col.exames.some((e) => e.id === itemId))
-    }
+    const findColumnByItem = (itemId: string) => data.find((col) => col.exames.some((e) => e.id === itemId))
 
-    const getExameById = (id: string | null) => {
-        if (!id) return null
-        for (const col of data) {
-            const e = col.exames.find((x) => x.id === id)
-            if (e) return e
-        }
-        return null
-    }
-
-    // ================= DRAG =================
-
-    function handleDragStart(e: DragStartEvent) {
-        setActiveId(e.active.id as string)
+    function handleDragStart(event: DragStartEvent) {
+        const exame = data.flatMap(c => c.exames).find(e => e.id === event.active.id)
+        if (exame) setActiveExame(exame)
     }
 
     async function handleDragEnd(event: DragEndEvent) {
         const { active, over } = event
-        setActiveId(null)
+        setActiveExame(null)
         if (!over) return
 
         const activeId = active.id as string
@@ -151,285 +140,252 @@ export default function KanbanExames() {
 
         if (!sourceCol || !targetCol) return
 
-        // mover entre colunas
         if (sourceCol.id !== targetCol.id) {
+            setData(prev => prev.map(col => {
+                if (col.id === sourceCol.id) return { ...col, exames: col.exames.filter(e => e.id !== activeId) }
+                if (col.id === targetCol.id) return { ...col, exames: [...col.exames, { ...sourceCol.exames.find(e => e.id === activeId)!, especialidade_id: targetCol.id }] }
+                return col
+            }))
             await supabase.from("exames").update({ especialidade_id: targetCol.id }).eq("id", activeId)
-            toast.success("Movido de coluna")
-            return fetchData()
+            toast.success("Especialidade alterada")
+            return
         }
 
-        // reorder na mesma coluna
         const oldIndex = sourceCol.exames.findIndex((e) => e.id === activeId)
         const newIndex = sourceCol.exames.findIndex((e) => e.id === overId)
 
         if (oldIndex !== newIndex) {
             const newItems = arrayMove(sourceCol.exames, oldIndex, newIndex)
+            setData(prev => prev.map(col => col.id === sourceCol.id ? { ...col, exames: newItems } : col))
 
-            // persistir ordem
-            await Promise.all(
-                newItems.map((item, idx) =>
-                    supabase.from("exames").update({ ordem: idx }).eq("id", item.id)
-                )
+            const updates = newItems.map((item, idx) =>
+                supabase.from("exames").update({ ordem: idx }).eq("id", item.id)
             )
-
-            toast.success("Ordem atualizada")
-            fetchData()
+            await Promise.all(updates)
         }
     }
-
-    // ================= CRUD =================
 
     async function salvar() {
-        if (tipoModal === "especialidade") {
-            if (editandoEspecialidade) {
-                await supabase.from("especialidades").update({ nome: form.nome }).eq("id", editandoEspecialidade)
-                toast.success("Atualizado")
+        try {
+            if (tipoModal === "especialidade") {
+                const payload = { nome: form.nome.toUpperCase() }
+                if (editandoEspecialidade) {
+                    await supabase.from("especialidades").update(payload).eq("id", editandoEspecialidade)
+                } else {
+                    await supabase.from("especialidades").insert(payload)
+                }
             } else {
-                await supabase.from("especialidades").insert({ nome: form.nome })
-                toast.success("Criado")
-            }
-        }
-
-        if (tipoModal === "exame") {
-            if (tipoModal === "exame" && editandoExame) {
-                await supabase
-                    .from("exames")
-                    .update({
-                        nome: form.nome,
-                        especialidade_id: form.especialidade_id,
-                        tempo_execucao_segundos: Number(form.tempo),
-                        observacao: form.observacao,
-                    })
-                    .eq("id", editandoExame.id)
-
-                // dependência (simplificado: 1 dependência)
-                if (form.dependencia) {
-                    await supabase.from("exame_dependencias").delete().eq("exame_id", editandoExame.id)
-                    await supabase.from("exame_dependencias").insert({
-                        exame_id: editandoExame.id,
-                        depende_de_exame_id: form.dependencia,
-                    })
+                const payloadExame = {
+                    nome: form.nome.toUpperCase(),
+                    especialidade_id: form.especialidade_id,
+                    tempo_execucao_segundos: Number(form.tempo),
                 }
 
-                toast.success("Exame atualizado")
-            } else {
-                const { data: novo } = await supabase
-                    .from("exames")
-                    .insert({
-                        nome: form.nome,
-                        especialidade_id: form.especialidade_id,
-                        tempo_execucao_segundos: Number(form.tempo),
-                        observacao: form.observacao,
-                    })
-                    .select()
-                    .single()
-
-                if (form.dependencia) {
-                    await supabase.from("exame_dependencias").insert({
-                        exame_id: novo.id,
-                        depende_de_exame_id: form.dependencia,
-                    })
+                let exameId = editandoExame?.id
+                if (editandoExame) {
+                    await supabase.from("exames").update(payloadExame).eq("id", exameId)
+                } else {
+                    const { data: n } = await supabase.from("exames").insert(payloadExame).select().single()
+                    exameId = n.id
                 }
 
-                toast.success("Exame criado")
+                await supabase.from("exame_dependencias").delete().eq("exame_id", exameId)
+
+                if (form.depende_de_exame_id) {
+                    await supabase.from("exame_dependencias").insert({
+                        exame_id: exameId,
+                        depende_de_exame_id: form.depende_de_exame_id
+                    })
+                }
             }
+            toast.success("Salvo com sucesso")
+            fecharModal()
+            fetchData()
+        } catch (err) {
+            toast.error("Erro ao salvar")
         }
-
-        setOpenModal(false)
-        setEditandoEspecialidade(null)
-        setEditandoExame(null)
-        setForm({})
-        fetchData()
     }
 
-    async function deletarExame(id: string) {
-        await supabase.from("exames").delete().eq("id", id)
-        toast.success("Excluído")
-        fetchData()
+    async function deletarExame() {
+        if (!editandoExame || !confirm("Excluir exame?")) return
+        await supabase.from("exames").delete().eq("id", editandoExame.id)
+        toast.success("Removido")
+        fecharModal(); fetchData()
     }
 
-    if (loading) return <div className="p-6">Carregando...</div>
+    const fecharModal = () => {
+        setOpenModal(false); setEditandoExame(null); setEditandoEspecialidade(null); setForm({})
+    }
 
-    function DroppableColumn({ id, children }: any) {
-        const { setNodeRef } = useDroppable({ id })
+    const renderExameCard = (exame: Exame, isOverlay = false) => {
+        // Encontra o nome do exame do qual este depende
+        const nomeDependencia = allExames.find(e => e.id === exame.depende_de_exame_id)?.nome
 
         return (
-            <div ref={setNodeRef}>
-                {children}
-            </div>
+            <Card className={`border-none bg-white dark:bg-slate-800 shadow-sm transition-all ${!isOverlay ? 'hover:ring-1 ring-emerald-500 cursor-grab' : 'shadow-2xl ring-2 ring-emerald-500 scale-105'}`}>
+                <CardContent className="p-3 space-y-2">
+                    {/* Aumentei para text-[11px] e font-black */}
+                    <div className="font-black text-slate-800 dark:text-slate-100 uppercase text-[11px] leading-tight line-clamp-2">
+                        {exame.nome}
+                    </div>
+                    
+                    <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-700/50 pt-2">
+                        <div className="flex items-center gap-3">
+                            {/* Tempo de Execução */}
+                            <div className="flex items-center gap-1">
+                                <Activity className="w-3 h-3 text-emerald-500" />
+                                <span className="text-[10px] font-black text-slate-500 uppercase">{exame.tempo_execucao_segundos}s</span>
+                            </div>
+
+                            {/* Dependência Visual ao lado do tempo */}
+                            {exame.depende_de_exame_id && (
+                                <div className="flex items-center gap-1 bg-blue-50 dark:bg-blue-900/20 px-1.5 py-0.5 rounded border border-blue-100 dark:border-blue-800">
+                                    <Link2 className="w-2.5 h-2.5 text-blue-600 dark:text-blue-400" />
+                                    <span className="text-[8px] font-bold text-blue-600 dark:text-blue-400 uppercase truncate max-w-[80px]">
+                                        {nomeDependencia || "DEP"}
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
         )
     }
 
+    if (loading) return (
+        <div className="flex items-center justify-center min-h-screen bg-slate-50 dark:bg-slate-950">
+            <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
+        </div>
+    )
+
     return (
-        <>
-            {/* HEADER */}
-            <div className="p-6">
-                <div className="bg-white dark:bg-gray-900 rounded-2xl shadow p-6 flex flex-col md:flex-row justify-between gap-4">
-                    <div>
-                        <h1 className="text-xl font-bold">KANBAN - Especialidades e Exames</h1>
-                        <p className="text-sm text-gray-500">Unidade: (não definida)</p>
+        <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-4">
+            <div className="max-w-[100%] mx-auto space-y-4">
+                {/* HEADER */}
+                <div className="bg-slate-900 rounded-xl p-4 flex justify-between items-center border border-slate-800 shadow-xl">
+                    <div className="flex items-center gap-3">
+                        <div className="bg-emerald-500/20 p-1.5 rounded-lg"><Stethoscope className="w-5 h-5 text-emerald-400" /></div>
+                        <div>
+                            <h1 className="text-lg font-black text-white uppercase leading-none tracking-tight">Fluxo de Exames</h1>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Gestão de Especialidades/Exames</p>
+                        </div>
                     </div>
-
-                    <div className="flex gap-3">
-                        <Button onClick={() => {
-                            setTipoModal("especialidade")
-
-                            setEditandoEspecialidade(null)
-                            setForm({})
-
-                            setOpenModal(true)
-                        }}>+ Especialidade</Button>
-                        <Button
-                            variant="secondary"
-                            onClick={() => {
-                                setTipoModal("exame")
-                                setEditandoExame(null)
-                                setForm({})
-
-                                setOpenModal(true)
-                            }}
-                        >
+                    <div className="flex gap-2">
+                        <Button onClick={() => { setTipoModal("especialidade"); setOpenModal(true); }} variant="outline" className="h-9 border-slate-700 text-white text-[10px] font-bold uppercase tracking-widest bg-blue-600 hover:bg-blue-500">
+                            + Especialidade
+                        </Button>
+                        <Button onClick={() => { setTipoModal("exame"); setOpenModal(true); }} className="h-9 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold uppercase tracking-widest">
                             + Exame
                         </Button>
                     </div>
                 </div>
+
+                {/* KANBAN BOARD */}
+                <div className="overflow-x-auto pb-4 scrollbar-hide">
+                    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+                        <div className="flex gap-4 min-w-max md:min-w-0 md:grid md:grid-cols-3 lg:grid-cols-6 items-start">
+                            {data.map((col) => (
+                                <div key={col.id} className="w-[280px] md:w-auto bg-slate-200/40 dark:bg-slate-900/40 rounded-xl p-2 border border-slate-200 dark:border-slate-800 shrink-0">
+                                    <div className="flex justify-between items-center mb-3 px-1 group cursor-pointer"
+                                        onClick={() => { setTipoModal("especialidade"); setEditandoEspecialidade(col.id); setForm({ nome: col.nome }); setOpenModal(true); }}>
+                                        <h2 className="font-black text-slate-700 dark:text-slate-300 uppercase text-[9px] tracking-widest truncate group-hover:text-emerald-500 transition-colors">
+                                            {col.nome}
+                                        </h2>
+                                        <Badge className="h-4 px-1 text-[9px] bg-white dark:bg-slate-800 text-slate-500 border-none shadow-sm">{col.exames.length}</Badge>
+                                    </div>
+
+                                    <SortableContext items={col.exames.map(e => e.id)} strategy={verticalListSortingStrategy}>
+                                        <DroppableColumn id={col.id}>
+                                            {col.exames.map((exame) => (
+                                                <SortableItem key={exame.id} id={exame.id}>
+                                                    <div onClick={() => {
+                                                        setTipoModal("exame");
+                                                        setEditandoExame(exame);
+                                                        setForm({ ...exame, tempo: exame.tempo_execucao_segundos });
+                                                        setOpenModal(true);
+                                                    }}>
+                                                        {renderExameCard(exame)}
+                                                    </div>
+                                                </SortableItem>
+                                            ))}
+                                        </DroppableColumn>
+                                    </SortableContext>
+                                </div>
+                            ))}
+                        </div>
+                        <DragOverlay>
+                            {activeExame ? renderExameCard(activeExame, true) : null}
+                        </DragOverlay>
+                    </DndContext>
+                </div>
             </div>
 
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-                <div className="flex gap-6 overflow-x-auto px-6 pb-6">
-                    {data.map((col) => (
-                        <DroppableColumn key={col.id} id={col.id}>
-                            <div className="w-80 bg-gray-50 dark:bg-gray-800 rounded-2xl p-4 shadow">
-                                <div className="flex justify-between items-center mb-4 cursor-pointer"
-                                    onClick={() => {
-                                        setTipoModal("especialidade")
-                                        setEditandoEspecialidade(col.id)
-                                        setForm({ nome: col.nome })
-                                        setOpenModal(true)
-                                    }}>
-                                    <h2 className="font-bold text-lg">{col.nome}</h2>
-                                    <span className="text-xs text-gray-400">editar</span>
-                                </div>
-
-                                <SortableContext items={col.exames.map((e) => e.id)} strategy={verticalListSortingStrategy}>
-                                    <div className="flex flex-col gap-3 min-h-[50px]">
-                                        {col.exames.map((exame) => (
-                                            <SortableItem key={exame.id} id={exame.id}>
-                                                <Card
-                                                    className="cursor-grab active:cursor-grabbing hover:shadow-lg transition"
-                                                    onClick={() => {
-                                                        setTipoModal("exame")
-                                                        setEditandoExame(exame)
-                                                        setForm({
-                                                            nome: exame.nome,
-                                                            especialidade_id: exame.especialidade_id,
-                                                            tempo: exame.tempo_execucao_segundos,
-                                                            observacao: exame.observacao,
-                                                        })
-                                                        setOpenModal(true)
-                                                    }}
-                                                >
-                                                    <CardContent className="px-3 flex flex-col gap-2">
-                                                        <div className="font-semibold">{exame.nome}</div>
-
-                                                        <div className="flex gap-2 mt-2 flex-wrap">
-                                                            <Badge className={getColorTempo(exame.tempo_execucao_segundos)}>
-                                                                ⏱ {exame.tempo_execucao_segundos}s
-                                                            </Badge>
-                                                        </div>
-
-                                                        {exame.dependencia_id && (
-                                                            <Badge variant="outline" className="text-xs">
-                                                                Depende de {getExameById(exame.dependencia_id)?.nome || "exame desconhecido"}
-                                                            </Badge>
-                                                        )}
-
-                                                        {exame.observacao && (
-                                                            <p className="text-xs text-gray-500 mt-2 line-clamp-2">
-                                                                {exame.observacao}
-                                                            </p>
-                                                        )}
-
-                                                        <div className="flex justify-end mt-2">
-                                                            <Button size="sm" variant="destructive" onClick={(e) => { e.stopPropagation(); deletarExame(exame.id) }}>
-                                                                Excluir
-                                                            </Button>
-                                                        </div>
-                                                    </CardContent>
-                                                </Card>
-                                            </SortableItem>
-                                        ))}
-                                    </div>
-                                </SortableContext>
-                            </div>
-                        </DroppableColumn>
-                    ))}
-                </div>
-
-                <DragOverlay>
-                    {activeId ? (
-                        <Card className="shadow-2xl">
-                            <CardContent className="p-3">{getExameById(activeId)?.nome}</CardContent>
-                        </Card>
-                    ) : null}
-                </DragOverlay>
-            </DndContext>
-
-            {/* MODAL */}
-            <Dialog
-                open={openModal}
-                onOpenChange={(open) => {
-                    setOpenModal(open)
-
-                    if (!open) {
-                        setEditandoExame(null)
-                        setEditandoEspecialidade(null)
-                        setForm({})
-                    }
-                }}
-            >
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>
-                            {tipoModal === "especialidade"
-                                ? editandoEspecialidade ? "Editar Especialidade" : "Nova Especialidade"
-                                : editandoExame ? "Editar Exame" : "Novo Exame"}
+            {/* MODAL UNIFICADO */}
+            <Dialog open={openModal} onOpenChange={fecharModal}>
+                <DialogContent className="sm:max-w-[420px] bg-white dark:bg-slate-900 border-none shadow-2xl p-6 overflow-y-auto max-h-[90vh]">
+                    <DialogHeader className="space-y-3">
+                        <div className="bg-emerald-500/10 w-fit p-3 rounded-2xl mx-auto">
+                            {tipoModal === "exame" ? <Activity className="w-8 h-8 text-emerald-500" /> : <Stethoscope className="w-8 h-8 text-emerald-500" />}
+                        </div>
+                        <DialogTitle className="text-center text-xl font-black uppercase tracking-tight text-slate-800 dark:text-white">
+                            {tipoModal === "exame" ? (editandoExame ? "Editar Exame" : "Novo Exame") : (editandoEspecialidade ? "Editar Especialidade" : "Nova Especialidade")}
                         </DialogTitle>
                     </DialogHeader>
 
-                    <div className="flex flex-col gap-3 min-h-[80px]">
-                        <Input placeholder="Nome" value={form.nome || ""} onChange={(e) => setForm({ ...form, nome: e.target.value })} />
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Nome</Label>
+                            <Input
+                                className="h-12 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-bold uppercase text-xs focus:ring-emerald-500"
+                                value={form.nome || ""}
+                                onChange={e => setForm({ ...form, nome: e.target.value.toUpperCase() })}
+                            />
+                        </div>
 
                         {tipoModal === "exame" && (
                             <>
-                                <select className="border rounded p-2" value={form.especialidade_id || ""}
-                                    onChange={(e) => setForm({ ...form, especialidade_id: e.target.value })}>
-                                    <option value="">Selecione especialidade</option>
-                                    {data.map((e) => (
-                                        <option key={e.id} value={e.id}>{e.nome}</option>
-                                    ))}
-                                </select>
-
-                                <Input placeholder="Tempo estimado (s)" value={form.tempo || ""}
-                                    onChange={(e) => setForm({ ...form, tempo: e.target.value })} />
-
-                                <Textarea placeholder="Observação" value={form.observacao || ""}
-                                    onChange={(e) => setForm({ ...form, observacao: e.target.value })} />
-
-                                <select className="border rounded p-2"
-                                    onChange={(e) => setForm({ ...form, dependencia: e.target.value })}>
-                                    <option value="">Dependência (opcional)</option>
-                                    {data.flatMap((c) => c.exames).map((e) => (
-                                        <option key={e.id} value={e.id}>{e.nome}</option>
-                                    ))}
-                                </select>
+                                <div className="space-y-2">
+                                    <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Tempo (segundos)</Label>
+                                    <Input
+                                        type="number"
+                                        className="h-12 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-bold text-xs"
+                                        value={form.tempo || ""}
+                                        onChange={e => setForm({ ...form, tempo: e.target.value })}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Depende de qual exame?</Label>
+                                    <select
+                                        className="flex h-12 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-xs font-bold uppercase"
+                                        value={form.depende_de_exame_id || ""}
+                                        onChange={e => setForm({ ...form, depende_de_exame_id: e.target.value })}
+                                    >
+                                        <option value="">NENHUMA DEPENDÊNCIA</option>
+                                        {allExames
+                                            .filter(e => e.id !== editandoExame?.id)
+                                            .map(e => <option key={e.id} value={e.id}>{e.nome}</option>)
+                                        }
+                                    </select>
+                                </div>
                             </>
                         )}
+                    </div>
 
-                        <Button onClick={salvar}>Salvar</Button>
+                    <div className="space-y-3">
+                        {tipoModal === "exame" && editandoExame && (
+                            <Button variant="ghost" className="w-full text-rose-500 bg-rose-500/10 font-bold uppercase text-[10px] hover:bg-rose-50 dark:hover:bg-rose-950/30" onClick={deletarExame}>
+                                <Trash2 className="w-3 h-3 mr-2" /> Excluir Exame
+                            </Button>
+                        )}
+                        <DialogFooter>
+                            <Button className="w-full h-12 bg-emerald-600 hover:bg-emerald-700 text-white font-bold uppercase tracking-widest transition-all" onClick={salvar}>
+                                Salvar Alterações
+                            </Button>
+                        </DialogFooter>
                     </div>
                 </DialogContent>
             </Dialog>
-        </>
+        </div>
     )
 }
