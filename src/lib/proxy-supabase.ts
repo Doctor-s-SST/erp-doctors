@@ -5,6 +5,7 @@ import { NextResponse, type NextRequest } from "next/server"
 const ROUTE_PERMISSIONS: Record<string, string[]> = {
   "/sistema-filas/kanban": ["admin"],
   "/sistema-filas/users": ["admin"],
+  "/sistema-filas/painel": ["admin"],
   "/sistema-filas/senhas-recepcao": ["admin", "recepcao", "especialista"],
   "/sistema-filas/filas": ["admin", "especialista", "recepcao"],
 }

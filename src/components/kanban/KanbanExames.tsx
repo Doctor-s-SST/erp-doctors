@@ -323,7 +323,7 @@ export default function KanbanExames() {
 
             {/* MODAL UNIFICADO */}
             <Dialog open={openModal} onOpenChange={fecharModal}>
-                <DialogContent className="sm:max-w-[420px] bg-white dark:bg-slate-900 border-none shadow-2xl p-6 overflow-y-auto max-h-[90vh]">
+                <DialogContent className="sm:max-w-105 bg-white dark:bg-slate-900 border-none shadow-2xl p-6 overflow-y-auto max-h-[90vh]">
                     <DialogHeader className="space-y-3">
                         <div className="bg-emerald-500/10 w-fit p-3 rounded-2xl mx-auto">
                             {tipoModal === "exame" ? <Activity className="w-8 h-8 text-emerald-500" /> : <Stethoscope className="w-8 h-8 text-emerald-500" />}
@@ -344,7 +344,23 @@ export default function KanbanExames() {
                         </div>
 
                         {tipoModal === "exame" && (
-                            <>
+    <>
+        {/* NOVO CAMPO: SELEÇÃO DE ESPECIALIDADE */}
+        <div className="space-y-2">
+            <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Especialidade</Label>
+            <select
+                className="flex h-12 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-xs font-bold uppercase focus:ring-2 focus:ring-emerald-500 outline-none"
+                value={form.especialidade_id || ""}
+                onChange={e => setForm({ ...form, especialidade_id: e.target.value })}
+            >
+                <option value="" disabled>SELECIONE UMA ESPECIALIDADE</option>
+                {data.map(esp => (
+                    <option key={esp.id} value={esp.id}>
+                        {esp.nome}
+                    </option>
+                ))}
+            </select>
+        </div>
                                 <div className="space-y-2">
                                     <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Tempo (segundos)</Label>
                                     <Input

@@ -35,6 +35,7 @@ const navItems: NavItem[] = [
       { name: "Kanban", path: "/sistema-filas/kanban", roles: ["admin"] },
       { name: "Chamada de Senhas", path: "/sistema-filas/senhas-recepcao", roles: ["admin", "recepcao"] },
       { name: "Filas", path: "/sistema-filas/filas", roles: ["admin", "recepcao", "especialista"] },
+      { name: "Painel", path: "/sistema-filas/painel", roles: ["admin"] },
       { name: "Gerenciar Usuários", path: "/sistema-filas/users", roles: ["admin"] },
     ],
   },

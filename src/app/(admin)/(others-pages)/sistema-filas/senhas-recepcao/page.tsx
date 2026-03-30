@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
 import { useEffect, useState, useRef, useMemo } from "react"
@@ -9,31 +10,26 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
-import { FileEdit, CheckCircle2, RefreshCw, User, Monitor, XCircle, Filter, ArrowUpDown, Clock, PlusCircle, MonitorCheck, UploadCloud, Save, Plus } from "lucide-react"
+import { FileEdit, CheckCircle2, RefreshCw, User, Monitor, XCircle, Filter, ArrowUpDown, Clock, PlusCircle, MonitorCheck, UploadCloud, Save, Building2, Stethoscope, BellRing } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 type Atendimento = {
-    id: string
-    senha_codigo: string
-    tipo_senha: string
-    nome: string
-    ficha_sequencial: string
-    created_at: string
-    status: string
-    guiche: string
+    id: string;
+    senha_codigo: string;
+    tipo_senha: string;
+    nome: string;
+    ficha_sequencial: string;
+    created_at: string;
+    status: string;
+    guiche: string;
+    tempo_espera_min: number;
+    ficha_preenchida: boolean;
 }
 
 type ConfigOrdenacao = {
     coluna: keyof Atendimento | 'tempo_espera'
     direcao: 'asc' | 'desc'
-}
-
-interface DetalhesFicha {
-    empresa: { razao_social: string; cnpj: string };
-    funcionario: { cargo: string; setor: string; cpf: string };
-    exames: Array<{ exame: string; data: string }>;
-    riscos: { físicos: string[]; químicos: string[]; ergonômicos: string[]; acidentes: string[] };
 }
 
 const RECEPCIONISTAS = ["Livia Beatriz", "Mariana Galvao", "Pietra Senatore", "Marcela Santos"]
@@ -46,20 +42,72 @@ export default function RecepcaoPage() {
     const [openModal, setOpenModal] = useState(false)
     const [ordenacao, setOrdenacao] = useState<ConfigOrdenacao>({ coluna: 'tempo_espera', direcao: 'asc' })
     const generatingRef = useRef(false)
+    const [exameInput, setExameInput] = useState("")
 
     // ESTADOS DO MODAL DE IMPORTAÇÃO
     const [importModal, setImportModal] = useState<{ open: boolean, item: Atendimento | null }>({ open: false, item: null })
-    const [formFicha, setFormFicha] = useState({
-        nome: "",
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const [especialidades, setEspecialidades] = useState<any[]>([])
+    const initialFormFicha = {
         sequencial: 0,
         arquivo: null as File | null,
-        dadosExtra: null as DetalhesFicha | null
-    })
+        empresa: { razao_social: "", cnpj: "" },
+        funcionario: { nome: "", rg: "", nascimento: "", cargo: "", setor: "", cpf: "" },
+        exame: { tipo: "" },
+        exames: [] as Array<{ exame: string }>,
+        especialidadesSelecionadas: [] as number[]
+
+    }
+    const [formFicha, setFormFicha] = useState(initialFormFicha)
+
+    useEffect(() => {
+        const fetchEspecialidades = async () => {
+            const { data } = await supabase.from("especialidades").select("id, nome, exames(id, nome)")
+            setEspecialidades(data || [])
+        }
+
+        fetchEspecialidades()
+        console.log('Exames:', especialidades)
+    }, [])
+
+    const formatarNome = (str: string) => {
+        if (!str) return ""
+        return str.toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+    }
+
+    const handleAddExameManual = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' && exameInput.trim()) {
+            e.preventDefault();
+            const novoExame = { exame: exameInput.trim().toUpperCase() };
+            setFormFicha(prev => ({
+                ...prev,
+                exames: [...prev.exames, novoExame]
+            }));
+            setExameInput("");
+        }
+    };
+
+    const removeExame = (index: number) => {
+        setFormFicha(prev => ({
+            ...prev,
+            exames: prev.exames.filter((_, i) => i !== index)
+        }));
+    };
+
+    const updateNestedField = (category: string, field: string, value: string) => {
+        setFormFicha(prev => ({
+            ...prev,
+            [category]: {
+                ...prev[category as keyof typeof prev],
+                [field]: value
+            }
+        }));
+    };
 
     //user localStorage
     useEffect(() => {
         const checkUser = async () => {
-            const { data: { user }, error } = await supabase.auth.getUser();
+            const { data: { user } } = await supabase.auth.getUser();
 
             if (user) {
                 const userKey = `recepcao_session_${user.id}`;
@@ -81,8 +129,7 @@ export default function RecepcaoPage() {
         checkUser();
     }, []);
 
-
-
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const getTempoEsperaEvolutivo = (item: any) => {
         if (!item.created_at) return { texto: "--", isCancelado: false };
         const statusTravados = ["CANCELADO"];
@@ -112,12 +159,14 @@ export default function RecepcaoPage() {
     }
 
     function getStatusBadge(status: string) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const styles: any = {
-            "AGUARDANDO_RECEPCAO": "bg-slate-100 text-slate-500",
-            "EM_FILA": "bg-amber-100 text-amber-600",
-            "EM_RECEPCAO": "bg-blue-100 text-blue-600 animate-pulse",
-            "FINALIZADO": "bg-emerald-100 text-emerald-600",
-            "CANCELADO": "bg-red-100 text-red-600"
+            "AGUARDANDO_RECEPCAO": "bg-slate-600 text-slate-100",
+            "EM_FILA": "bg-amber-600 text-amber-100",
+            "EM_RECEPCAO": "bg-blue-600 text-blue-100 animate-pulse",
+            "FINALIZADO": "bg-emerald-600 text-emerald-100",
+            "CANCELADO": "bg-red-600 text-red-100",
+            "AUSENTE": "bg-orange-600 text-orange-100"
         }
         return <Badge className={`${styles[status] || 'bg-slate-100'} border-none text-[9px] font-black tracking-widest uppercase px-2`}>{status.replace('_', ' ')}</Badge>
     }
@@ -130,7 +179,7 @@ export default function RecepcaoPage() {
     }
 
     const dadosProcessados = useMemo(() => {
-        let filtrados = data.filter(item => filtroTipo === "TODOS" ? true : item.tipo_senha === filtroTipo)
+        const filtrados = data.filter(item => filtroTipo === "TODOS" ? true : item.tipo_senha === filtroTipo)
 
         return filtrados.sort((a, b) => {
             // 1. PRIORIDADE POR STATUS (Mantém EM_RECEPCAO no topo, etc)
@@ -139,7 +188,9 @@ export default function RecepcaoPage() {
                     case "EM_RECEPCAO": return 1
                     case "EM_FILA": return 2
                     case "AGUARDANDO_RECEPCAO": return 3
-                    default: return 4
+                    case "FINALIZADO": return 4
+                    case "CANCELADO": return 5
+                    default: return 6
                 }
             }
             const pA = pesoStatus(a.status);
@@ -192,34 +243,41 @@ export default function RecepcaoPage() {
         }
     }
 
-    // LÓGICA DE SALVAMENTO DA FICHA
-    async function handleSalvarFicha() {
-        if (!importModal.item) return
-        setLoadingAction("saving_ficha")
+    async function handleSalvarDadosFicha() {
+        if (!importModal.item) return;
+        setLoadingAction("saving_ficha");
 
-        const { error } = await supabase.rpc("vincular_ficha_paciente", {
+        const nomesExames = formFicha.exames.map(e => e.exame);
+
+        const { error } = await supabase.rpc("registrar_dados_ficha", {
             p_atendimento_id: importModal.item.id,
-            p_nome: formFicha.nome,
-            p_sequencial: formFicha.sequencial.toString()
-        })
+            p_paciente_nome: formFicha.funcionario.nome,
+            p_paciente_cpf: formFicha.funcionario.cpf,
+            p_paciente_nascimento: formFicha.funcionario.nascimento,
+            p_exames_nomes: nomesExames
+        });
 
         if (error) {
-            toast.error("Erro ao salvar dados")
+            toast.error("Erro ao registrar dados");
         } else {
-            toast.success("Ficha importada com sucesso!")
-            setImportModal({ open: false, item: null })
-            fetchData()
+            toast.success("Dados da ficha salvos no sistema!");
+            setImportModal({ open: false, item: null });
+            fetchData(); // Atualiza a tabela para mostrar o nome do paciente
         }
-        setLoadingAction(null)
+        setLoadingAction(null);
     }
 
     const abrirModalImportacao = (item: Atendimento) => {
         setImportModal({ open: true, item });
+
         setFormFicha({
-            nome: item.nome || "",
             sequencial: 0,
             arquivo: null,
-            dadosExtra: null,
+            empresa: { razao_social: "", cnpj: "" },
+            funcionario: { nome: item.nome || "", rg: "", nascimento: "", cargo: "", setor: "", cpf: "" },
+            exame: { tipo: "" },
+            exames: [],
+            especialidadesSelecionadas: []
         });
     }
 
@@ -232,6 +290,7 @@ export default function RecepcaoPage() {
             if (error) throw error
             toast.success(`Senha ${tipo} gerada!`)
             fetchData()
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
         } catch (err) {
             toast.error("Erro ao gerar senha")
         } finally {
@@ -240,8 +299,9 @@ export default function RecepcaoPage() {
         }
     }
 
-    async function executarAcao(rpcName: string, params: any, actionId: string) {
-        setLoadingAction(actionId)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    async function executarAcao(rpcName: string, params: any) {
+        setLoadingAction(params.p_atendimento_id)
         const { error } = await supabase.rpc(rpcName, params)
         if (error) toast.error("Erro na operação")
         else { toast.success("Sucesso!"); fetchData() }
@@ -272,17 +332,36 @@ export default function RecepcaoPage() {
             if (!response.ok) throw new Error("Erro no processamento");
 
             const dataArray = await response.json();
-            const data = dataArray[0]; // Pega o primeiro objeto do retorno
+            const data = dataArray[0];
+            console.log('Dados n8n:', data)
 
-            setFormFicha((prev) => ({
+            setFormFicha(prev => ({
                 ...prev,
-                nome: data.funcionario.nome.toUpperCase(),
                 sequencial: parseInt(data.funcionario.ficha) || prev.sequencial,
-                // Armazenamos o restante para exibição visual
-                dadosExtra: data
-            }));
+
+                empresa: {
+                    razao_social: data.empresa?.razao_social || "",
+                    cnpj: data.empresa?.cnpj || ""
+                },
+
+                funcionario: {
+                    nome: formatarNome(data.funcionario?.nome) || "",
+                    rg: data.funcionario?.rg || "",
+                    nascimento: data.funcionario?.nascimento || "",
+                    cargo: data.funcionario?.cargo || "",
+                    setor: data.funcionario?.setor || "",
+                    cpf: data.funcionario?.cpf || ""
+                },
+
+                exame: {
+                    tipo: data.exame?.tipo || ""
+                },
+
+                exames: data.exames || []
+            }))
 
             toast.success("Ficha identificada!", { id: toastId });
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
         } catch (error) {
             toast.error("Erro ao ler PDF", { id: toastId });
         } finally {
@@ -407,103 +486,198 @@ export default function RecepcaoPage() {
                                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                                         {dadosProcessados.map((item) => {
                                             const tempo = getTempoEsperaEvolutivo(item);
+
+                                            // Lógica de estados
+                                            const isFinalizado = item.status === "FINALIZADO";
+                                            const isAusente = item.status === "AUSENTE";
+                                            const isCancelado = item.status === "CANCELADO";
+                                            const isEncerrado = isFinalizado || isAusente || isCancelado;
+
+                                            // NOVIDADE: Verifica se a ficha já foi salva no banco
+                                            const fichaPronta = item.ficha_preenchida || !!item.nome;
+
+                                            // Estilização da Linha baseada no Status
+                                            const rowStyles = isFinalizado
+                                                ? "bg-emerald-200/70 dark:bg-emerald-900/30"
+                                                : isCancelado
+                                                    ? "bg-red-200/70 dark:bg-red-900/30"
+                                                    : isAusente
+                                                        ? "bg-orange-200/70 dark:bg-orange-900/30"
+                                                        : fichaPronta
+                                                            ? "bg-blue-50/30 dark:bg-blue-900/5"
+                                                            : "hover:bg-slate-50/80 dark:hover:bg-slate-800/40";
+
                                             return (
-                                                <tr key={item.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
+                                                <tr
+                                                    key={item.id}
+                                                    className={`${rowStyles} transition-all border-b border-slate-100 dark:border-slate-800`}
+                                                >
                                                     <td className="p-4">
                                                         <div className="flex flex-col gap-1">
-                                                            {item.tipo_senha == "PREFERENCIAL" ? (
-                                                                <span className="text-lg font-black text-orange-600 dark:text-orange-400 leading-none">{item.senha_codigo}</span>
-                                                            ) : (<span className="text-lg font-black text-blue-600 dark:text-blue-400 leading-none">{item.senha_codigo}</span>)}
+                                                            <span className={`text-lg font-black leading-none ${item.tipo_senha === "PREFERENCIAL" ? "text-orange-600" : "text-blue-600"}`}>
+                                                                {item.senha_codigo}
+                                                            </span>
                                                             <span className="text-[9px] font-bold text-slate-400 uppercase">{item.tipo_senha}</span>
                                                         </div>
                                                     </td>
-                                                    <td className="p-4 font-medium text-slate-700 dark:text-slate-300">
-                                                        {item.nome || <span className="text-slate-300 dark:text-slate-600 italic">Não identificado</span>}
-                                                    </td>
+
                                                     <td className="p-4">
-                                                        {item.ficha_sequencial ? (
-                                                            <span className="font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 font-bold text-slate-700 dark:text-slate-300 italic">#{item.ficha_sequencial}</span>
-                                                        ) : (
-                                                            <span className="text-slate-300 dark:text-slate-600 italic text-[11px]">Pendente</span>
-                                                        )}
-                                                    </td>
-                                                    <td className="p-4 text-slate-600 dark:text-slate-400 font-medium">{getHora(item.created_at)}</td>
-                                                    <td className={`p-4 font-bold ${getColorTempoEspera(
-                                                        Math.max(0, Math.floor((Date.now() - new Date(item.created_at).getTime()) / 60000)),
-                                                        tempo.isCancelado
-                                                    )}`}>
-                                                        <div className="flex flex-col">
-                                                            <div className="flex items-center gap-1">
-                                                                <Clock className="w-3 h-3 opacity-70" />
-                                                                {tempo.texto}
-                                                            </div>
-                                                            {tempo.isCancelado && (
-                                                                <span className="text-[9px] font-medium opacity-70">INTERROMPIDO</span>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className={`${!item.nome ? "text-slate-400 italic" : "font-bold text-slate-700 dark:text-slate-200"}`}>
+                                                                {item.nome || "Aguardando ficha..."}
+                                                            </span>
+
+                                                            {/* Feedback visual de que a ficha foi salva */}
+                                                            {fichaPronta && !isEncerrado && (
+                                                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" title="Ficha Salva" />
+                                                            )}
+
+                                                            {item.tem_exames && (
+                                                                <TooltipProvider>
+                                                                    <Tooltip>
+                                                                        <TooltipTrigger>
+                                                                            <Stethoscope className="w-3 h-3 text-emerald-500" />
+                                                                        </TooltipTrigger>
+                                                                        <TooltipContent>Exames já vinculados</TooltipContent>
+                                                                    </Tooltip>
+                                                                </TooltipProvider>
                                                             )}
                                                         </div>
                                                     </td>
-                                                    <td className="p-4 text-center">{getStatusBadge(item.status)}</td>
+
+                                                    <td className="p-4 font-mono text-slate-500">{item.ficha_sequencial || "--"}</td>
+
+                                                    <td className="p-4 text-slate-600 dark:text-slate-400 font-medium">{getHora(item.created_at)}</td>
+
+                                                    <td className={`p-4 font-bold ${isEncerrado ? "text-slate-400" : getColorTempoEspera(parseInt(tempo.texto), tempo.isCancelado)}`}>
+                                                        <div className="flex items-center gap-1">
+                                                            <Clock className="w-3 h-3 opacity-70" />
+                                                            {tempo.texto}
+                                                        </div>
+                                                    </td>
+
+                                                    <td className="p-4 text-center">
+                                                        {getStatusBadge(item.status)}
+                                                    </td>
+
                                                     <td className="p-4 text-center font-black text-slate-700 dark:text-white">
                                                         {item.guiche || "--"}
                                                     </td>
+
+
                                                     <td className="p-4 text-right">
-                                                        <div className="flex justify-end gap-1.5">
-                                                            {item.status === "AGUARDANDO_RECEPCAO" && (
-                                                                <Button size="sm" variant="outline" className="h-8 text-[11px] border-amber-600 text-amber-600 hover:bg-amber-50"
-                                                                    onClick={() => executarAcao("atualizar_status", { p_id: item.id, p_status: 'EM_FILA' }, item.id)}>Chamar</Button>
-                                                            )}
-
-                                                            {item.status === "EM_FILA" && (
+                                                        <div className="flex justify-end gap-1.5 items-center">
+                                                            {!isEncerrado ? (
                                                                 <>
-                                                                    <Button size="sm" className="h-8 text-[11px] bg-blue-600"
-                                                                        onClick={() => executarAcao("atualizar_status", { p_id: item.id, p_status: 'EM_RECEPCAO' }, item.id)}>Atender</Button>
-                                                                    <Button size="sm" variant="ghost" className="h-8 text-[11px] text-slate-500"
-                                                                        onClick={() => executarAcao("atualizar_status", { p_id: item.id, p_status: 'AUSENTE' }, item.id)}>Ausente</Button>
-                                                                </>
-                                                            )}
-
-                                                            {item.status === "EM_RECEPCAO" && (
-                                                                <Button size="sm" className="h-8 text-[11px] bg-emerald-600 hover:bg-emerald-700"
-                                                                    onClick={() => executarAcao("atualizar_status", { p_id: item.id, p_status: 'FINALIZADO' }, item.id)}>
-                                                                    <CheckCircle2 className="w-3 h-3 mr-1" /> Finalizar
-                                                                </Button>
-                                                            )}
-
-                                                            <TooltipProvider>
-                                                                <Tooltip>
-                                                                    <TooltipTrigger asChild>
+                                                                    {/* BOTÃO CHAMAR: Agora já coloca em atendimento direto */}
+                                                                    {item.status === "AGUARDANDO_RECEPCAO" && (
                                                                         <Button
                                                                             size="sm"
-                                                                            variant="secondary"
-                                                                            className="h-8 w-8 p-0 bg-blue-600 hover:bg-blue-400 text-white"
-                                                                            onClick={() => abrirModalImportacao(item)}
+                                                                            variant="outline"
+                                                                            className="h-8 text-[11px] border-amber-600 text-amber-600 hover:bg-amber-50"
+                                                                            onClick={() => executarAcao("gerenciar_chamada_recepcao", {
+                                                                                p_atendimento_id: item.id,
+                                                                                p_status: 'EM_RECEPCAO', // Direto para atendimento
+                                                                                p_guiche: '3'
+                                                                            })}
                                                                         >
-                                                                            <FileEdit className="w-3.5 h-3.5" />
+                                                                            <BellRing className="w-3 h-3 mr-1" />
+                                                                            Chamar
                                                                         </Button>
-                                                                    </TooltipTrigger>
-                                                                    <TooltipContent className="bg-slate-900 text-white border-slate-800 text-[10px] font-bold uppercase tracking-wider">
-                                                                        <p>Importar Ficha</p>
-                                                                    </TooltipContent>
-                                                                </Tooltip>
-                                                            </TooltipProvider>
+                                                                    )}
 
-                                                            <TooltipProvider>
-                                                                <Tooltip>
-                                                                    <TooltipTrigger asChild>
-                                                                        <Button size="sm" className="h-8 w-8 p-0 bg-red-700"
-                                                                            onClick={() => executarAcao("cancelar_atendimento", { p_atendimento_id: item.id }, item.id)}>
-                                                                            <XCircle className="w-3.5 h-3.5" />
-                                                                        </Button>
-                                                                    </TooltipTrigger>
-                                                                    <TooltipContent className="bg-slate-900 text-white border-slate-800 text-[10px] font-bold uppercase tracking-wider">
-                                                                        <p>Cancelar Senha</p>
-                                                                    </TooltipContent>
-                                                                </Tooltip>
-                                                            </TooltipProvider>
+                                                                    {/* OPÇÕES DURANTE O ATENDIMENTO */}
+                                                                    {item.status === "EM_RECEPCAO" && (
+                                                                        <>
+                                                                            <Button
+                                                                                size="sm"
+                                                                                disabled={!fichaPronta}
+                                                                                className={`h-8 text-[11px] font-bold ${fichaPronta ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-300'}`}
+                                                                                onClick={() => executarAcao("finalizar_recepcao", { p_atendimento_id: item.id })}
+                                                                            >
+                                                                                <CheckCircle2 className="w-3 h-3 mr-1" />
+                                                                                Finalizar
+                                                                            </Button>
+
+                                                                            <Button
+                                                                                size="sm"
+                                                                                variant="outline"
+                                                                                className="h-8 text-[11px] border-blue-600 text-blue-600"
+                                                                                onClick={() => executarAcao("gerenciar_chamada_recepcao", {
+                                                                                    p_atendimento_id: item.id,
+                                                                                    p_status: 'EM_RECEPCAO' // Dispara o painel novamente mantendo o status
+                                                                                })}
+                                                                            >
+                                                                                Rechamar
+                                                                            </Button>
+
+                                                                            <Button
+                                                                                size="sm"
+                                                                                variant="ghost"
+                                                                                className="h-8 text-[11px] text-orange-500 hover:text-orange-700"
+                                                                                onClick={() => executarAcao("gerenciar_chamada_recepcao", {
+                                                                                    p_atendimento_id: item.id,
+                                                                                    p_status: 'AUSENTE'
+                                                                                })}
+                                                                            >
+                                                                                Ausente
+                                                                            </Button>
+                                                                        </>
+                                                                    )}
+
+                                                                    {/* BOTÃO FICHA */}
+                                                                    <TooltipProvider>
+                                                                        <Tooltip>
+                                                                            <TooltipTrigger asChild>
+                                                                                <Button
+                                                                                    size="sm"
+                                                                                    variant="secondary"
+                                                                                    className={`h-8 w-8 p-0 ${fichaPronta ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-600 text-white'}`}
+                                                                                    onClick={() => abrirModalImportacao(item)}
+                                                                                >
+                                                                                    <FileEdit className="w-3.5 h-3.5" />
+                                                                                </Button>
+                                                                            </TooltipTrigger>
+                                                                            <TooltipContent>{fichaPronta ? "Editar" : "Importar"}</TooltipContent>
+                                                                        </Tooltip>
+                                                                    </TooltipProvider>
+
+                                                                    {/* BOTÃO CANCELAR */}
+                                                                    <TooltipProvider>
+                                                                        <Tooltip>
+                                                                            <TooltipTrigger asChild>
+                                                                                <Button
+                                                                                    size="sm"
+                                                                                    variant="ghost"
+                                                                                    className="h-8 w-8 p-0 text-red-400 hover:text-red-600"
+                                                                                    onClick={() => {
+                                                                                        if (confirm("Cancelar este atendimento?")) {
+                                                                                            executarAcao("gerenciar_chamada_recepcao", {
+                                                                                                p_atendimento_id: item.id,
+                                                                                                p_status: 'CANCELADO'
+                                                                                            })
+                                                                                        }
+                                                                                    }}
+                                                                                >
+                                                                                    <XCircle className="w-3.5 h-3.5" />
+                                                                                </Button>
+                                                                            </TooltipTrigger>
+                                                                            <TooltipContent>Cancelar</TooltipContent>
+                                                                        </Tooltip>
+                                                                    </TooltipProvider>
+                                                                </>
+                                                            ) : (
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className={`text-[10px] font-bold uppercase italic ${isCancelado ? 'text-red-500' : 'text-slate-400'}`}>
+                                                                        {isFinalizado ? "Atendido" : isCancelado ? "Cancelado" : "Ausente"}
+                                                                    </span>
+                                                                    {/* Permite reabrir ou importar ficha mesmo se encerrado, se desejar, ou manter apenas o texto */}
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     </td>
                                                 </tr>
-                                            )
+                                            );
                                         })}
                                     </tbody>
                                 </table>
@@ -514,118 +688,236 @@ export default function RecepcaoPage() {
             </div>
 
             {/* MODAL DE IMPORTAÇÃO DE FICHA */}
-            <Dialog open={importModal.open} onOpenChange={(val) => {
-                setImportModal({ ...importModal, open: val });
-                if (!val) setFormFicha({
-                    nome: "",
-                    sequencial: -1,
-                    arquivo: null,
-                    dadosExtra: null
-                });
-            }}>
-                <DialogContent className="sm:max-w-[600px] bg-white dark:bg-slate-900 border-none shadow-2xl max-h-[90vh] overflow-y-auto">
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight">
-                            <FileEdit className="w-5 h-5 text-blue-500" />
-                            Ficha: {importModal.item?.senha_codigo}
+            <Dialog
+                open={importModal.open}
+                onOpenChange={(val) => {
+                    setImportModal({ ...importModal, open: val });
+                    if (!val) setFormFicha(initialFormFicha);
+                }}
+            >
+                <DialogContent className="sm:max-w-200 bg-white dark:bg-slate-900 border-none shadow-2xl max-h-[95vh] overflow-y-auto p-0">
+                    <DialogHeader className="p-6 pb-0">
+                        <DialogTitle className="flex items-center gap-2 text-2xl font-black uppercase tracking-tighter">
+                            <FileEdit className="w-6 h-6 text-blue-600" />
+                            Vincular Ficha: <span className="text-blue-600">{importModal.item?.senha_codigo}</span>
                         </DialogTitle>
                     </DialogHeader>
 
-                    <div className="space-y-6 py-4">
-                        {/* LOADING OVERLAY */}
-                        {loadingAction === "processing_pdf" && (
-                            <div className="absolute inset-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm flex flex-col items-center justify-center">
-                                <RefreshCw className="w-10 h-10 animate-spin text-blue-600 mb-2" />
-                                <p className="font-black text-blue-600 uppercase tracking-widest text-xs">Analisando PDF via n8n...</p>
-                            </div>
-                        )}
-
-                        {/* INPUT DE ARQUIVO */}
-                        <div className="space-y-2">
-                            <Label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Documento PDF (Opcional)</Label>
-                            <div className="border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl p-4 hover:border-blue-500/50 transition-colors bg-slate-50/50 dark:bg-slate-800/20 group text-center cursor-pointer relative">
-                                <input type="file" accept="application/pdf" className="absolute inset-0 opacity-0 cursor-pointer"
-                                    onChange={(e) => e.target.files?.[0] && handleUploadPDF(e.target.files[0])} />
+                    <div className="p-6 space-y-8">
+                        {/* 1. UPLOAD E BOTÃO DE IMPORTAÇÃO */}
+                        <div className="relative group">
+                            {loadingAction === "processing_pdf" && (
+                                <div className="absolute inset-0 z-50 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm rounded-xl flex flex-col items-center justify-center border-2 border-blue-500 border-dashed">
+                                    <RefreshCw className="w-10 h-10 animate-spin text-blue-600 mb-2" />
+                                    <p className="font-black text-blue-600 uppercase tracking-widest text-[10px]">Lendo PDF...</p>
+                                </div>
+                            )}
+                            <div className="border-2 border-dashed border-slate-200 dark:border-slate-800 hover:border-blue-400 bg-slate-50/50 dark:bg-slate-800/50 transition-all rounded-xl p-4 text-center relative cursor-pointer">
+                                <input
+                                    type="file"
+                                    accept="application/pdf"
+                                    className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                                    onChange={(e) => e.target.files?.[0] && handleUploadPDF(e.target.files[0])}
+                                />
                                 <div className="flex items-center justify-center gap-3">
-                                    <UploadCloud className="w-6 h-6 text-slate-400 group-hover:text-blue-500" />
-                                    <p className="text-[11px] font-bold text-slate-500 uppercase">
-                                        {formFicha.arquivo?.name ?? "Importar ficha"}
+                                    <UploadCloud className="w-6 h-6 text-slate-400" />
+                                    <p className="text-sm font-bold text-slate-500">
+                                        {formFicha.arquivo?.name ?? "Importar PDF da Ficha (Preenchimento Automático)"}
                                     </p>
                                 </div>
                             </div>
                         </div>
 
-                        {/* EXIBIÇÃO DE DADOS IMPORTADOS - Protegido contra Undefined */}
-                        {formFicha.dadosExtra && (
-                            <div className="bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30 rounded-xl p-4 space-y-4 animate-in fade-in slide-in-from-top-2">
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <p className="text-[9px] font-black text-blue-500 uppercase">Empresa</p>
-                                        <p className="text-xs font-bold text-slate-700 dark:text-slate-300 truncate">
-                                            {formFicha.dadosExtra.empresa?.razao_social ?? "Não detectado"}
-                                        </p>
+                        {/* 2. DADOS DO FUNCIONÁRIO (FOCO PRINCIPAL) */}
+                        <section className="space-y-4">
+                            <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+                                <User className="w-4 h-4 text-blue-500" />
+                                <h3 className="text-xs font-black uppercase tracking-widest text-slate-500">Dados do Funcionário</h3>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                <div className="md:col-span-3 space-y-1.5">
+                                    <Label className="text-[10px] font-black uppercase text-slate-400">Nome Completo</Label>
+                                    <Input className="h-10 font-bold" value={formFicha.funcionario.nome} onChange={(e) => setFormFicha({ ...formFicha, funcionario: { ...formFicha.funcionario, nome: e.target.value.toUpperCase() } })} />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label className="text-[10px] font-black uppercase text-slate-400">Nº Sequencial</Label>
+                                    <Input type="number" className="h-10 font-black text-blue-600 text-center text-lg" value={formFicha.sequencial} onChange={(e) => setFormFicha({ ...formFicha, sequencial: parseInt(e.target.value) })} />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div className="space-y-1.5">
+                                    <Label className="text-[10px] font-black uppercase text-slate-400">CPF</Label>
+                                    <Input
+                                        className="h-9"
+                                        value={formFicha.funcionario.cpf || ""}
+                                        onChange={(e) => updateNestedField('funcionario', 'cpf', e.target.value)}
+                                    />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label className="text-[10px] font-black uppercase text-slate-400">RG</Label>
+                                    <Input
+                                        className="h-9"
+                                        value={formFicha.funcionario.rg || ""}
+                                        onChange={(e) => updateNestedField('funcionario', 'rg', e.target.value)}
+                                    />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label className="text-[10px] font-black uppercase text-slate-400">Nascimento</Label>
+                                    <Input
+                                        className="h-9 text-center"
+                                        value={formFicha.funcionario.nascimento || ""}
+                                        onChange={(e) => updateNestedField('funcionario', 'nascimento', e.target.value)}
+                                    />
+                                </div>
+                                {/* <div className="space-y-1.5">
+                                    <Label className="text-[10px] font-black uppercase text-slate-400">Matrícula</Label>
+                                    <Input
+                                        className="h-9"
+                                        value={formFicha.funcionario.matricula || ""}
+                                        onChange={(e) => updateNestedField('funcionario', 'matricula', e.target.value)}
+                                    />
+                                </div> */}
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1.5">
+                                    <Label className="text-[10px] font-black uppercase text-slate-400">Cargo</Label>
+                                    <Input
+                                        className="h-9"
+                                        value={formFicha.funcionario.cargo || ""}
+                                        onChange={(e) => updateNestedField('funcionario', 'cargo', e.target.value.toUpperCase())}
+                                    />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label className="text-[10px] font-black uppercase text-slate-400">Setor</Label>
+                                    <Input
+                                        className="h-9"
+                                        value={formFicha.funcionario.setor || ""}
+                                        onChange={(e) => updateNestedField('funcionario', 'setor', e.target.value.toUpperCase())}
+                                    />
+                                </div>
+                            </div>
+                        </section>
+
+                        {/* 3. DADOS DA EMPRESA E MÉDICO */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <section className="space-y-4">
+                                <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+                                    <Building2 className="w-4 h-4 text-slate-400" />
+                                    <h3 className="text-xs font-black uppercase tracking-widest text-slate-500">Empresa</h3>
+                                </div>
+                                <div className="space-y-3">
+                                    <div className="space-y-1.5">
+                                        <Label className="text-[10px] font-bold opacity-70">Razão Social</Label>
+                                        <Input
+                                            className="h-9"
+                                            value={formFicha.empresa.razao_social || ""}
+                                            onChange={(e) => updateNestedField('empresa', 'razao_social', e.target.value.toUpperCase())}
+                                        />
                                     </div>
-                                    <div>
-                                        <p className="text-[9px] font-black text-blue-500 uppercase">Cargo</p>
-                                        <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                                            {formFicha.dadosExtra.funcionario?.cargo ?? "Não detectado"}
-                                        </p>
+                                    <div className="space-y-1.5">
+                                        <Label className="text-[10px] font-bold opacity-70">CNPJ</Label>
+                                        <Input
+                                            className="h-9"
+                                            value={formFicha.empresa.cnpj || ""}
+                                            onChange={(e) => updateNestedField('empresa', 'cnpj', e.target.value)}
+                                        />
                                     </div>
                                 </div>
+                            </section>
 
-                                {formFicha.dadosExtra.exames && (
-                                    <div>
-                                        <p className="text-[9px] font-black text-blue-500 uppercase mb-2">Exames Detectados ({formFicha.dadosExtra.exames.length})</p>
-                                        <div className="flex flex-wrap gap-1">
-                                            {formFicha.dadosExtra.exames.map((ex, i) => (
-                                                <Badge key={i} variant="outline" className="text-[9px] bg-white dark:bg-slate-800 border-slate-200 py-0 uppercase font-medium">
-                                                    {ex.exame?.replace('.', '')}
-                                                </Badge>
-                                            ))}
-                                        </div>
+                            <section className="space-y-4">
+                                <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+                                    <Stethoscope className="w-4 h-4 text-slate-400" />
+                                    <h3 className="text-xs font-black uppercase tracking-widest text-slate-500">Informações ASO</h3>
+                                </div>
+                                <div className="space-y-3">
+                                    <div className="space-y-1.5">
+                                        <Label className="text-[10px] font-bold opacity-70">Tipo de Exame</Label>
+                                        <Input
+                                            className="h-9 font-bold text-blue-600"
+                                            value={formFicha.exame.tipo || ""}
+                                            onChange={(e) => updateNestedField('exame', 'tipo', e.target.value)}
+                                        />
                                     </div>
-                                )}
-                            </div>
-                        )}
+                                </div>
+                            </section>
+                        </div>
 
-                        {/* INPUTS PRINCIPAIS - Sempre editáveis */}
-                        <div className="grid grid-cols-1 gap-4">
-                            <div className="space-y-2">
-                                <Label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Nome Completo</Label>
-                                <Input className="h-12 bg-slate-50 dark:bg-slate-800 border-slate-200 font-bold uppercase"
-                                    placeholder="Digite o nome ou importe o PDF"
-                                    value={formFicha.nome}
-                                    onChange={(e) => setFormFicha({ ...formFicha, nome: e.target.value })} />
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Sequencial / Ficha</Label>
+                        {/* 4. LANÇAMENTO DE EXAMES E ESPECIALIDADES */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4 border-t border-slate-100">
+                            <div className="space-y-4">
                                 <div className="flex items-center gap-2">
-                                    <Input type="number" className="h-12 bg-slate-50 dark:bg-slate-800 border-slate-200 text-lg font-black text-blue-600"
-                                        value={formFicha.sequencial}
-                                        onChange={(e) => setFormFicha({ ...formFicha, sequencial: parseInt(e.target.value) || 0 })} />
-                                    <Button variant="outline" type="button" className="h-12 px-4 border-slate-200 hover:bg-slate-100"
-                                        onClick={() => setFormFicha(prev => ({ ...prev, sequencial: (prev.sequencial || 0) + 1 }))}>
-                                        <Plus className="w-4 h-4" />
-                                    </Button>
+                                    <PlusCircle className="w-4 h-4 text-blue-500" />
+                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-blue-500">Exames do Prontuário</h4>
+                                </div>
+                                <Input
+                                    placeholder="Adicionar exame manual..."
+                                    className="h-10 border-slate-200"
+                                    value={exameInput}
+                                    onChange={(e) => setExameInput(e.target.value)}
+                                    onKeyDown={handleAddExameManual}
+                                />
+                                <div className="flex flex-wrap gap-1.5 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl min-h-25 align-top">
+                                    {formFicha.exames.map((ex, i) => (
+                                        <Badge key={i} className="bg-white dark:bg-slate-700 text-slate-700 border border-slate-200 font-bold py-1 px-2 flex items-center gap-2">
+                                            {ex.exame.toUpperCase()}
+                                            <XCircle className="w-3 h-3 cursor-pointer text-slate-400 hover:text-red-500" onClick={() => removeExame(i)} />
+                                        </Badge>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="space-y-4">
+                                <div className="flex items-center gap-2">
+                                    <Filter className="w-4 h-4 text-blue-500" />
+                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-blue-500">Destinos de Atendimento</h4>
+                                </div>
+                                <div className="bg-slate-50 h-fit dark:bg-slate-800/50 border border-slate-100 rounded-xl p-3 h-38.75 overflow-y-auto space-y-1">
+                                    {especialidades.map((esp) => {
+                                        const normalizar = (txt: string) => txt.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\./g, "");
+                                        const isMatchedByDatabase = formFicha.exames.some(exDigitado =>
+                                            esp.exames?.some((exBanco: any) => normalizar(String(exBanco.nome)) === normalizar(String(exDigitado.exame)))
+                                        );
+                                        const isTriagem = esp.nome.toLowerCase().includes("triagem");
+                                        const isChecked = isTriagem || formFicha.especialidadesSelecionadas.includes(esp.id) || isMatchedByDatabase;
+
+                                        return (
+                                            <label key={esp.id} className={`flex items-center justify-between p-2 rounded-md transition-all cursor-pointer ${isChecked ? 'bg-blue-100/50 dark:bg-blue-900/30' : 'opacity-50 hover:opacity-100'}`}>
+                                                <div className="flex items-center gap-2">
+                                                    <input type="checkbox" checked={isChecked} disabled={isTriagem} className="w-3.5 h-3.5" onChange={(e) => {
+                                                        setFormFicha(prev => ({
+                                                            ...prev,
+                                                            especialidadesSelecionadas: e.target.checked ? [...prev.especialidadesSelecionadas, esp.id] : prev.especialidadesSelecionadas.filter(id => id !== esp.id)
+                                                        }))
+                                                    }} />
+                                                    <span className="text-[10px] font-black uppercase text-slate-600 dark:text-slate-300">{esp.nome}</span>
+                                                </div>
+                                                {isChecked && <CheckCircle2 className="w-3 h-3 text-blue-600" />}
+                                            </label>
+                                        )
+                                    })}
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <DialogFooter className="bg-slate-50 dark:bg-slate-800/50 -mx-6 -mb-6 p-6 mt-4">
-                        <Button className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-widest shadow-lg shadow-blue-500/20"
-                            onClick={handleSalvarFicha}
-                            disabled={loadingAction === "saving_ficha" || loadingAction === "processing_pdf"}>
-                            {loadingAction === "saving_ficha" ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
-                            Confirmar e Vincular
+                    <DialogFooter className="p-6 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-800">
+                        <Button
+                            className="w-full h-14 bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-widest shadow-lg shadow-blue-500/20"
+                            onClick={handleSalvarDadosFicha}
+                            disabled={loadingAction === "saving_ficha" || !formFicha.funcionario.nome}
+                        >
+                            {loadingAction === "saving_ficha" ? <RefreshCw className="w-5 h-5 animate-spin mr-2" /> : <Save className="w-5 h-5 mr-2" />}
+                            Salvar Prontuário e Liberar Atendimento
                         </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
 
+
+            {/* MODAL DE GUICHÊ */}
             <Dialog open={openModal} onOpenChange={setOpenModal}>
-                <DialogContent className="sm:max-w-[400px] border-none shadow-2xl bg-white dark:bg-slate-900">
+                <DialogContent className="sm:max-w-100 border-none shadow-2xl bg-white dark:bg-slate-900">
                     <DialogHeader>
                         <DialogTitle className="text-center text-xl font-black uppercase tracking-tight">
                             Guichê de Atendimento
@@ -668,8 +960,8 @@ export default function RecepcaoPage() {
                             </Select>
                         </div>
                     </div>
-                    <DialogFooter>
-                        <Button className="w-full h-12 bg-slate-900 hover:bg-blue-600" onClick={salvarSessao}>
+                    <DialogFooter className="bg-slate-800">
+                        <Button className="w-full h-12 text-muted bg-slate-900 dark:bg-blue-600 dark:hover:bg-blue-400 hover:bg-blue-600" onClick={salvarSessao}>
                             Ativar Guichê
                         </Button>
                     </DialogFooter>
