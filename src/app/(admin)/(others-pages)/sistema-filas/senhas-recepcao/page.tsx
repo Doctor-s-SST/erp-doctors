@@ -157,6 +157,8 @@ export default function RecepcaoPage() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const getTempoEsperaEvolutivo = (item: any) => {
         if (!item.created_at) return { texto: "--", isCancelado: false };
+    console.log(item.created_at)
+
         const statusTravados = ["CANCELADO", "FINALIZADO"];
 
         if (statusTravados.includes(item.status) && item.tempo_espera_min !== undefined) {
@@ -296,8 +298,6 @@ export default function RecepcaoPage() {
             p_exames_nomes: formFicha.exames
         });
 
-        console.log("Especialidades: ", formFicha.especialidadesSelecionadas);
-
         if (error) {
             toast.error("Erro: " + error.message);
         } else {
@@ -372,7 +372,7 @@ export default function RecepcaoPage() {
                 exame: { tipo: "" },
                 // Carrega os exames que foram salvos no JSONB
                 exames: detalhes.exames_list || [],
-                especialidadesSelecionadas: idTriagem ? [idTriagem] : [] // Opcional: buscar do atendimento_exames
+                especialidadesSelecionadas: idTriagem ? [idTriagem] : []
             });
         }
 
@@ -1002,14 +1002,6 @@ export default function RecepcaoPage() {
                                         onChange={(e) => updateNestedField('funcionario', 'nascimento', e.target.value)}
                                     />
                                 </div>
-                                {/* <div className="space-y-1.5">
-                                    <Label className="text-[10px] font-black uppercase text-slate-400">Matrícula</Label>
-                                    <Input
-                                        className="h-9"
-                                        value={formFicha.funcionario.matricula || ""}
-                                        onChange={(e) => updateNestedField('funcionario', 'matricula', e.target.value)}
-                                    />
-                                </div> */}
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1.5">
@@ -1120,9 +1112,6 @@ export default function RecepcaoPage() {
                                 </div>
                                 <div className="bg-slate-50 h-fit dark:bg-slate-800/50 border border-slate-100 rounded-xl p-3 h-38.75 overflow-y-auto space-y-1">
                                     {especialidades.map((esp) => {
-                                        // Mantemos a normalização para conferência
-                                        const normalizar = (txt: string) => txt?.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\./g, "") || "";
-
                                         // Verifica se esta especialidade deve estar marcada (está no estado)
                                         const isChecked = formFicha.especialidadesSelecionadas.includes(esp.id);
 

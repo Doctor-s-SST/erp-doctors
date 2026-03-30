@@ -23,7 +23,8 @@ import {
     LayoutGrid,
     RefreshCw,
     Beaker,
-    Clock
+    Clock,
+    FlaskConical
 } from "lucide-react"
 
 type ItemFila = {
@@ -65,6 +66,7 @@ export default function FilaPage() {
 
     const getTempoEsperaTotal = (item: ItemFila) => {
         if (!item.created_at) return 0
+        
         const decorridoDesdeCriacao = Math.floor((Date.now() - new Date(item.created_at).getTime()) / 1000 / 60)
         return (item.tempo_espera_inicial || 0) + decorridoDesdeCriacao
     }
@@ -73,6 +75,7 @@ export default function FilaPage() {
         if (!date) return "--:--"
         return new Date(date).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
     }
+
 
     // Lógica de cores centralizada
     const getStatusStyles = (status: string, bloqueado?: boolean) => {
@@ -190,14 +193,18 @@ export default function FilaPage() {
     }
 
     const dadosProcessados = useMemo(() => {
-        const listaMesclada = showToxicologico ? [...data, ...dataTox] : [...data]
-        return listaMesclada.sort((a, b) => {
-            const pesoStatus = (s: string, bloq?: boolean) => {
-                if (bloq) return 5
-                if (s === "EM_ATENDIMENTO") return 1
-                if (s === "AGUARDANDO") return 2
-                return 3
-            }
+    const listaBruta = showToxicologico ? [...data, ...dataTox] : [...data];
+    
+    // Remove duplicatas baseadas no ID do atendimento_exame
+    const listaUnica = Array.from(new Map(listaBruta.map(item => [item.id, item])).values());
+
+    return listaUnica.sort((a, b) => {
+        const pesoStatus = (s, bloq) => {
+            if (bloq) return 5;
+            if (s === "EM_ATENDIMENTO") return 1;
+            if (s === "AGUARDANDO") return 2;
+            return 3;
+        };
             const pA = pesoStatus(a.status, a.bloqueado)
             const pB = pesoStatus(b.status, b.bloqueado)
             if (pA !== pB) return pA - pB
