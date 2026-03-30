@@ -22,10 +22,12 @@ import {
     DoorOpen,
     LayoutGrid,
     RefreshCw,
-    Beaker
+    Beaker,
+    Clock
 } from "lucide-react"
 
 type ItemFila = {
+    tipo: string
     id: string
     senha: string
     nome: string
@@ -59,7 +61,7 @@ export default function FilaPage() {
     const [ordenacao, setOrdenacao] = useState<ConfigOrdenacao>({ coluna: 'tempo_total', direcao: 'desc' })
     const [showToxicologico, setShowToxicologico] = useState(false)
 
-    const TOX_ID = "eaae8f6a-924c-442c-bbd8-c108445dfc5c"
+    const TOX_SALA = "Toxicológico"
 
     const getTempoEsperaTotal = (item: ItemFila) => {
         if (!item.created_at) return 0
@@ -74,31 +76,62 @@ export default function FilaPage() {
 
     // Lógica de cores centralizada
     const getStatusStyles = (status: string, bloqueado?: boolean) => {
+        // PROTEÇÃO: Se status for undefined ou null, retorna um estilo padrão
+        if (!status) return { color: "text-slate-400", bg: "bg-slate-100", label: "INDETERMINADO" };
+
+        // Agora é seguro usar startsWith
+        if (status.startsWith("EM_") && status !== "EM_ATENDIMENTO") {
+            return {
+                color: "text-orange-600 dark:text-orange-400",
+                bg: "bg-orange-500/10",
+                label: status.replace("EM_", "").replace("_", " "),
+                animate: ""
+            }
+        }
+
         if (bloqueado) return { color: "text-red-500", bg: "bg-red-500/10", label: "BLOQUEADO" }
+
         switch (status) {
             case "EM_ATENDIMENTO":
-                return { color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-500/10", label: "EM CONSULTA", animate: "animate-pulse" }
+                return { color: "text-blue-600", bg: "bg-blue-500/10", label: "EM CONSULTA", animate: "animate-pulse" }
             case "FINALIZADO":
-                return { color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-500/10", label: "FINALIZADO" }
-            case "AGUARDANDO":
+                return { color: "text-emerald-600", bg: "bg-emerald-500/10", label: "FINALIZADO" }
             default:
-                return { color: "text-slate-600 dark:text-slate-400", bg: "bg-slate-100 dark:bg-slate-800", label: "NA FILA" }
+                return { color: "text-slate-600", bg: "bg-slate-100", label: "NA FILA" }
         }
     }
 
     async function fetchFila() {
         setIsRefreshing(true)
         try {
-            const { data: esp } = await supabase.from('especialidades').select('nome').eq('id', id).single()
-            if (esp) setEspecialidadeNome(esp.nome)
+            // 1. Busca o nome da especialidade primeiro
+            const { data: esp } = await supabase
+                .from('especialidades')
+                .select('nome')
+                .eq('id', id)
+                .single()
 
-            const { data: result } = await supabase.rpc("get_fila_especialidade", { especialidade_id: id })
+            if (!esp) return;
+
+            // Atualiza o estado para o Header (UI)
+            setEspecialidadeNome(esp.nome)
+
+            // 2. USA O VALOR DIRETO DA VARIÁVEL 'esp.nome' e não do estado
+            const { data: result, error } = await supabase.rpc("get_fila_especialidade", {
+                p_sala: esp.nome
+            })
+
             if (result) setData(result)
 
+            // Lógica do Toxicológico (se aplicável)
             if (showToxicologico) {
-                const { data: resultTox } = await supabase.rpc("get_fila_especialidade", { especialidade_id: TOX_ID })
+                const { data: resultTox } = await supabase.rpc("get_fila_especialidade", {
+                    p_sala: TOX_SALA
+                })
                 if (resultTox) setDataTox(resultTox)
             }
+        } catch (err) {
+            console.error("Erro ao buscar fila:", err)
         } finally {
             setLoading(false)
             setIsRefreshing(false)
@@ -107,7 +140,7 @@ export default function FilaPage() {
 
     useEffect(() => {
         fetchFila()
-        const interval = setInterval(fetchFila, 5000)
+        const interval = setInterval(fetchFila, 3000)
         const channel = supabase.channel(`fila-${id}`).on("postgres_changes", { event: "*", schema: "public", table: "atendimento_exames" }, () => fetchFila()).subscribe()
         return () => { clearInterval(interval); supabase.removeChannel(channel) }
     }, [id, showToxicologico])
@@ -235,68 +268,176 @@ export default function FilaPage() {
                                         <ThOrdenavel label="Chegada" coluna="created_at" />
                                         <ThOrdenavel label="Tempo Espera" coluna="tempo_total" />
                                         <ThOrdenavel label="Status" coluna="status" />
-                                        <ThOrdenavel label="Guichê" coluna="guiche" />
-                                        <th className="text-right p-4 font-bold text-slate-500 uppercase tracking-widest text-[10px]">Ações</th>
+                                        <ThOrdenavel label="Sala" coluna="sala" />
+                                        <th className="text-right p-4 font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest text-[10px]">
+                                            Ações
+                                        </th>
                                     </tr>
                                 </thead>
+
                                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                                     {dadosProcessados.map((item) => {
-                                        const styles = getStatusStyles(item.status, item.bloqueado);
+                                        const styles = getStatusStyles(item.status, item.bloqueado)
+
+                                        const isFinalizado = item.status === "FINALIZADO"
+                                        const isCancelado = item.status === "CANCELADO"
+                                        const isNaoAtendido = item.status === "NAO_ATENDIDO"
+                                        const isEncerrado = isFinalizado || isCancelado
+
+                                        const rowStyles =
+                                            isFinalizado
+                                                ? "bg-emerald-200/70 dark:bg-emerald-900/30"
+                                                : isCancelado
+                                                    ? "bg-red-200/70 dark:bg-red-900/30"
+                                                    : isNaoAtendido
+                                                        ? "bg-orange-200/70 dark:bg-orange-900/30"
+                                                        : "hover:bg-slate-50/80 dark:hover:bg-slate-800/40"
+
+                                        function onFichaClick(item: ItemFila): void {
+                                            throw new Error("Function not implemented.")
+                                        }
+
                                         return (
-                                            <tr key={item.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
+                                            <tr
+                                                key={item.id}
+                                                className={`${rowStyles} transition-all border-b border-slate-100 dark:border-slate-800`}
+                                            >
+                                                {/* SENHA */}
                                                 <td className="p-4">
-                                                    {/* Cor do número da senha baseada no status */}
-                                                    <span className={`text-lg font-black ${styles.color} ${styles.animate || ""}`}>
-                                                        {item.senha}
-                                                    </span>
-                                                </td>
-                                                <td className="p-4 font-bold text-slate-700 dark:text-slate-300">
-                                                    <div className="flex flex-col">
-                                                        {item.nome}
-                                                        {showToxicologico && item.especialidade_nome && (
-                                                            <span className="text-[9px] text-slate-400 uppercase font-black">{item.especialidade_nome}</span>
+                                                    <div className="flex flex-col gap-1">
+                                                        <span className={`text-lg font-black ${styles.color} ${styles.animate || ""}`}>
+                                                            {item.senha}
+                                                        </span>
+                                                        {item.tipo && (
+                                                            <span className="text-[9px] font-bold text-slate-400 uppercase">
+                                                                {item.tipo}
+                                                            </span>
                                                         )}
                                                     </div>
                                                 </td>
-                                                <td className="p-4 font-mono text-slate-500">{item.sequencial_ficha || "-"}</td>
-                                                <td className="p-4 text-slate-500">{getHora(item.created_at)}</td>
-                                                <td className={`p-4 font-bold ${item.status === "EM_ATENDIMENTO" ? "text-blue-500" : "text-amber-600"}`}>
-                                                    {getTempoEsperaTotal(item)} min
-                                                </td>
+
+                                                {/* NOME */}
                                                 <td className="p-4">
-                                                    <Badge className={`${styles.bg} ${styles.color} border-none text-[10px] font-bold tracking-wider ${styles.animate || ""}`}>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-bold text-slate-700 dark:text-slate-200">
+                                                            {item.nome}
+                                                        </span>
+
+                                                        {showToxicologico && item.especialidade_nome && (
+                                                            <span className="text-[9px] text-slate-400 uppercase font-black">
+                                                                {item.especialidade_nome}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </td>
+
+                                                {/* FICHA */}
+                                                <td
+                                                    className="p-4 text-[13px] font-bold font-mono cursor-pointer text-center"
+                                                    onClick={() => onFichaClick?.(item)}
+                                                >
+                                                    <span className="p-1 rounded bg-slate-500/20 hover:bg-slate-500/50 transition-all">
+                                                        {item.sequencial_ficha || "--"}
+                                                    </span>
+                                                </td>
+
+                                                {/* CHEGADA */}
+                                                <td className="p-4 text-slate-600 dark:text-slate-400 font-medium">
+                                                    {getHora(item.created_at)}
+                                                </td>
+
+                                                {/* TEMPO */}
+                                                <td className="p-4 font-bold">
+                                                    <div className="flex items-center gap-1 text-amber-600">
+                                                        <Clock className="w-3 h-3 opacity-70" />
+                                                        {getTempoEsperaTotal(item)} min
+                                                    </div>
+                                                </td>
+
+                                                {/* STATUS */}
+                                                <td className="p-4 text-center">
+                                                    <Badge
+                                                        className={`${styles.bg} ${styles.color} border-none text-[10px] font-bold tracking-wider ${styles.animate || ""}`}
+                                                    >
                                                         {styles.label}
                                                     </Badge>
                                                 </td>
-                                                <td className="p-4 text-slate-500 font-medium">{item.guiche || "-"}</td>
-                                                <td className="p-4 text-right">
-                                                    <div className="flex justify-end gap-2">
-                                                        {!item.bloqueado && item.status === "AGUARDANDO" && (
-                                                            <Button size="sm" className="h-8 bg-blue-600 hover:bg-blue-700 text-[11px] font-bold" disabled={!!loadingAction}
-                                                                onClick={() => executarAcao("chamar_paciente", { atendimento_exame_id: item.id, sala: session.sala, profissional: session.profissional }, item.id)}>
-                                                                <Volume2 className="w-3 h-3 mr-1" /> Chamar
-                                                            </Button>
-                                                        )}
-                                                        {item.status === "EM_ATENDIMENTO" && (
-                                                            <Button size="sm" className="h-8 bg-emerald-600 hover:bg-emerald-700 text-[11px] font-bold" disabled={!!loadingAction}
-                                                                onClick={() => executarAcao("finalizar_atendimento", { atendimento_exame_id: item.id }, item.id)}>
-                                                                <CheckCircle2 className="w-3 h-3 mr-1" /> Finalizar
-                                                            </Button>
-                                                        )}
 
-                                                        <TooltipProvider>
-                                                            <Tooltip>
-                                                                <TooltipTrigger asChild>
-                                                                    <Button size="sm" className="h-8 w-8 p-0 bg-red-700"
-                                                                        onClick={() => executarAcao("cancelar_atendimento", { p_atendimento_id: item.id }, item.id)}>
-                                                                        <XCircle className="w-3.5 h-3.5" />
+                                                {/* GUICHÊ */}
+                                                <td className="p-4 text-center font-black text-slate-700 dark:text-white">
+                                                    {item.guiche || "--"}
+                                                </td>
+
+                                                {/* AÇÕES */}
+                                                <td className="p-4 text-right">
+                                                    <div className="flex justify-end gap-1.5 items-center">
+                                                        {!isEncerrado ? (
+                                                            <>
+                                                                {item.status === "AGUARDANDO" && !item.bloqueado && (
+                                                                    <Button
+                                                                        size="sm"
+                                                                        className="h-8 text-[11px] border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white transition-colors"
+                                                                        onClick={() =>
+                                                                            executarAcao(
+                                                                                "chamar_paciente",
+                                                                                {
+                                                                                    atendimento_exame_id: item.id,
+                                                                                    sala: session.sala,
+                                                                                    profissional: session.profissional,
+                                                                                },
+                                                                                item.id
+                                                                            )
+                                                                        }
+                                                                    >
+                                                                        <Volume2 className="w-3 h-3 mr-1" />
+                                                                        Chamar
                                                                     </Button>
-                                                                </TooltipTrigger>
-                                                                <TooltipContent className="bg-slate-900 text-white border-slate-800 text-[10px] font-bold uppercase tracking-wider">
-                                                                    <p>Cancelar Senha</p>
-                                                                </TooltipContent>
-                                                            </Tooltip>
-                                                        </TooltipProvider>
+                                                                )}
+
+                                                                {item.status === "EM_ATENDIMENTO" && (
+                                                                    <Button
+                                                                        size="sm"
+                                                                        className="h-8 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700"
+                                                                        onClick={() =>
+                                                                            executarAcao(
+                                                                                "finalizar_atendimento",
+                                                                                { atendimento_exame_id: item.id },
+                                                                                item.id
+                                                                            )
+                                                                        }
+                                                                    >
+                                                                        <CheckCircle2 className="w-3 h-3 mr-1" />
+                                                                        Finalizar
+                                                                    </Button>
+                                                                )}
+
+                                                                {/* CANCELAR */}
+                                                                <TooltipProvider>
+                                                                    <Tooltip>
+                                                                        <TooltipTrigger asChild>
+                                                                            <Button
+                                                                                size="sm"
+                                                                                className="h-8 w-8 p-0 text-white hover:text-red-600 hover:border-red-500 bg-red-500"
+                                                                                onClick={() =>
+                                                                                    executarAcao(
+                                                                                        "cancelar_atendimento",
+                                                                                        { p_atendimento_id: item.id },
+                                                                                        item.id
+                                                                                    )
+                                                                                }
+                                                                            >
+                                                                                <XCircle className="w-3.5 h-3.5" />
+                                                                            </Button>
+                                                                        </TooltipTrigger>
+                                                                        <TooltipContent>Cancelar</TooltipContent>
+                                                                    </Tooltip>
+                                                                </TooltipProvider>
+                                                            </>
+                                                        ) : (
+                                                            <span className="text-[10px] font-bold uppercase italic text-slate-400">
+                                                                Encerrado
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 </td>
                                             </tr>

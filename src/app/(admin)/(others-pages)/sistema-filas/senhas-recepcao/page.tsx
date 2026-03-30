@@ -10,11 +10,13 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
-import { FileEdit, CheckCircle2, RefreshCw, User, Monitor, XCircle, Filter, ArrowUpDown, Clock, PlusCircle, MonitorCheck, UploadCloud, Save, Building2, Stethoscope, BellRing } from "lucide-react"
+import { FileEdit, CheckCircle2, RefreshCw, User, Monitor, XCircle, Filter, ArrowUpDown, Clock, PlusCircle, MonitorCheck, UploadCloud, Save, Building2, Stethoscope, BellRing, Loader2, X } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { on } from "events"
 
 type Atendimento = {
+    tem_exames: any
     id: string;
     senha_codigo: string;
     tipo_senha: string;
@@ -23,6 +25,7 @@ type Atendimento = {
     created_at: string;
     status: string;
     guiche: string;
+    atendente: string;
     tempo_espera_min: number;
     ficha_preenchida: boolean;
 }
@@ -43,13 +46,14 @@ export default function RecepcaoPage() {
     const [ordenacao, setOrdenacao] = useState<ConfigOrdenacao>({ coluna: 'tempo_espera', direcao: 'asc' })
     const generatingRef = useRef(false)
     const [exameInput, setExameInput] = useState("")
+    const [finalizandoIds, setFinalizandoIds] = useState<Record<string, number>>({});
 
     // ESTADOS DO MODAL DE IMPORTAÇÃO
     const [importModal, setImportModal] = useState<{ open: boolean, item: Atendimento | null }>({ open: false, item: null })
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [especialidades, setEspecialidades] = useState<any[]>([])
     const initialFormFicha = {
-        sequencial: 0,
+        sequencial: "",
         arquivo: null as File | null,
         empresa: { razao_social: "", cnpj: "" },
         funcionario: { nome: "", rg: "", nascimento: "", cargo: "", setor: "", cpf: "" },
@@ -62,13 +66,34 @@ export default function RecepcaoPage() {
 
     useEffect(() => {
         const fetchEspecialidades = async () => {
-            const { data } = await supabase.from("especialidades").select("id, nome, exames(id, nome)")
-            setEspecialidades(data || [])
-        }
+            const { data } = await supabase.from("especialidades").select("id, nome, exames(id, nome)");
+            if (data) {
+                const ordenadas = [...data].sort((a, b) => {
+                    const nomeA = a.nome.toUpperCase();
+                    const nomeB = b.nome.toUpperCase();
 
-        fetchEspecialidades()
-        console.log('Exames:', especialidades)
-    }, [])
+                    // Regra: Toxicológico sempre por último
+                    if (nomeA.includes("TOXICOLOGICO") || nomeA.includes("TOXICOLÓGICO")) return 1;
+                    if (nomeB.includes("TOXICOLOGICO") || nomeB.includes("TOXICOLÓGICO")) return -1;
+
+                    // Restante em ordem alfabética
+                    return nomeA.localeCompare(nomeB);
+                });
+
+                setEspecialidades(ordenadas);
+
+                // 4. Lógica para Triagem vir ticada por padrão no estado inicial
+                const triagem = ordenadas.find(e => e.nome.toLowerCase().includes("triagem"));
+                if (triagem) {
+                    setFormFicha(prev => ({
+                        ...prev,
+                        especialidadesSelecionadas: [triagem.id]
+                    }));
+                }
+            }
+        }
+        fetchEspecialidades();
+    }, []);
 
     const formatarNome = (str: string) => {
         if (!str) return ""
@@ -98,7 +123,7 @@ export default function RecepcaoPage() {
         setFormFicha(prev => ({
             ...prev,
             [category]: {
-                ...prev[category as keyof typeof prev],
+                ...((prev[category as keyof typeof prev] as object) || {}),
                 [field]: value
             }
         }));
@@ -132,7 +157,7 @@ export default function RecepcaoPage() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const getTempoEsperaEvolutivo = (item: any) => {
         if (!item.created_at) return { texto: "--", isCancelado: false };
-        const statusTravados = ["CANCELADO"];
+        const statusTravados = ["CANCELADO", "FINALIZADO"];
 
         if (statusTravados.includes(item.status) && item.tempo_espera_min !== undefined) {
             return { texto: `${item.tempo_espera_min} min`, isCancelado: true };
@@ -162,13 +187,14 @@ export default function RecepcaoPage() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const styles: any = {
             "AGUARDANDO_RECEPCAO": "bg-slate-600 text-slate-100",
-            "EM_FILA": "bg-amber-600 text-amber-100",
+            "EM_FILA": "bg-amber-600 text-amber-100 animate-pulse",
             "EM_RECEPCAO": "bg-blue-600 text-blue-100 animate-pulse",
             "FINALIZADO": "bg-emerald-600 text-emerald-100",
             "CANCELADO": "bg-red-600 text-red-100",
-            "AUSENTE": "bg-orange-600 text-orange-100"
+            "NAO_ATENDIDO": "bg-orange-600 text-orange-100",
+            "AGUARDANDO_EXAMES": "bg-orange-600 text-orange-100"
         }
-        return <Badge className={`${styles[status] || 'bg-slate-100'} border-none text-[9px] font-black tracking-widest uppercase px-2`}>{status.replace('_', ' ')}</Badge>
+        return <Badge className={`${styles[status] || 'bg-slate-100'} border-none text-[9px] font-black tracking-widest uppercase px-2`}>{(status) === "NAO_ATENDIDO" ? "NÃO ATENDIDO" : (status === "AGUARDANDO_RECEPCAO" ? "AGUARDANDO RECEPÇÃO" : (status === "EM_RECEPCAO" ? "EM RECEPÇÃO" : status.replace('_', ' ')))}</Badge>
     }
 
     const handleSort = (coluna: keyof Atendimento | 'tempo_espera') => {
@@ -188,9 +214,11 @@ export default function RecepcaoPage() {
                     case "EM_RECEPCAO": return 1
                     case "EM_FILA": return 2
                     case "AGUARDANDO_RECEPCAO": return 3
-                    case "FINALIZADO": return 4
-                    case "CANCELADO": return 5
-                    default: return 6
+                    case "NAO_ATENDIDO": return 4
+                    case "AGUARDANDO_EXAMES": return 5
+                    case "FINALIZADO": return 6
+                    case "CANCELADO": return 7
+                    default: return 8
                 }
             }
             const pA = pesoStatus(a.status);
@@ -239,46 +267,117 @@ export default function RecepcaoPage() {
             setOpenModal(false)
             fetchData()
         } else {
-            toast.error("Usuário não au")
+            toast.error("Usuário não autenticado")
         }
     }
+
+    const formatarParaSQL = (dataStr: string) => {
+        if (!dataStr || !dataStr.includes('/')) return dataStr;
+        const [d, m, y] = dataStr.split('/');
+        return `${y}-${m}-${d}`;
+    };
 
     async function handleSalvarDadosFicha() {
         if (!importModal.item) return;
         setLoadingAction("saving_ficha");
 
-        const nomesExames = formFicha.exames.map(e => e.exame);
-
         const { error } = await supabase.rpc("registrar_dados_ficha", {
             p_atendimento_id: importModal.item.id,
+            p_sequencial: formFicha.sequencial,
             p_paciente_nome: formFicha.funcionario.nome,
             p_paciente_cpf: formFicha.funcionario.cpf,
-            p_paciente_nascimento: formFicha.funcionario.nascimento,
-            p_exames_nomes: nomesExames
+            p_paciente_nascimento: formatarParaSQL(formFicha.funcionario.nascimento),
+            p_paciente_rg: formFicha.funcionario.rg,
+            p_paciente_cargo: formFicha.funcionario.cargo,
+            p_paciente_setor: formFicha.funcionario.setor,
+            p_empresa_razao: formFicha.empresa.razao_social,
+            p_empresa_cnpj: formFicha.empresa.cnpj,
+            p_especialidades_ids: formFicha.especialidadesSelecionadas,
+            p_exames_nomes: formFicha.exames
         });
 
+        console.log("Especialidades: ", formFicha.especialidadesSelecionadas);
+
         if (error) {
-            toast.error("Erro ao registrar dados");
+            toast.error("Erro: " + error.message);
         } else {
-            toast.success("Dados da ficha salvos no sistema!");
+            toast.success("Dados salvos com sucesso!");
             setImportModal({ open: false, item: null });
-            fetchData(); // Atualiza a tabela para mostrar o nome do paciente
+            fetchData();
         }
         setLoadingAction(null);
     }
 
-    const abrirModalImportacao = (item: Atendimento) => {
-        setImportModal({ open: true, item });
+    useEffect(() => {
+        const normalizar = (txt: string) => txt?.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\./g, "") || "";
 
-        setFormFicha({
-            sequencial: 0,
-            arquivo: null,
-            empresa: { razao_social: "", cnpj: "" },
-            funcionario: { nome: item.nome || "", rg: "", nascimento: "", cargo: "", setor: "", cpf: "" },
-            exame: { tipo: "" },
-            exames: [],
-            especialidadesSelecionadas: []
+        // Encontra IDs de especialidades que dão match com os exames atuais
+        const novosIdsMatch = especialidades
+            .filter(esp =>
+                formFicha.exames.some(exDigitado =>
+                    esp.exames?.some((exBanco: { nome: string }) => normalizar(exBanco.nome) === normalizar(exDigitado.exame))
+                )
+            )
+            .map(esp => esp.id);
+
+        // Mantém a Triagem sempre se ela existir
+        const idTriagem = especialidades.find(e => e.nome.toLowerCase().includes("triagem"))?.id;
+        if (idTriagem && !novosIdsMatch.includes(idTriagem)) {
+            novosIdsMatch.push(idTriagem);
+        }
+
+        setFormFicha(prev => {
+            // Une os que já estavam selecionados manualmente com os novos matches (sem duplicar)
+            const totalSelecionados = Array.from(new Set([...prev.especialidadesSelecionadas, ...novosIdsMatch]));
+
+            // Só atualiza se houver mudança real para evitar loop infinito
+            if (JSON.stringify(totalSelecionados.sort()) !== JSON.stringify(prev.especialidadesSelecionadas.sort())) {
+                return { ...prev, especialidadesSelecionadas: totalSelecionados };
+            }
+            return prev;
         });
+    }, [formFicha.exames, especialidades]);
+
+    const abrirModalImportacao = async (item: Atendimento) => {
+        setLoadingAction("loading_edit");
+
+        // 1. Busca dados estendidos do atendimento/paciente
+        const { data: detalhes } = await supabase
+            .from("atendimentos")
+            .select(`
+            *,
+            pacientes (*)
+        `)
+            .eq("id", item.id)
+            .single();
+
+        const idTriagem = especialidades.find(e => e.nome.toLowerCase().includes("triagem"))?.id;
+
+        if (detalhes) {
+            setFormFicha({
+                sequencial: detalhes.ficha_sequencial || 0,
+                arquivo: null,
+                empresa: {
+                    razao_social: detalhes.pacientes?.empresa_razao || "",
+                    cnpj: detalhes.pacientes?.empresa_cnpj || ""
+                },
+                funcionario: {
+                    nome: detalhes.pacientes?.nome || item.nome || "",
+                    rg: detalhes.pacientes?.rg || "",
+                    nascimento: detalhes.pacientes?.data_nascimento || "",
+                    cargo: detalhes.pacientes?.cargo || "",
+                    setor: detalhes.pacientes?.setor || "",
+                    cpf: detalhes.pacientes?.cpf || ""
+                },
+                exame: { tipo: "" },
+                // Carrega os exames que foram salvos no JSONB
+                exames: detalhes.exames_list || [],
+                especialidadesSelecionadas: idTriagem ? [idTriagem] : [] // Opcional: buscar do atendimento_exames
+            });
+        }
+
+        setImportModal({ open: true, item });
+        setLoadingAction(null);
     }
 
     async function gerarSenha(tipo: "NORMAL" | "PREFERENCIAL") {
@@ -286,7 +385,7 @@ export default function RecepcaoPage() {
         generatingRef.current = true
         setLoadingAction(tipo)
         try {
-            const { error } = await supabase.rpc("gerar_senha", { tipo_param: tipo, guiche_param: session?.guiche || "0" })
+            const { error } = await supabase.rpc("gerar_senha", { tipo_param: tipo, guiche_param: session?.guiche || "0", atendente_param: session?.nome || "" })
             if (error) throw error
             toast.success(`Senha ${tipo} gerada!`)
             fetchData()
@@ -307,6 +406,54 @@ export default function RecepcaoPage() {
         else { toast.success("Sucesso!"); fetchData() }
         setLoadingAction(null)
     }
+
+    const timersRef = useRef<{ [key: string]: NodeJS.Timeout }>({});
+
+    const cancelarFinalizacao = (id: string) => {
+        if (timersRef.current[id]) {
+            clearInterval(timersRef.current[id]);
+            delete timersRef.current[id];
+        }
+        setFinalizandoIds(prev => {
+            const { [id]: _, ...rest } = prev;
+            return rest;
+        });
+    };
+
+    const iniciarFinalizacaoComDelay = (id: string) => {
+        const TEMPO_ESPERA = 10;
+        const idsParaFinalizar = obterIdsConsolidados();
+
+        setFinalizandoIds(prev => ({ ...prev, [id]: TEMPO_ESPERA }));
+
+        const interval = setInterval(() => {
+            setFinalizandoIds(prev => {
+                const tempoAtual = prev[id];
+
+                // Se o ID não está mais no estado (cancelado), limpa o intervalo
+                if (tempoAtual === undefined) {
+                    clearInterval(interval);
+                    return prev;
+                }
+
+                if (tempoAtual <= 1) {
+                    clearInterval(interval);
+                    delete timersRef.current[id];
+
+                    executarAcao("finalizar_recepcao", {
+                        p_atendimento_id: id,
+                        p_especialidades_ids: idsParaFinalizar
+                    });
+
+                    const { [id]: _, ...rest } = prev;
+                    return rest;
+                }
+                return { ...prev, [id]: tempoAtual - 1 };
+            });
+        }, 1000);
+
+        timersRef.current[id] = interval;
+    };
 
     const ThOrdenavel = ({ label, coluna }: { label: string, coluna: keyof Atendimento | 'tempo_espera' }) => (
         <th
@@ -333,11 +480,10 @@ export default function RecepcaoPage() {
 
             const dataArray = await response.json();
             const data = dataArray[0];
-            console.log('Dados n8n:', data)
 
             setFormFicha(prev => ({
                 ...prev,
-                sequencial: parseInt(data.funcionario.ficha) || prev.sequencial,
+                sequencial: data.funcionario.ficha || prev.sequencial,
 
                 empresa: {
                     razao_social: data.empresa?.razao_social || "",
@@ -367,6 +513,27 @@ export default function RecepcaoPage() {
         } finally {
             setLoadingAction(null);
         }
+    };
+
+    const obterIdsConsolidados = () => {
+        return especialidades
+            .filter(esp => {
+                const normalizar = (txt: string) => txt.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\./g, "");
+
+                const isMatchedByDatabase = formFicha.exames.some(exDigitado =>
+                    esp.exames?.some((exBanco: any) => normalizar(String(exBanco.nome)) === normalizar(String(exDigitado.exame)))
+                );
+                const isTriagem = esp.nome.toLowerCase().includes("triagem");
+                const isManual = formFicha.especialidadesSelecionadas.includes(esp.id);
+
+                return isTriagem || isMatchedByDatabase || isManual;
+            })
+            .map(esp => esp.id);
+    };
+
+    const onFichaClick = (item: any) => {
+        window.navigator.clipboard.writeText(item.ficha_sequencial || "--");
+        toast.success("Ficha copiada: " + (item.ficha_sequencial || "--"))
     };
 
     return (
@@ -489,9 +656,9 @@ export default function RecepcaoPage() {
 
                                             // Lógica de estados
                                             const isFinalizado = item.status === "FINALIZADO";
-                                            const isAusente = item.status === "AUSENTE";
+                                            const isNaoAtendido = item.status === "NAO_ATENDIDO";
                                             const isCancelado = item.status === "CANCELADO";
-                                            const isEncerrado = isFinalizado || isAusente || isCancelado;
+                                            const isEncerrado = isFinalizado || isCancelado;
 
                                             // NOVIDADE: Verifica se a ficha já foi salva no banco
                                             const fichaPronta = item.ficha_preenchida || !!item.nome;
@@ -501,7 +668,7 @@ export default function RecepcaoPage() {
                                                 ? "bg-emerald-200/70 dark:bg-emerald-900/30"
                                                 : isCancelado
                                                     ? "bg-red-200/70 dark:bg-red-900/30"
-                                                    : isAusente
+                                                    : isNaoAtendido
                                                         ? "bg-orange-200/70 dark:bg-orange-900/30"
                                                         : fichaPronta
                                                             ? "bg-blue-50/30 dark:bg-blue-900/5"
@@ -529,7 +696,9 @@ export default function RecepcaoPage() {
 
                                                             {/* Feedback visual de que a ficha foi salva */}
                                                             {fichaPronta && !isEncerrado && (
-                                                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" title="Ficha Salva" />
+                                                                <span title="Ficha Salva">
+                                                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                                                                </span>
                                                             )}
 
                                                             {item.tem_exames && (
@@ -545,7 +714,9 @@ export default function RecepcaoPage() {
                                                         </div>
                                                     </td>
 
-                                                    <td className="p-4 font-mono text-slate-500">{item.ficha_sequencial || "--"}</td>
+                                                    <td className="p-4 text-[13px] font-bold font-mono cursor-pointer text-center" onClick={() => onFichaClick(item)}>
+                                                        <span className="p-1 rounded bg-slate-500/20 hover:bg-slate-500/50 transition-all">{item.ficha_sequencial || "--"}</span>
+                                                    </td>
 
                                                     <td className="p-4 text-slate-600 dark:text-slate-400 font-medium">{getHora(item.created_at)}</td>
 
@@ -569,7 +740,14 @@ export default function RecepcaoPage() {
                                                         <div className="flex justify-end gap-1.5 items-center">
                                                             {!isEncerrado ? (
                                                                 <>
-                                                                    {/* BOTÃO CHAMAR: Agora já coloca em atendimento direto */}
+                                                                    {item.status === "EM_FILA" && (
+                                                                        <div className="flex items-center gap-2 px-3 py-1 rounded-md bg-amber-100 text-amber-700 border border-amber-200 animate-pulse">
+                                                                            <Loader2 className="w-3 h-3 animate-spin" />
+                                                                            <span className="text-[11px] font-medium italic">Aguardando chamada...</span>
+                                                                        </div>
+                                                                    )}
+
+                                                                    {/* OPÇÕES DURANTE O ATENDIMENTO */}
                                                                     {item.status === "AGUARDANDO_RECEPCAO" && (
                                                                         <Button
                                                                             size="sm"
@@ -577,9 +755,11 @@ export default function RecepcaoPage() {
                                                                             className="h-8 text-[11px] border-amber-600 text-amber-600 hover:bg-amber-50"
                                                                             onClick={() => executarAcao("gerenciar_chamada_recepcao", {
                                                                                 p_atendimento_id: item.id,
-                                                                                p_status: 'EM_RECEPCAO', // Direto para atendimento
-                                                                                p_guiche: '3'
+                                                                                p_status: 'EM_FILA',
+                                                                                p_guiche: item.guiche,
+                                                                                p_atendente: item.atendente
                                                                             })}
+                                                                            disabled={loadingAction === item.id}
                                                                         >
                                                                             <BellRing className="w-3 h-3 mr-1" />
                                                                             Chamar
@@ -589,38 +769,93 @@ export default function RecepcaoPage() {
                                                                     {/* OPÇÕES DURANTE O ATENDIMENTO */}
                                                                     {item.status === "EM_RECEPCAO" && (
                                                                         <>
-                                                                            <Button
-                                                                                size="sm"
-                                                                                disabled={!fichaPronta}
-                                                                                className={`h-8 text-[11px] font-bold ${fichaPronta ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-300'}`}
-                                                                                onClick={() => executarAcao("finalizar_recepcao", { p_atendimento_id: item.id })}
-                                                                            >
-                                                                                <CheckCircle2 className="w-3 h-3 mr-1" />
-                                                                                Finalizar
-                                                                            </Button>
+                                                                            {finalizandoIds[item.id] ? (
+                                                                                <div className="flex items-center gap-1">
+                                                                                    {/* BOTÃO COM CONTAGEM */}
+                                                                                    <Button
+                                                                                        size="sm"
+                                                                                        disabled
+                                                                                        className="h-8 text-[11px] font-bold bg-slate-600 min-w-[90px] text-white"
+                                                                                    >
+                                                                                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                                                                        {finalizandoIds[item.id]}s
+                                                                                    </Button>
 
+                                                                                    {/* BOTÃO PARA CANCELAR A CONTAGEM */}
+                                                                                    <TooltipProvider>
+                                                                                        <Tooltip>
+                                                                                            <TooltipTrigger asChild>
+                                                                                                <Button
+                                                                                                    size="sm"
+                                                                                                    variant="destructive"
+                                                                                                    className="h-8 w-8 p-0"
+                                                                                                    onClick={() => cancelarFinalizacao(item.id)}
+                                                                                                >
+                                                                                                    <X className="w-4 h-4" />
+                                                                                                </Button>
+                                                                                            </TooltipTrigger>
+                                                                                            <TooltipContent>Interromper finalização</TooltipContent>
+                                                                                        </Tooltip>
+                                                                                    </TooltipProvider>
+                                                                                </div>
+                                                                            ) : (
+                                                                                // BOTÃO NORMAL
+                                                                                <Button
+                                                                                    size="sm"
+                                                                                    disabled={!fichaPronta}
+                                                                                    className={`h-8 text-[11px] font-bold ${fichaPronta ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-300'
+                                                                                        }`}
+                                                                                    onClick={() => iniciarFinalizacaoComDelay(item.id)}
+                                                                                >
+                                                                                    <CheckCircle2 className="w-3 h-3 mr-1" />
+                                                                                    Finalizar
+                                                                                </Button>
+                                                                            )}
+
+                                                                            {!finalizandoIds[item.id] && (
+                                                                                <>
+                                                                                    <Button
+                                                                                        size="sm"
+                                                                                        variant="outline"
+                                                                                        className="h-8 text-[11px] border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-muted dark:hover:text-white dark:hover:bg-blue-600 transition-colors"
+                                                                                        onClick={() => executarAcao("gerenciar_chamada_recepcao", {
+                                                                                            p_atendimento_id: item.id,
+                                                                                            p_status: 'EM_FILA'
+                                                                                        })}
+                                                                                    >
+                                                                                        <BellRing className="w-3 h-3 mr-1" />
+                                                                                        Chamar Novamente
+                                                                                    </Button>
+
+                                                                                    <Button
+                                                                                        size="sm"
+                                                                                        variant="ghost"
+                                                                                        className="h-8 text-[11px] bg-orange-500/80 text-white hover:text-orange-500 border-orange-500/50 transition-colors dark:text-white/80"
+                                                                                        onClick={() => executarAcao("gerenciar_chamada_recepcao", {
+                                                                                            p_atendimento_id: item.id,
+                                                                                            p_status: 'NAO_ATENDIDO'
+                                                                                        })}
+                                                                                    >
+                                                                                        Não Atendido
+                                                                                    </Button>
+                                                                                </>
+                                                                            )}
+                                                                        </>
+                                                                    )}
+
+                                                                    {item.status === "NAO_ATENDIDO" && (
+                                                                        <>
                                                                             <Button
                                                                                 size="sm"
                                                                                 variant="outline"
-                                                                                className="h-8 text-[11px] border-blue-600 text-blue-600"
+                                                                                className="h-8 text-[11px] border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-muted dark:hover:text-white dark:hover:bg-blue-600 transition-colors"
                                                                                 onClick={() => executarAcao("gerenciar_chamada_recepcao", {
                                                                                     p_atendimento_id: item.id,
-                                                                                    p_status: 'EM_RECEPCAO' // Dispara o painel novamente mantendo o status
+                                                                                    p_status: 'EM_FILA'
                                                                                 })}
                                                                             >
-                                                                                Rechamar
-                                                                            </Button>
-
-                                                                            <Button
-                                                                                size="sm"
-                                                                                variant="ghost"
-                                                                                className="h-8 text-[11px] text-orange-500 hover:text-orange-700"
-                                                                                onClick={() => executarAcao("gerenciar_chamada_recepcao", {
-                                                                                    p_atendimento_id: item.id,
-                                                                                    p_status: 'AUSENTE'
-                                                                                })}
-                                                                            >
-                                                                                Ausente
+                                                                                <BellRing className="w-3 h-3 mr-1" />
+                                                                                Chamar Novamente
                                                                             </Button>
                                                                         </>
                                                                     )}
@@ -632,7 +867,7 @@ export default function RecepcaoPage() {
                                                                                 <Button
                                                                                     size="sm"
                                                                                     variant="secondary"
-                                                                                    className={`h-8 w-8 p-0 ${fichaPronta ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-600 text-white'}`}
+                                                                                    className={`h-8 w-8 p-0 ${fichaPronta ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-600 text-white'} ${fichaPronta ? "hover:bg-emerald-300" : "hover:bg-blue-300"} transition-colors`}
                                                                                     onClick={() => abrirModalImportacao(item)}
                                                                                 >
                                                                                     <FileEdit className="w-3.5 h-3.5" />
@@ -649,12 +884,11 @@ export default function RecepcaoPage() {
                                                                                 <Button
                                                                                     size="sm"
                                                                                     variant="ghost"
-                                                                                    className="h-8 w-8 p-0 text-red-400 hover:text-red-600"
+                                                                                    className="h-8 w-8 p-0 text-white hover:text-red-600 hover:border-red-500 bg-red-500"
                                                                                     onClick={() => {
                                                                                         if (confirm("Cancelar este atendimento?")) {
-                                                                                            executarAcao("gerenciar_chamada_recepcao", {
+                                                                                            executarAcao("cancelar_atendimento", {
                                                                                                 p_atendimento_id: item.id,
-                                                                                                p_status: 'CANCELADO'
                                                                                             })
                                                                                         }
                                                                                     }}
@@ -669,9 +903,8 @@ export default function RecepcaoPage() {
                                                             ) : (
                                                                 <div className="flex items-center gap-2">
                                                                     <span className={`text-[10px] font-bold uppercase italic ${isCancelado ? 'text-red-500' : 'text-slate-400'}`}>
-                                                                        {isFinalizado ? "Atendido" : isCancelado ? "Cancelado" : "Ausente"}
+                                                                        {isFinalizado ? "Atendido" : isCancelado ? "Cancelado" : "Não Atendido"}
                                                                     </span>
-                                                                    {/* Permite reabrir ou importar ficha mesmo se encerrado, se desejar, ou manter apenas o texto */}
                                                                 </div>
                                                             )}
                                                         </div>
@@ -699,7 +932,7 @@ export default function RecepcaoPage() {
                     <DialogHeader className="p-6 pb-0">
                         <DialogTitle className="flex items-center gap-2 text-2xl font-black uppercase tracking-tighter">
                             <FileEdit className="w-6 h-6 text-blue-600" />
-                            Vincular Ficha: <span className="text-blue-600">{importModal.item?.senha_codigo}</span>
+                            Cadastrar Ficha: <span className="text-blue-600">{importModal.item?.senha_codigo}</span>
                         </DialogTitle>
                     </DialogHeader>
 
@@ -741,7 +974,7 @@ export default function RecepcaoPage() {
                                 </div>
                                 <div className="space-y-1.5">
                                     <Label className="text-[10px] font-black uppercase text-slate-400">Nº Sequencial</Label>
-                                    <Input type="number" className="h-10 font-black text-blue-600 text-center text-lg" value={formFicha.sequencial} onChange={(e) => setFormFicha({ ...formFicha, sequencial: parseInt(e.target.value) })} />
+                                    <Input className="h-10 font-black text-blue-600 text-center text-lg" value={formFicha.sequencial} onChange={(e) => setFormFicha({ ...formFicha, sequencial: e.target.value })} />
                                 </div>
                             </div>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -859,9 +1092,22 @@ export default function RecepcaoPage() {
                                 />
                                 <div className="flex flex-wrap gap-1.5 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl min-h-25 align-top">
                                     {formFicha.exames.map((ex, i) => (
-                                        <Badge key={i} className="bg-white dark:bg-slate-700 text-slate-700 border border-slate-200 font-bold py-1 px-2 flex items-center gap-2">
+                                        <Badge
+                                            key={i}
+                                            className="bg-white dark:bg-slate-700 text-slate-700 border border-slate-200 font-bold py-1 px-2 flex items-center gap-2"
+                                        >
                                             {ex.exame.toUpperCase()}
-                                            <XCircle className="w-3 h-3 cursor-pointer text-slate-400 hover:text-red-500" onClick={() => removeExame(i)} />
+                                            <Button onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                removeExame(i);
+                                            }}
+                                                className="cursor-pointer text-slate-400 hover:text-red-500 transition-colors bg-transparent p-0">
+
+                                                <XCircle
+                                                    className="w-3 h-3"
+                                                />
+                                            </Button>
                                         </Badge>
                                     ))}
                                 </div>
@@ -874,22 +1120,28 @@ export default function RecepcaoPage() {
                                 </div>
                                 <div className="bg-slate-50 h-fit dark:bg-slate-800/50 border border-slate-100 rounded-xl p-3 h-38.75 overflow-y-auto space-y-1">
                                     {especialidades.map((esp) => {
-                                        const normalizar = (txt: string) => txt.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\./g, "");
-                                        const isMatchedByDatabase = formFicha.exames.some(exDigitado =>
-                                            esp.exames?.some((exBanco: any) => normalizar(String(exBanco.nome)) === normalizar(String(exDigitado.exame)))
-                                        );
-                                        const isTriagem = esp.nome.toLowerCase().includes("triagem");
-                                        const isChecked = isTriagem || formFicha.especialidadesSelecionadas.includes(esp.id) || isMatchedByDatabase;
+                                        // Mantemos a normalização para conferência
+                                        const normalizar = (txt: string) => txt?.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\./g, "") || "";
+
+                                        // Verifica se esta especialidade deve estar marcada (está no estado)
+                                        const isChecked = formFicha.especialidadesSelecionadas.includes(esp.id);
 
                                         return (
                                             <label key={esp.id} className={`flex items-center justify-between p-2 rounded-md transition-all cursor-pointer ${isChecked ? 'bg-blue-100/50 dark:bg-blue-900/30' : 'opacity-50 hover:opacity-100'}`}>
                                                 <div className="flex items-center gap-2">
-                                                    <input type="checkbox" checked={isChecked} disabled={isTriagem} className="w-3.5 h-3.5" onChange={(e) => {
-                                                        setFormFicha(prev => ({
-                                                            ...prev,
-                                                            especialidadesSelecionadas: e.target.checked ? [...prev.especialidadesSelecionadas, esp.id] : prev.especialidadesSelecionadas.filter(id => id !== esp.id)
-                                                        }))
-                                                    }} />
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={isChecked}
+                                                        className="w-3.5 h-3.5"
+                                                        onChange={(e) => {
+                                                            setFormFicha(prev => ({
+                                                                ...prev,
+                                                                especialidadesSelecionadas: e.target.checked
+                                                                    ? [...prev.especialidadesSelecionadas, esp.id]
+                                                                    : prev.especialidadesSelecionadas.filter(id => id !== esp.id)
+                                                            }))
+                                                        }}
+                                                    />
                                                     <span className="text-[10px] font-black uppercase text-slate-600 dark:text-slate-300">{esp.nome}</span>
                                                 </div>
                                                 {isChecked && <CheckCircle2 className="w-3 h-3 text-blue-600" />}
@@ -908,7 +1160,7 @@ export default function RecepcaoPage() {
                             disabled={loadingAction === "saving_ficha" || !formFicha.funcionario.nome}
                         >
                             {loadingAction === "saving_ficha" ? <RefreshCw className="w-5 h-5 animate-spin mr-2" /> : <Save className="w-5 h-5 mr-2" />}
-                            Salvar Prontuário e Liberar Atendimento
+                            Salvar Ficha de Atendimento
                         </Button>
                     </DialogFooter>
                 </DialogContent>
