@@ -85,14 +85,7 @@ export default function RecepcaoPage() {
 
                 setEspecialidades(ordenadas);
 
-                // 4. Lógica para Triagem vir ticada por padrão no estado inicial
-                const triagem = ordenadas.find(e => e.nome.toLowerCase().includes("triagem"));
-                // if (triagem) {
-                //     setFormFicha(prev => ({
-                //         ...prev,
-                //         especialidadesSelecionadas: [triagem.id]
-                //     }));
-                // }
+                // const triagem = ordenadas.find(e => e.nome.toLowerCase().includes("triagem"));
             }
         }
         fetchEspecialidades();
@@ -160,7 +153,6 @@ export default function RecepcaoPage() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const getTempoEsperaEvolutivo = (item: any) => {
         if (!item.created_at) return { texto: "--", isCancelado: false };
-        console.log(item.created_at)
 
         const statusTravados = ["CANCELADO", "FINALIZADO"];
 
@@ -198,7 +190,12 @@ export default function RecepcaoPage() {
             "CANCELADO": "bg-red-600 text-red-100",
             "NAO_ATENDIDO": "bg-orange-600 text-orange-100",
             "AGUARDANDO_EXAMES": "bg-green-600 text-green-100",
+            "EM_AUDIOMETRIA": "bg-green-600 text-green-100",
+            "EM_CLINICO": "bg-green-600 text-green-100",
             "EM_TRIAGEM": "bg-green-600 text-green-100",
+            "EM_TOXICOLOGICO": "bg-green-600 text-green-100",
+            "EM_LABORATORIO": "bg-green-600 text-green-100",
+            "EM_ECG/EEG/ESPIRO": "bg-green-600 text-green-100",
         }
         return <Badge className={`${styles[status] || 'bg-slate-100'} border-none text-[9px] font-black tracking-widest uppercase px-2`}>{(status) === "NAO_ATENDIDO" ? "NÃO ATENDIDO" : (status === "AGUARDANDO_RECEPCAO" ? "AGUARDANDO RECEPÇÃO" : (status === "EM_RECEPCAO" ? "EM RECEPÇÃO" : status.replace('_', ' ')))}</Badge>
     }
@@ -681,7 +678,7 @@ export default function RecepcaoPage() {
                                             const isFinalizado = item.status === "FINALIZADO";
                                             const isNaoAtendido = item.status === "NAO_ATENDIDO";
                                             const isCancelado = item.status === "CANCELADO";
-                                            const isAguardandoExames = item.status === "AGUARDANDO_EXAMES" || item.status === "EM_TRIAGEM";
+                                            const isAguardandoExames = item.status === "AGUARDANDO_EXAMES" || item.status === "EM_TRIAGEM" || item.status === "EM_CLINICO" || item.status === "EM_TOXICOLOGICO" || item.status === "EM_LABORATORIO" || item.status === "EM_ECG/EEG/ESPIRO" || item.status === "EM_AUDIOMETRIA";
                                             const isAguardandoRecepcao = item.status === "AGUARDANDO_RECEPCAO";
                                             const isEncerrado = isFinalizado || isCancelado;
 
@@ -758,13 +755,17 @@ export default function RecepcaoPage() {
                                                     </td>
 
                                                     <td className="p-4 text-center">
-                                                        {(item.sala_atual == null) ? (
+                                                        {item.sala_atual == null ? (
                                                             getStatusBadge(item.status)
                                                         ) : (
-                                                            `${getStatusBadge(item.status)} - Sala: ${item.sala_atual}`
+                                                            <div className="flex flex-col items-center gap-1">
+                                                                {getStatusBadge(item.status)}
+                                                                <span className="text-[12px] font-bold text-slate-500">
+                                                                    Sala: {item.sala_atual}
+                                                                </span>
+                                                            </div>
                                                         )}
                                                     </td>
-
                                                     <td className="p-4 text-center font-black text-slate-700 dark:text-white">
                                                         {item.guiche || "--"}
                                                     </td>

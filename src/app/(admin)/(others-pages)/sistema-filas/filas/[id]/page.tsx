@@ -89,8 +89,8 @@ export default function FilaPage() {
     }
 
     // Lógica de cores centralizada
-    const getStatusStyles = (status: string, bloqueado?: boolean, salaAtual?: string) => {
-
+    const getStatusStyles = (statusAtendimento?: string, bloqueado?: boolean, salaAtual?: string, status?: string) => {
+        console.log(statusAtendimento, bloqueado, salaAtual, status)
         if (!status) {
             return { color: "text-slate-400", bg: "bg-slate-100", label: "INDETERMINADO" };
         }
@@ -105,21 +105,12 @@ export default function FilaPage() {
             }
         }
 
-        // 🟠 EM ALGUMA SALA (status do atendimento)
-        if (status.startsWith("EM_") && status !== "EM_ATENDIMENTO") {
-            return {
-                color: "text-orange-600",
-                bg: "bg-orange-500/10",
-                label: status.replace("EM_", "").replaceAll("_", " ")
-            }
-        }
-
         // 🔵 Em atendimento (exame atual)
-        if (status === "EM_ATENDIMENTO") {
+        if (statusAtendimento && statusAtendimento.startsWith("EM_") && status == "EM_ATENDIMENTO") {
             return {
                 color: "text-blue-600",
                 bg: "bg-blue-500/10",
-                label: "EM CONSULTA",
+                label: "ATENDENDO",
                 animate: "animate-pulse"
             }
         }
@@ -323,7 +314,8 @@ export default function FilaPage() {
                                         const styles = getStatusStyles(
                                             item.status_atendimento,
                                             item.bloqueado,
-                                            item.sala_atual
+                                            item.sala_atual,
+                                            item.status
                                         )
 
                                         const isFinalizado = item.status === "FINALIZADO"
@@ -396,10 +388,12 @@ export default function FilaPage() {
                                                 {/* STATUS */}
                                                 <td className="p-4 text-center">
                                                     {item.bloqueado ? (
-                                                        <Badge variant="destructive" className={`h-fit flex-col uppercase ${styles.bg} ${styles.color} border-none text-[10px] font-bold tracking-wider p-2 ${styles.animate || ""}`}>
-                                                            <span>{styles.label}</span>
-                                                            <span>{`${item.sala_atual} (Sala ${item.num_sala})`}</span>
+                                                        <div className="flex flex-col items-center gap-1">
+                                                        <Badge variant="destructive" className={`uppercase ${styles.bg} ${styles.color} border-none text-[10px] font-bold tracking-wider ${styles.animate || ""}`}>
+                                                            {styles.label}
                                                         </Badge>
+                                                        <span className="text-[11px] font-bold">{`${item.sala_atual} (Sala ${item.num_sala})`}</span>
+                                                        </div>
                                                     ) : (
                                                         <Badge
                                                             className={`${styles.bg} ${styles.color} border-none text-[10px] font-bold tracking-wider ${styles.animate || ""}`}
