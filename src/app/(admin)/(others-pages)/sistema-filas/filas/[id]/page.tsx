@@ -28,14 +28,14 @@ import {
 } from "lucide-react"
 
 type ItemFila = {
-    tipo: string
+    tipo_senha: string
     id: string
     senha: string
     nome: string
     status: string
     created_at: string
-    sequencial_ficha: string
-    guiche: string
+    ficha_sequencial: string
+    num_sala: string
     tempo_espera_inicial: number
     observacao?: string
     bloqueado?: boolean
@@ -45,7 +45,7 @@ type ItemFila = {
 }
 
 type ConfigOrdenacao = {
-    coluna: keyof ItemFila | 'tempo_total'
+    coluna: keyof ItemFila | 'tempo_espera'
     direcao: 'asc' | 'desc'
 }
 
@@ -59,14 +59,14 @@ export default function FilaPage() {
     const [loadingAction, setLoadingAction] = useState<string | null>(null)
     const [openModal, setOpenModal] = useState(false)
     const [session, setSession] = useState<any>(null)
-    const [ordenacao, setOrdenacao] = useState<ConfigOrdenacao>({ coluna: 'tempo_total', direcao: 'desc' })
+    const [ordenacao, setOrdenacao] = useState<ConfigOrdenacao>({ coluna: 'tempo_espera', direcao: 'desc' })
     const [showToxicologico, setShowToxicologico] = useState(false)
 
     const TOX_SALA = "Toxicológico"
 
     const getTempoEsperaTotal = (item: ItemFila) => {
         if (!item.created_at) return 0
-        
+
         const decorridoDesdeCriacao = Math.floor((Date.now() - new Date(item.created_at).getTime()) / 1000 / 60)
         return (item.tempo_espera_inicial || 0) + decorridoDesdeCriacao
     }
@@ -76,6 +76,13 @@ export default function FilaPage() {
         return new Date(date).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
     }
 
+    const getColorTempoEspera = (minutos: number, isCancelado: boolean) => {
+        if (isCancelado) return "text-red-500";
+        if (minutos < 10) return "text-emerald-500"; // Até 10 min: Verde (Ok)
+        if (minutos < 20) return "text-amber-500";   // 10-20 min: Amarelo (Atenção)
+        if (minutos < 30) return "text-orange-600";  // 20-30 min: Laranja (Urgente)
+        return "text-yellow-600 animate-pulse";         // +30 min: Vermelho Pulsante (Crítico)
+    }
 
     // Lógica de cores centralizada
     const getStatusStyles = (status: string, bloqueado?: boolean) => {
@@ -99,8 +106,10 @@ export default function FilaPage() {
                 return { color: "text-blue-600", bg: "bg-blue-500/10", label: "EM CONSULTA", animate: "animate-pulse" }
             case "FINALIZADO":
                 return { color: "text-emerald-600", bg: "bg-emerald-500/10", label: "FINALIZADO" }
+            case "AGUARDANDO":
+                return { color: "text-slate-600", bg: "bg-slate-100", label: "AGUARDANDO" }
             default:
-                return { color: "text-slate-600", bg: "bg-slate-100", label: "NA FILA" }
+                return { color: "text-slate-600", bg: "bg-slate-100", label: "AGUARDANDO" }
         }
     }
 
@@ -193,18 +202,18 @@ export default function FilaPage() {
     }
 
     const dadosProcessados = useMemo(() => {
-    const listaBruta = showToxicologico ? [...data, ...dataTox] : [...data];
-    
-    // Remove duplicatas baseadas no ID do atendimento_exame
-    const listaUnica = Array.from(new Map(listaBruta.map(item => [item.id, item])).values());
+        const listaBruta = showToxicologico ? [...data, ...dataTox] : [...data];
 
-    return listaUnica.sort((a, b) => {
-        const pesoStatus = (s, bloq) => {
-            if (bloq) return 5;
-            if (s === "EM_ATENDIMENTO") return 1;
-            if (s === "AGUARDANDO") return 2;
-            return 3;
-        };
+        // Remove duplicatas baseadas no ID do atendimento_exame
+        const listaUnica = Array.from(new Map(listaBruta.map(item => [item.id, item])).values());
+
+        return listaUnica.sort((a, b) => {
+            const pesoStatus = (s: string, bloq: boolean | undefined) => {
+                if (bloq) return 5;
+                if (s === "EM_ATENDIMENTO") return 1;
+                if (s === "AGUARDANDO") return 2;
+                return 3;
+            };
             const pA = pesoStatus(a.status, a.bloqueado)
             const pB = pesoStatus(b.status, b.bloqueado)
             if (pA !== pB) return pA - pB
@@ -212,12 +221,17 @@ export default function FilaPage() {
         })
     }, [data, dataTox, showToxicologico, ordenacao])
 
-    const ThOrdenavel = ({ label, coluna }: { label: string, coluna: keyof ItemFila | 'tempo_total' }) => (
+    const ThOrdenavel = ({ label, coluna }: { label: string, coluna: keyof ItemFila | 'tempo_espera' }) => (
         <th className="text-left p-4 font-bold text-slate-500 uppercase tracking-widest text-[10px] cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             onClick={() => setOrdenacao(prev => ({ coluna, direcao: prev.coluna === coluna && prev.direcao === 'asc' ? 'desc' : 'asc' }))}>
             <div className="flex items-center gap-1">{label} <ArrowUpDown className="w-3 h-3 opacity-50" /></div>
         </th>
     )
+
+    const onFichaClick = (item: any) => {
+        window.navigator.clipboard.writeText(item.ficha_sequencial || "--");
+        toast.success("Ficha copiada: " + (item.ficha_sequencial || "--"))
+    };
 
     if (loading) return <div className="flex h-screen items-center justify-center font-mono text-sm animate-pulse text-emerald-600 bg-slate-50 dark:bg-slate-950 uppercase tracking-widest">Sincronizando Fila...</div>
 
@@ -271,9 +285,9 @@ export default function FilaPage() {
                                     <tr>
                                         <ThOrdenavel label="Senha" coluna="senha" />
                                         <ThOrdenavel label="Nome" coluna="nome" />
-                                        <ThOrdenavel label="Sequencial Ficha" coluna="sequencial_ficha" />
+                                        <ThOrdenavel label="Sequencial Ficha" coluna="ficha_sequencial" />
                                         <ThOrdenavel label="Chegada" coluna="created_at" />
-                                        <ThOrdenavel label="Tempo Espera" coluna="tempo_total" />
+                                        <ThOrdenavel label="Tempo Espera" coluna="tempo_espera" />
                                         <ThOrdenavel label="Status" coluna="status" />
                                         <ThOrdenavel label="Sala" coluna="sala" />
                                         <th className="text-right p-4 font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest text-[10px]">
@@ -300,10 +314,6 @@ export default function FilaPage() {
                                                         ? "bg-orange-200/70 dark:bg-orange-900/30"
                                                         : "hover:bg-slate-50/80 dark:hover:bg-slate-800/40"
 
-                                        function onFichaClick(item: ItemFila): void {
-                                            throw new Error("Function not implemented.")
-                                        }
-
                                         return (
                                             <tr
                                                 key={item.id}
@@ -312,14 +322,10 @@ export default function FilaPage() {
                                                 {/* SENHA */}
                                                 <td className="p-4">
                                                     <div className="flex flex-col gap-1">
-                                                        <span className={`text-lg font-black ${styles.color} ${styles.animate || ""}`}>
+                                                        <span className={`text-lg font-black leading-none ${item.tipo_senha === "PREFERENCIAL" ? "text-orange-600" : "text-blue-600"}`}>
                                                             {item.senha}
                                                         </span>
-                                                        {item.tipo && (
-                                                            <span className="text-[9px] font-bold text-slate-400 uppercase">
-                                                                {item.tipo}
-                                                            </span>
-                                                        )}
+                                                        <span className="text-[9px] font-bold text-slate-400 uppercase">{item.tipo_senha}</span>
                                                     </div>
                                                 </td>
 
@@ -344,7 +350,7 @@ export default function FilaPage() {
                                                     onClick={() => onFichaClick?.(item)}
                                                 >
                                                     <span className="p-1 rounded bg-slate-500/20 hover:bg-slate-500/50 transition-all">
-                                                        {item.sequencial_ficha || "--"}
+                                                        {item.ficha_sequencial || "--"}
                                                     </span>
                                                 </td>
 
@@ -354,7 +360,7 @@ export default function FilaPage() {
                                                 </td>
 
                                                 {/* TEMPO */}
-                                                <td className="p-4 font-bold">
+                                                <td className={`p-4 font-bold ${isEncerrado ? "text-slate-400" : getColorTempoEspera(parseInt(item.created_at), isCancelado)}`}>
                                                     <div className="flex items-center gap-1 text-amber-600">
                                                         <Clock className="w-3 h-3 opacity-70" />
                                                         {getTempoEsperaTotal(item)} min
@@ -370,9 +376,9 @@ export default function FilaPage() {
                                                     </Badge>
                                                 </td>
 
-                                                {/* GUICHÊ */}
+                                                {/* SALA */}
                                                 <td className="p-4 text-center font-black text-slate-700 dark:text-white">
-                                                    {item.guiche || "--"}
+                                                    {item.num_sala || "--"}
                                                 </td>
 
                                                 {/* AÇÕES */}
@@ -469,7 +475,7 @@ export default function FilaPage() {
                             <Label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Número da Sala</Label>
                             <div className="relative">
                                 <DoorOpen className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
-                                <Input className="pl-10 h-12 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:ring-emerald-500" placeholder="Ex: Consultório 01" value={session?.sala || ""} onChange={(e) => setSession({ ...session, sala: e.target.value })} />
+                                <Input className="pl-10 h-12 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:ring-emerald-500" placeholder="Ex: Consultório 01" onChange={(e) => setSession({ ...session, sala: e.target.value })} />
                             </div>
                         </div>
                         <div className="space-y-2">

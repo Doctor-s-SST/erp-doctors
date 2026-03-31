@@ -84,12 +84,12 @@ export default function RecepcaoPage() {
 
                 // 4. Lógica para Triagem vir ticada por padrão no estado inicial
                 const triagem = ordenadas.find(e => e.nome.toLowerCase().includes("triagem"));
-                if (triagem) {
-                    setFormFicha(prev => ({
-                        ...prev,
-                        especialidadesSelecionadas: [triagem.id]
-                    }));
-                }
+                // if (triagem) {
+                //     setFormFicha(prev => ({
+                //         ...prev,
+                //         especialidadesSelecionadas: [triagem.id]
+                //     }));
+                // }
             }
         }
         fetchEspecialidades();
@@ -157,7 +157,7 @@ export default function RecepcaoPage() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const getTempoEsperaEvolutivo = (item: any) => {
         if (!item.created_at) return { texto: "--", isCancelado: false };
-    console.log(item.created_at)
+        console.log(item.created_at)
 
         const statusTravados = ["CANCELADO", "FINALIZADO"];
 
@@ -283,6 +283,14 @@ export default function RecepcaoPage() {
         if (!importModal.item) return;
         setLoadingAction("saving_ficha");
 
+        const idTriagem = especialidades.find(e =>
+            e.nome.toLowerCase().includes("triagem")
+        )?.id;
+
+        const especialidadesFinal = idTriagem
+            ? Array.from(new Set([idTriagem, ...formFicha.especialidadesSelecionadas]))
+            : formFicha.especialidadesSelecionadas;
+
         const { error } = await supabase.rpc("registrar_dados_ficha", {
             p_atendimento_id: importModal.item.id,
             p_sequencial: formFicha.sequencial,
@@ -294,7 +302,7 @@ export default function RecepcaoPage() {
             p_paciente_setor: formFicha.funcionario.setor,
             p_empresa_razao: formFicha.empresa.razao_social,
             p_empresa_cnpj: formFicha.empresa.cnpj,
-            p_especialidades_ids: formFicha.especialidadesSelecionadas,
+            p_especialidades_ids: especialidadesFinal,
             p_exames_nomes: formFicha.exames
         });
 
@@ -321,10 +329,10 @@ export default function RecepcaoPage() {
             .map(esp => esp.id);
 
         // Mantém a Triagem sempre se ela existir
-        const idTriagem = especialidades.find(e => e.nome.toLowerCase().includes("triagem"))?.id;
-        if (idTriagem && !novosIdsMatch.includes(idTriagem)) {
-            novosIdsMatch.push(idTriagem);
-        }
+        // const idTriagem = especialidades.find(e => e.nome.toLowerCase().includes("triagem"))?.id;
+        // if (idTriagem && !novosIdsMatch.includes(idTriagem)) {
+        //     novosIdsMatch.push(idTriagem);
+        // }
 
         setFormFicha(prev => {
             // Une os que já estavam selecionados manualmente com os novos matches (sem duplicar)
@@ -341,7 +349,6 @@ export default function RecepcaoPage() {
     const abrirModalImportacao = async (item: Atendimento) => {
         setLoadingAction("loading_edit");
 
-        // 1. Busca dados estendidos do atendimento/paciente
         const { data: detalhes } = await supabase
             .from("atendimentos")
             .select(`
@@ -351,7 +358,20 @@ export default function RecepcaoPage() {
             .eq("id", item.id)
             .single();
 
+        const { data: examesAtendimento } = await supabase
+            .from("atendimento_exames")
+            .select("sala")
+            .eq("atendimento_id", item.id);
+
+        const idsSelecionados = especialidades
+            .filter(esp => examesAtendimento?.some(e => e.sala === esp.nome))
+            .map(esp => esp.id);
+
         const idTriagem = especialidades.find(e => e.nome.toLowerCase().includes("triagem"))?.id;
+
+        const especialidadesFinal = idTriagem
+            ? Array.from(new Set([idTriagem, ...idsSelecionados]))
+            : idsSelecionados;
 
         if (detalhes) {
             setFormFicha({
@@ -370,15 +390,20 @@ export default function RecepcaoPage() {
                     cpf: detalhes.pacientes?.cpf || ""
                 },
                 exame: { tipo: "" },
-                // Carrega os exames que foram salvos no JSONB
                 exames: detalhes.exames_list || [],
-                especialidadesSelecionadas: idTriagem ? [idTriagem] : []
+                especialidadesSelecionadas: especialidadesFinal
             });
+
+        } else {
+            setFormFicha(prev => ({
+                ...initialFormFicha,
+                especialidadesSelecionadas: idTriagem ? [idTriagem] : []
+            }));
         }
 
         setImportModal({ open: true, item });
         setLoadingAction(null);
-    }
+    };
 
     async function gerarSenha(tipo: "NORMAL" | "PREFERENCIAL") {
         if (generatingRef.current) return
@@ -523,10 +548,10 @@ export default function RecepcaoPage() {
                 const isMatchedByDatabase = formFicha.exames.some(exDigitado =>
                     esp.exames?.some((exBanco: any) => normalizar(String(exBanco.nome)) === normalizar(String(exDigitado.exame)))
                 );
-                const isTriagem = esp.nome.toLowerCase().includes("triagem");
+                // const isTriagem = esp.nome.toLowerCase().includes("triagem");
                 const isManual = formFicha.especialidadesSelecionadas.includes(esp.id);
 
-                return isTriagem || isMatchedByDatabase || isManual;
+                return isMatchedByDatabase || isManual;
             })
             .map(esp => esp.id);
     };
@@ -1159,10 +1184,9 @@ export default function RecepcaoPage() {
             {/* MODAL DE GUICHÊ */}
             <Dialog open={openModal} onOpenChange={setOpenModal}>
                 <DialogContent className="sm:max-w-100 border-none shadow-2xl bg-white dark:bg-slate-900">
-                    <DialogHeader>
-                        <DialogTitle className="text-center text-xl font-black uppercase tracking-tight">
-                            Guichê de Atendimento
-                        </DialogTitle>
+                    <DialogHeader className="space-y-4">
+                        <div className="bg-emerald-500/10 w-fit p-3 rounded-2xl mx-auto"><MonitorCheck className="w-8 h-8 text-emerald-500" /></div>
+                        <DialogTitle className="text-center text-xl font-black uppercase tracking-tight text-slate-800 dark:text-white">Guichê de Atendimento</DialogTitle>
                     </DialogHeader>
 
                     <div className="space-y-5 py-4 flex flex-col items-center">
