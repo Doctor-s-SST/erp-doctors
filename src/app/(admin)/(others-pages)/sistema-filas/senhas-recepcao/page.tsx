@@ -16,7 +16,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { on } from "events"
 
 type Atendimento = {
-    tem_exames: any
     id: string;
     senha_codigo: string;
     tipo_senha: string;
@@ -28,6 +27,10 @@ type Atendimento = {
     atendente: string;
     tempo_espera_min: number;
     ficha_preenchida: boolean;
+    tem_exames: any[];
+    sala_atual?: string | null
+    num_sala?: string | null
+    profissional?: string | null
 }
 
 type ConfigOrdenacao = {
@@ -194,7 +197,8 @@ export default function RecepcaoPage() {
             "FINALIZADO": "bg-emerald-600 text-emerald-100",
             "CANCELADO": "bg-red-600 text-red-100",
             "NAO_ATENDIDO": "bg-orange-600 text-orange-100",
-            "AGUARDANDO_EXAMES": "bg-orange-600 text-orange-100"
+            "AGUARDANDO_EXAMES": "bg-green-600 text-green-100",
+            "EM_TRIAGEM": "bg-green-600 text-green-100",
         }
         return <Badge className={`${styles[status] || 'bg-slate-100'} border-none text-[9px] font-black tracking-widest uppercase px-2`}>{(status) === "NAO_ATENDIDO" ? "NÃO ATENDIDO" : (status === "AGUARDANDO_RECEPCAO" ? "AGUARDANDO RECEPÇÃO" : (status === "EM_RECEPCAO" ? "EM RECEPÇÃO" : status.replace('_', ' ')))}</Badge>
     }
@@ -327,12 +331,6 @@ export default function RecepcaoPage() {
                 )
             )
             .map(esp => esp.id);
-
-        // Mantém a Triagem sempre se ela existir
-        // const idTriagem = especialidades.find(e => e.nome.toLowerCase().includes("triagem"))?.id;
-        // if (idTriagem && !novosIdsMatch.includes(idTriagem)) {
-        //     novosIdsMatch.push(idTriagem);
-        // }
 
         setFormFicha(prev => {
             // Une os que já estavam selecionados manualmente com os novos matches (sem duplicar)
@@ -683,21 +681,28 @@ export default function RecepcaoPage() {
                                             const isFinalizado = item.status === "FINALIZADO";
                                             const isNaoAtendido = item.status === "NAO_ATENDIDO";
                                             const isCancelado = item.status === "CANCELADO";
+                                            const isAguardandoExames = item.status === "AGUARDANDO_EXAMES" || item.status === "EM_TRIAGEM";
+                                            const isAguardandoRecepcao = item.status === "AGUARDANDO_RECEPCAO";
                                             const isEncerrado = isFinalizado || isCancelado;
 
                                             // NOVIDADE: Verifica se a ficha já foi salva no banco
                                             const fichaPronta = item.ficha_preenchida || !!item.nome;
 
                                             // Estilização da Linha baseada no Status
-                                            const rowStyles = isFinalizado
-                                                ? "bg-emerald-200/70 dark:bg-emerald-900/30"
-                                                : isCancelado
-                                                    ? "bg-red-200/70 dark:bg-red-900/30"
-                                                    : isNaoAtendido
-                                                        ? "bg-orange-200/70 dark:bg-orange-900/30"
-                                                        : fichaPronta
-                                                            ? "bg-blue-50/30 dark:bg-blue-900/5"
-                                                            : "hover:bg-slate-50/80 dark:hover:bg-slate-800/40";
+                                            const rowStyles =
+                                                isFinalizado
+                                                    ? "bg-emerald-200/70 dark:bg-emerald-900/30"
+                                                    : isCancelado
+                                                        ? "bg-red-200/70 dark:bg-red-900/30"
+                                                        : isAguardandoExames
+                                                            ? "bg-green-200/30 dark:bg-green-900/30"
+                                                            : isNaoAtendido
+                                                                ? "bg-orange-200/70 dark:bg-orange-900/30"
+                                                                : isAguardandoRecepcao
+                                                                    ? "hover:bg-slate-50/80 dark:hover:bg-slate-800/40"
+                                                                    : fichaPronta
+                                                                        ? "bg-blue-50/30 dark:bg-blue-900/5"
+                                                                        : "hover:bg-slate-50/80 dark:hover:bg-slate-800/40";
 
                                             return (
                                                 <tr
@@ -753,7 +758,11 @@ export default function RecepcaoPage() {
                                                     </td>
 
                                                     <td className="p-4 text-center">
-                                                        {getStatusBadge(item.status)}
+                                                        {(item.sala_atual == null) ? (
+                                                            getStatusBadge(item.status)
+                                                        ) : (
+                                                            `${getStatusBadge(item.status)} - Sala: ${item.sala_atual}`
+                                                        )}
                                                     </td>
 
                                                     <td className="p-4 text-center font-black text-slate-700 dark:text-white">

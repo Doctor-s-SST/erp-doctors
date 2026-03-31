@@ -24,24 +24,28 @@ import {
     RefreshCw,
     Beaker,
     Clock,
-    FlaskConical
+    FlaskConical,
+    BellRing
 } from "lucide-react"
 
 type ItemFila = {
     tipo_senha: string
     id: string
+    atendimento_id: string
     senha: string
     nome: string
     status: string
+    status_atendimento: string
     created_at: string
     ficha_sequencial: string
-    num_sala: string
-    tempo_espera_inicial: number
+    num_sala?: string | null
+    tempo_espera_inicial?: number
     observacao?: string
     bloqueado?: boolean
     sala?: string
     profissional?: string
     especialidade_nome?: string
+    sala_atual?: string
 }
 
 type ConfigOrdenacao = {
@@ -81,36 +85,54 @@ export default function FilaPage() {
         if (minutos < 10) return "text-emerald-500"; // Até 10 min: Verde (Ok)
         if (minutos < 20) return "text-amber-500";   // 10-20 min: Amarelo (Atenção)
         if (minutos < 30) return "text-orange-600";  // 20-30 min: Laranja (Urgente)
-        return "text-yellow-600 animate-pulse";         // +30 min: Vermelho Pulsante (Crítico)
+        return "text-red-600 animate-pulse";         // +30 min: Vermelho Pulsante (Crítico)
     }
 
     // Lógica de cores centralizada
-    const getStatusStyles = (status: string, bloqueado?: boolean) => {
-        // PROTEÇÃO: Se status for undefined ou null, retorna um estilo padrão
-        if (!status) return { color: "text-slate-400", bg: "bg-slate-100", label: "INDETERMINADO" };
+    const getStatusStyles = (status: string, bloqueado?: boolean, salaAtual?: string) => {
 
-        // Agora é seguro usar startsWith
-        if (status.startsWith("EM_") && status !== "EM_ATENDIMENTO") {
+        if (!status) {
+            return { color: "text-slate-400", bg: "bg-slate-100", label: "INDETERMINADO" };
+        }
+
+        // 🔴 BLOQUEADO mostrando onde está
+        if (bloqueado && salaAtual) {
             return {
-                color: "text-orange-600 dark:text-orange-400",
-                bg: "bg-orange-500/10",
-                label: status.replace("EM_", "").replace("_", " "),
-                animate: ""
+                color: "text-red-600",
+                bg: "bg-red-500/10",
+                label: `EM ATENDIMENTO`
+                // ${salaAtual.toUpperCase()}
             }
         }
 
-        if (bloqueado) return { color: "text-red-500", bg: "bg-red-500/10", label: "BLOQUEADO" }
-
-        switch (status) {
-            case "EM_ATENDIMENTO":
-                return { color: "text-blue-600", bg: "bg-blue-500/10", label: "EM CONSULTA", animate: "animate-pulse" }
-            case "FINALIZADO":
-                return { color: "text-emerald-600", bg: "bg-emerald-500/10", label: "FINALIZADO" }
-            case "AGUARDANDO":
-                return { color: "text-slate-600", bg: "bg-slate-100", label: "AGUARDANDO" }
-            default:
-                return { color: "text-slate-600", bg: "bg-slate-100", label: "AGUARDANDO" }
+        // 🟠 EM ALGUMA SALA (status do atendimento)
+        if (status.startsWith("EM_") && status !== "EM_ATENDIMENTO") {
+            return {
+                color: "text-orange-600",
+                bg: "bg-orange-500/10",
+                label: status.replace("EM_", "").replaceAll("_", " ")
+            }
         }
+
+        // 🔵 Em atendimento (exame atual)
+        if (status === "EM_ATENDIMENTO") {
+            return {
+                color: "text-blue-600",
+                bg: "bg-blue-500/10",
+                label: "EM CONSULTA",
+                animate: "animate-pulse"
+            }
+        }
+
+        if (bloqueado) {
+            return { color: "text-red-500", bg: "bg-red-500/10", label: "BLOQUEADO" }
+        }
+
+        if (status === "FINALIZADO") {
+            return { color: "text-emerald-600", bg: "bg-emerald-500/10", label: "FINALIZADO" }
+        }
+
+        return { color: "text-slate-600", bg: "bg-slate-100", label: "AGUARDANDO" }
     }
 
     async function fetchFila() {
@@ -183,11 +205,11 @@ export default function FilaPage() {
         checkUser();
     }, [id]);
 
-    async function executarAcao(rpcName: string, params: any, actionId: string) {
-        setLoadingAction(actionId)
+    async function executarAcao(rpcName: string, params: any) {
+        setLoadingAction(params.p_atendimento_id)
         const { error } = await supabase.rpc(rpcName, params)
         if (error) { toast.error("Erro na operação") }
-        else { toast.success("Operação realizada!"); fetchFila() }
+        else { toast.success("Sucesso!"); fetchFila() }
         setLoadingAction(null)
     }
 
@@ -298,7 +320,11 @@ export default function FilaPage() {
 
                                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                                     {dadosProcessados.map((item) => {
-                                        const styles = getStatusStyles(item.status, item.bloqueado)
+                                        const styles = getStatusStyles(
+                                            item.status_atendimento,
+                                            item.bloqueado,
+                                            item.sala_atual
+                                        )
 
                                         const isFinalizado = item.status === "FINALIZADO"
                                         const isCancelado = item.status === "CANCELADO"
@@ -361,7 +387,7 @@ export default function FilaPage() {
 
                                                 {/* TEMPO */}
                                                 <td className={`p-4 font-bold ${isEncerrado ? "text-slate-400" : getColorTempoEspera(parseInt(item.created_at), isCancelado)}`}>
-                                                    <div className="flex items-center gap-1 text-amber-600">
+                                                    <div className="flex items-center gap-1">
                                                         <Clock className="w-3 h-3 opacity-70" />
                                                         {getTempoEsperaTotal(item)} min
                                                     </div>
@@ -369,11 +395,18 @@ export default function FilaPage() {
 
                                                 {/* STATUS */}
                                                 <td className="p-4 text-center">
-                                                    <Badge
-                                                        className={`${styles.bg} ${styles.color} border-none text-[10px] font-bold tracking-wider ${styles.animate || ""}`}
-                                                    >
-                                                        {styles.label}
-                                                    </Badge>
+                                                    {item.bloqueado ? (
+                                                        <Badge variant="destructive" className={`h-fit flex-col uppercase ${styles.bg} ${styles.color} border-none text-[10px] font-bold tracking-wider p-2 ${styles.animate || ""}`}>
+                                                            <span>{styles.label}</span>
+                                                            <span>{`${item.sala_atual} (Sala ${item.num_sala})`}</span>
+                                                        </Badge>
+                                                    ) : (
+                                                        <Badge
+                                                            className={`${styles.bg} ${styles.color} border-none text-[10px] font-bold tracking-wider ${styles.animate || ""}`}
+                                                        >
+                                                            {styles.label}
+                                                        </Badge>
+                                                    )}
                                                 </td>
 
                                                 {/* SALA */}
@@ -389,20 +422,22 @@ export default function FilaPage() {
                                                                 {item.status === "AGUARDANDO" && !item.bloqueado && (
                                                                     <Button
                                                                         size="sm"
-                                                                        className="h-8 text-[11px] border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white transition-colors"
+                                                                        variant="outline"
+                                                                        className="h-8 text-[11px] border-amber-600 text-amber-600 hover:bg-amber-50"
                                                                         onClick={() =>
                                                                             executarAcao(
                                                                                 "chamar_paciente",
                                                                                 {
-                                                                                    atendimento_exame_id: item.id,
-                                                                                    sala: session.sala,
-                                                                                    profissional: session.profissional,
-                                                                                },
-                                                                                item.id
+                                                                                    p_atendimento_id: item.atendimento_id,
+                                                                                    p_atendimento_exame_id: item.id,
+                                                                                    p_sala: especialidadeNome,
+                                                                                    p_num_sala: session.sala,
+                                                                                    p_profissional: session.profissional,
+                                                                                }
                                                                             )
                                                                         }
                                                                     >
-                                                                        <Volume2 className="w-3 h-3 mr-1" />
+                                                                        <BellRing className="w-3 h-3 mr-1" />
                                                                         Chamar
                                                                     </Button>
                                                                 )}
@@ -415,7 +450,6 @@ export default function FilaPage() {
                                                                             executarAcao(
                                                                                 "finalizar_atendimento",
                                                                                 { atendimento_exame_id: item.id },
-                                                                                item.id
                                                                             )
                                                                         }
                                                                     >
@@ -434,8 +468,7 @@ export default function FilaPage() {
                                                                                 onClick={() =>
                                                                                     executarAcao(
                                                                                         "cancelar_atendimento",
-                                                                                        { p_atendimento_id: item.id },
-                                                                                        item.id
+                                                                                        { p_atendimento_id: item.atendimento_id }
                                                                                     )
                                                                                 }
                                                                             >
