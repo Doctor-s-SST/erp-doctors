@@ -25,7 +25,9 @@ import {
     Beaker,
     Clock,
     FlaskConical,
-    BellRing
+    BellRing,
+    Search,
+    MessageSquare
 } from "lucide-react"
 
 type ItemFila = {
@@ -65,6 +67,7 @@ export default function FilaPage() {
     const [session, setSession] = useState<any>(null)
     const [ordenacao, setOrdenacao] = useState<ConfigOrdenacao>({ coluna: 'tempo_espera', direcao: 'desc' })
     const [showToxicologico, setShowToxicologico] = useState(false)
+    const [filtro, setFiltro] = useState("")
 
     const TOX_SALA = "Toxicológico"
 
@@ -88,42 +91,42 @@ export default function FilaPage() {
         return "text-red-600 animate-pulse";         // +30 min: Vermelho Pulsante (Crítico)
     }
 
-    // Lógica de cores centralizada
-    const getStatusStyles = (statusAtendimento?: string, bloqueado?: boolean, salaAtual?: string, status?: string) => {
-        console.log(statusAtendimento, bloqueado, salaAtual, status)
-        if (!status) {
-            return { color: "text-slate-400", bg: "bg-slate-100", label: "INDETERMINADO" };
-        }
+    const getStatusStyles = (item: ItemFila) => {
+        const isMinhaSala = item.num_sala === session?.sala;
 
-        // 🔴 BLOQUEADO mostrando onde está
-        if (bloqueado && salaAtual) {
+        // 1. Prioridade para Bloqueados (em outra sala)
+        if (item.bloqueado && item.sala_atual && !isMinhaSala) {
             return {
                 color: "text-red-600",
                 bg: "bg-red-500/10",
-                label: `EM ATENDIMENTO`
-                // ${salaAtual.toUpperCase()}
+                label: "OCUPADO EM OUTRA SALA",
+                podeAcoes: false
             }
         }
 
-        // 🔵 Em atendimento (exame atual)
-        if (statusAtendimento && statusAtendimento.startsWith("EM_") && status == "EM_ATENDIMENTO") {
+        // 2. Se o status_atendimento for EM_CLÍNICO ou similar, ele já foi chamado
+        if (item.status_atendimento === "EM_CLÍNICO" && item.status === "EM_FILA") {
             return {
-                color: "text-blue-600",
-                bg: "bg-blue-500/10",
-                label: "ATENDENDO",
-                animate: "animate-pulse"
+                color: isMinhaSala ? "text-emerald-600" : "text-blue-600",
+                bg: isMinhaSala ? "bg-emerald-500/10" : "bg-blue-500/10",
+                label: isMinhaSala ? "EM FILA" : "EM CONSULTA",
+                animate: isMinhaSala ? "animate-pulse" : "",
+                podeAcoes: isMinhaSala
             }
         }
 
-        if (bloqueado) {
-            return { color: "text-red-500", bg: "bg-red-500/10", label: "BLOQUEADO" }
+        // 3. Status Finalizado
+        if (item.status === "FINALIZADO") {
+            return { color: "text-emerald-600", bg: "bg-emerald-500/10", label: "FINALIZADO", podeAcoes: false }
         }
 
-        if (status === "FINALIZADO") {
-            return { color: "text-emerald-600", bg: "bg-emerald-500/10", label: "FINALIZADO" }
+        // 4. Padrão: AGUARDANDO (Disponível para chamar)
+        return {
+            color: "text-slate-600",
+            bg: "bg-slate-100",
+            label: "AGUARDANDO",
+            podeAcoes: true
         }
-
-        return { color: "text-slate-600", bg: "bg-slate-100", label: "AGUARDANDO" }
     }
 
     async function fetchFila() {
@@ -215,24 +218,36 @@ export default function FilaPage() {
     }
 
     const dadosProcessados = useMemo(() => {
-        const listaBruta = showToxicologico ? [...data, ...dataTox] : [...data];
+        let lista = showToxicologico ? [...data, ...dataTox] : [...data];
 
-        // Remove duplicatas baseadas no ID do atendimento_exame
-        const listaUnica = Array.from(new Map(listaBruta.map(item => [item.id, item])).values());
+        // Remove duplicatas
+        lista = Array.from(new Map(lista.map(item => [item.id, item])).values());
 
-        return listaUnica.sort((a, b) => {
-            const pesoStatus = (s: string, bloq: boolean | undefined) => {
-                if (bloq) return 5;
-                if (s === "EM_ATENDIMENTO") return 1;
-                if (s === "AGUARDANDO") return 2;
+        // Aplicar Filtro de busca
+        if (filtro) {
+            const f = filtro.toLowerCase();
+            lista = lista.filter(i =>
+                i.nome.toLowerCase().includes(f) ||
+                i.senha.toLowerCase().includes(f) ||
+                i.ficha_sequencial?.toLowerCase().includes(f)
+            );
+        }
+
+        return lista.sort((a, b) => {
+            const pesoStatus = (item: ItemFila) => {
+                if (item.status === "EM_ATENDIMENTO") return 1;
+                if (item.status === "AGUARDANDO") return 2;
                 return 3;
             };
-            const pA = pesoStatus(a.status, a.bloqueado)
-            const pB = pesoStatus(b.status, b.bloqueado)
-            if (pA !== pB) return pA - pB
-            return ordenacao.direcao === 'asc' ? getTempoEsperaTotal(a) - getTempoEsperaTotal(b) : getTempoEsperaTotal(b) - getTempoEsperaTotal(a)
+            const pA = pesoStatus(a);
+            const pB = pesoStatus(b);
+            if (pA !== pB) return pA - pB;
+
+            return ordenacao.direcao === 'asc'
+                ? getTempoEsperaTotal(a) - getTempoEsperaTotal(b)
+                : getTempoEsperaTotal(b) - getTempoEsperaTotal(a);
         })
-    }, [data, dataTox, showToxicologico, ordenacao])
+    }, [data, dataTox, showToxicologico, ordenacao, filtro])
 
     const ThOrdenavel = ({ label, coluna }: { label: string, coluna: keyof ItemFila | 'tempo_espera' }) => (
         <th className="text-left p-4 font-bold text-slate-500 uppercase tracking-widest text-[10px] cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
@@ -277,16 +292,29 @@ export default function FilaPage() {
                     </div>
                 </div>
 
-                {/* CONTROLES */}
-                <div className="flex flex-wrap items-center gap-3">
-                    <Button onClick={fetchFila} disabled={isRefreshing} variant="outline" className="h-9 text-[10px] font-black uppercase tracking-widest border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800">
-                        <RefreshCw className={`w-3 h-3 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} /> Atualizar Lista
-                    </Button>
-                    {especialidadeNome === "Triagem" && (
-                        <Button onClick={() => setShowToxicologico(!showToxicologico)} variant={showToxicologico ? "default" : "outline"} className={`h-9 text-[10px] font-black uppercase tracking-widest transition-all ${showToxicologico ? 'bg-orange-600 hover:bg-orange-700 text-white border-none' : 'border-orange-200 text-orange-600 hover:bg-orange-50'}`}>
-                            <Beaker className="w-3 h-3 mr-2" /> {showToxicologico ? "Ocultar Toxicológico" : "Ver Toxicológico"}
+                {/* CONTROLES E FILTRO */}
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex gap-2">
+                        <Button onClick={fetchFila} disabled={isRefreshing} variant="outline" className="h-10 text-[10px] font-black uppercase border-slate-200">
+                            <RefreshCw className={`w-3 h-3 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} /> Atualizar
                         </Button>
-                    )}
+                        {especialidadeNome === "Triagem" && (
+                            <Button onClick={() => setShowToxicologico(!showToxicologico)} variant={showToxicologico ? "default" : "outline"} className={`h-10 text-[10px] font-black uppercase ${showToxicologico ? 'bg-orange-600' : ''}`}>
+                                <Beaker className="w-3 h-3 mr-2" /> Toxicológico
+                            </Button>
+                        )}
+                    </div>
+
+                    {/* BARRA DE PESQUISA (Igual recepção) */}
+                    <div className="relative w-full md:w-80">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <Input
+                            placeholder="Buscar por nome, senha ou ficha..."
+                            className="pl-10 h-10 bg-white border-slate-200 text-sm"
+                            value={filtro}
+                            onChange={(e) => setFiltro(e.target.value)}
+                        />
+                    </div>
                 </div>
 
                 {/* TABELA */}
@@ -302,7 +330,7 @@ export default function FilaPage() {
                                         <ThOrdenavel label="Chegada" coluna="created_at" />
                                         <ThOrdenavel label="Tempo Espera" coluna="tempo_espera" />
                                         <ThOrdenavel label="Status" coluna="status" />
-                                        <ThOrdenavel label="Sala" coluna="sala" />
+                                        <ThOrdenavel label="Observação" coluna="observacao" />
                                         <th className="text-right p-4 font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest text-[10px]">
                                             Ações
                                         </th>
@@ -311,12 +339,8 @@ export default function FilaPage() {
 
                                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                                     {dadosProcessados.map((item) => {
-                                        const styles = getStatusStyles(
-                                            item.status_atendimento,
-                                            item.bloqueado,
-                                            item.sala_atual,
-                                            item.status
-                                        )
+                                        const styles = getStatusStyles(item);
+                                        const waitTime = getTempoEsperaTotal(item);
 
                                         const isFinalizado = item.status === "FINALIZADO"
                                         const isCancelado = item.status === "CANCELADO"
@@ -389,10 +413,10 @@ export default function FilaPage() {
                                                 <td className="p-4 text-center">
                                                     {item.bloqueado ? (
                                                         <div className="flex flex-col items-center gap-1">
-                                                        <Badge variant="destructive" className={`uppercase ${styles.bg} ${styles.color} border-none text-[10px] font-bold tracking-wider ${styles.animate || ""}`}>
-                                                            {styles.label}
-                                                        </Badge>
-                                                        <span className="text-[11px] font-bold">{`${item.sala_atual} (Sala ${item.num_sala})`}</span>
+                                                            <Badge variant="destructive" className={`uppercase ${styles.bg} ${styles.color} border-none text-[10px] font-bold tracking-wider ${styles.animate || ""}`}>
+                                                                {styles.label}
+                                                            </Badge>
+                                                            <span className="text-[11px] font-bold">{`${item.sala_atual} (Sala ${item.num_sala})`}</span>
                                                         </div>
                                                     ) : (
                                                         <Badge
@@ -403,9 +427,18 @@ export default function FilaPage() {
                                                     )}
                                                 </td>
 
-                                                {/* SALA */}
-                                                <td className="p-4 text-center font-black text-slate-700 dark:text-white">
-                                                    {item.num_sala || "--"}
+                                                {/* CAMPO OBSERVAÇÃO */}
+                                                <td className="p-4 text-slate-500 italic max-w-[200px] truncate">
+                                                    {item.observacao ? (
+                                                        <TooltipProvider>
+                                                            <Tooltip>
+                                                                <TooltipTrigger className="flex items-center gap-1">
+                                                                    <MessageSquare className="w-3 h-3" /> {item.observacao}
+                                                                </TooltipTrigger>
+                                                                <TooltipContent className="max-w-xs">{item.observacao}</TooltipContent>
+                                                            </Tooltip>
+                                                        </TooltipProvider>
+                                                    ) : ""}
                                                 </td>
 
                                                 {/* AÇÕES */}

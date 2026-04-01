@@ -62,8 +62,8 @@ export default function RecepcaoPage() {
         funcionario: { nome: "", rg: "", nascimento: "", cargo: "", setor: "", cpf: "" },
         exame: { tipo: "" },
         exames: [] as Array<{ exame: string }>,
-        especialidadesSelecionadas: [] as number[]
-
+        especialidadesSelecionadas: [] as number[],
+        observacao: ""
     }
     const [formFicha, setFormFicha] = useState(initialFormFicha)
 
@@ -304,7 +304,8 @@ export default function RecepcaoPage() {
             p_empresa_razao: formFicha.empresa.razao_social,
             p_empresa_cnpj: formFicha.empresa.cnpj,
             p_especialidades_ids: especialidadesFinal,
-            p_exames_nomes: formFicha.exames
+            p_exames_nomes: formFicha.exames,
+            p_observacao: formFicha.observacao
         });
 
         if (error) {
@@ -370,24 +371,25 @@ export default function RecepcaoPage() {
 
         if (detalhes) {
             setFormFicha({
-                sequencial: detalhes.ficha_sequencial || 0,
-                arquivo: null,
-                empresa: {
-                    razao_social: detalhes.pacientes?.empresa_razao || "",
-                    cnpj: detalhes.pacientes?.empresa_cnpj || ""
-                },
-                funcionario: {
-                    nome: detalhes.pacientes?.nome || item.nome || "",
-                    rg: detalhes.pacientes?.rg || "",
-                    nascimento: detalhes.pacientes?.data_nascimento || "",
-                    cargo: detalhes.pacientes?.cargo || "",
-                    setor: detalhes.pacientes?.setor || "",
-                    cpf: detalhes.pacientes?.cpf || ""
-                },
-                exame: { tipo: "" },
-                exames: detalhes.exames_list || [],
-                especialidadesSelecionadas: especialidadesFinal
-            });
+                            sequencial: detalhes.ficha_sequencial || 0,
+                            arquivo: null,
+                            empresa: {
+                                razao_social: detalhes.pacientes?.empresa_razao || "",
+                                cnpj: detalhes.pacientes?.empresa_cnpj || ""
+                            },
+                            funcionario: {
+                                nome: detalhes.pacientes?.nome || item.nome || "",
+                                rg: detalhes.pacientes?.rg || "",
+                                nascimento: detalhes.pacientes?.data_nascimento || "",
+                                cargo: detalhes.pacientes?.cargo || "",
+                                setor: detalhes.pacientes?.setor || "",
+                                cpf: detalhes.pacientes?.cpf || ""
+                            },
+                            exame: { tipo: "" },
+                            exames: detalhes.exames_list || [],
+                            especialidadesSelecionadas: especialidadesFinal,
+                            observacao: detalhes.observacao || ""
+                        });
 
         } else {
             setFormFicha(prev => ({
@@ -1005,7 +1007,7 @@ export default function RecepcaoPage() {
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                                 <div className="md:col-span-3 space-y-1.5">
                                     <Label className="text-[10px] font-black uppercase text-slate-400">Nome Completo</Label>
-                                    <Input className="h-10 font-bold" value={formFicha.funcionario.nome} onChange={(e) => setFormFicha({ ...formFicha, funcionario: { ...formFicha.funcionario, nome: e.target.value.toUpperCase() } })} />
+                                    <Input className="h-10 font-bold" value={formFicha.funcionario.nome} onChange={(e) => setFormFicha({ ...formFicha, funcionario: { ...formFicha.funcionario, nome: e.target.value } })} />
                                 </div>
                                 <div className="space-y-1.5">
                                     <Label className="text-[10px] font-black uppercase text-slate-400">Nº Sequencial</Label>
@@ -1102,6 +1104,21 @@ export default function RecepcaoPage() {
                                 </div>
                             </section>
                         </div>
+
+                        {/* 3.5 OBSERVAÇÕES DO ATENDIMENTO */}
+                        <section className="space-y-4 pt-4 border-t border-slate-100">
+                            <div className="flex items-center gap-2 pb-2">
+                                <BellRing className="w-4 h-4 text-amber-500" />
+                                <h3 className="text-xs font-black uppercase tracking-widest text-slate-500">Observações</h3>
+                            </div>
+                            <div className="space-y-1.5">
+                                <textarea
+                                    className="w-full min-h-[80px] p-3 text-sm font-medium dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                                    value={formFicha.observacao}
+                                    onChange={(e) => setFormFicha({ ...formFicha, observacao: e.target.value })}
+                                />
+                            </div>
+                        </section>
 
                         {/* 4. LANÇAMENTO DE EXAMES E ESPECIALIDADES */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4 border-t border-slate-100">
