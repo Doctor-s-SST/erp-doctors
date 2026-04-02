@@ -1,44 +1,29 @@
-import type { Metadata } from "next";
-import { EcommerceMetrics } from "@/components/ecommerce/EcommerceMetrics";
-import React from "react";
-import MonthlyTarget from "@/components/ecommerce/MonthlyTarget";
-import MonthlySalesChart from "@/components/ecommerce/MonthlySalesChart";
-import StatisticsChart from "@/components/ecommerce/StatisticsChart";
-import RecentOrders from "@/components/ecommerce/RecentOrders";
-import DemographicCard from "@/components/ecommerce/DemographicCard";
-
+import { Metadata } from "next";
 
 export const metadata: Metadata = {
   title:
-    "Next.js E-commerce Dashboard | TailAdmin - Next.js Dashboard Template",
-  description: "This is Next.js Home for TailAdmin Dashboard Template",
+    "Doctor's | Sistema de Gestão Integrada",
+  description: "Sistema de Gestão Integrada para Doctor's Saúde e Segurança do Trabalho",
 };
 
-export default function Ecommerce() {
+export default function Home() {
 
   return (
-    <div className="grid grid-cols-12 gap-4 md:gap-6">
-      <div className="col-span-12 space-y-6 xl:col-span-7">
-        <EcommerceMetrics />
-
-        <MonthlySalesChart />
-      </div>
-
-      <div className="col-span-12 xl:col-span-5">
-        <MonthlyTarget />
-      </div>
-
-      <div className="col-span-12">
-        <StatisticsChart />
-      </div>
-
-      <div className="col-span-12 xl:col-span-5">
-        <DemographicCard />
-      </div>
-
-      <div className="col-span-12 xl:col-span-7">
-        <RecentOrders />
-      </div>
-    </div>
+    <main className="flex flex-col items-center justify-center min-h-screen bg-gray-50 p-8">
+      <h1 className="text-4xl font-bold text-blue-900 mb-4">
+        Bem-vindo ao Doctor's
+      </h1>
+      <p className="text-lg text-gray-700 mb-8 text-center max-w-xl">
+        Sistema de Gestão Integrada para Doctor's Saúde e Segurança do Trabalho. Gerencie seus processos de forma eficiente e segura.
+      </p>
+      {/* <div className="flex space-x-4">
+        <button className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition">
+          Acessar Módulos
+        </button>
+        <button className="px-6 py-2 bg-gray-200 text-blue-900 rounded hover:bg-gray-300 transition">
+          Saiba Mais
+        </button>
+      </div> */}
+    </main>
   );
 }

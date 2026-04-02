@@ -7,11 +7,10 @@ import { useSidebar } from "../context/SidebarContext";
 import {
   CalenderIcon,
   ChevronDownIcon,
-  GridIcon,
   HorizontaLDots,
-  PageIcon,
   UserCircleIcon,
 } from "../icons/index";
+import { House, MonitorCog } from 'lucide-react';
 import { supabase } from "@/lib/supabase";
 
 type NavItem = {
@@ -19,17 +18,23 @@ type NavItem = {
   icon: React.ReactNode;
   path?: string;
   roles?: string[];
-  subItems?: { 
-    name: string; 
-    path: string; 
-    roles?: string[] 
+  subItems?: {
+    name: string;
+    path: string;
+    roles?: string[]
   }[];
 };
 
 const navItems: NavItem[] = [
   {
+    icon: <House />,
+    name: "Home",
+    path: "/",
+    roles: ["admin", "recepcao", "especialista"],
+  },
+  {
     name: "Painel de Senhas",
-    icon: <PageIcon />,
+    icon: <MonitorCog />,
     roles: ["admin", "recepcao", "especialista"],
     subItems: [
       { name: "Kanban", path: "/sistema-filas/kanban", roles: ["admin"] },
@@ -38,12 +43,6 @@ const navItems: NavItem[] = [
       { name: "Painel", path: "/painel-senhas", roles: ["admin"] },
       { name: "Gerenciar Usuários", path: "/sistema-filas/users", roles: ["admin"] },
     ],
-  },
-  {
-    icon: <GridIcon />,
-    name: "Dashboard",
-    path: "/",
-    roles: ["admin"],
   },
   {
     icon: <CalenderIcon />,
@@ -74,7 +73,7 @@ const AppSidebar: React.FC = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         const { data, error } = await supabase
-          .from('profiles') 
+          .from('profiles')
           .select('role')
           .eq('id', user.id)
           .single();
@@ -152,7 +151,7 @@ const AppSidebar: React.FC = () => {
           <h2 className={`mb-4 text-xs uppercase text-gray-400 flex ${!isExpanded && !isHovered ? "lg:justify-center" : "justify-start"}`}>
             {isExpanded || isHovered || isMobileOpen ? "Menu Principal" : <HorizontaLDots />}
           </h2>
-          
+
           <ul className="flex flex-col gap-4">
             {filteredNavItems.map((nav, index) => (
               <li key={nav.name}>
