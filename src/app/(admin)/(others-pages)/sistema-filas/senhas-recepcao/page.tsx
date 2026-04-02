@@ -51,7 +51,8 @@ export default function RecepcaoPage() {
     const generatingRef = useRef(false)
     const [exameInput, setExameInput] = useState("")
     const [finalizandoIds, setFinalizandoIds] = useState<Record<string, number>>({});
-
+    const [especialidadesAuto, setEspecialidadesAuto] = useState<number[]>([]);
+    const [especialidadesManual, setEspecialidadesManual] = useState<number[]>([]);
 
     // ESTADOS DO MODAL DE IMPORTAÇÃO
     const [importModal, setImportModal] = useState<{ open: boolean, item: Atendimento | null }>({ open: false, item: null })
@@ -316,7 +317,7 @@ export default function RecepcaoPage() {
             p_paciente_setor: formFicha.funcionario.setor,
             p_empresa_razao: formFicha.empresa.razao_social,
             p_empresa_cnpj: formFicha.empresa.cnpj,
-            p_especialidades_ids: especialidadesFinal,
+            p_especialidades_ids: especialidadesSelecionadas,
             p_exames_nomes: formFicha.exames,
             p_observacao: formFicha.observacao
         });
@@ -332,28 +333,38 @@ export default function RecepcaoPage() {
     }
 
     useEffect(() => {
-        const normalizar = (txt: string) => txt?.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\./g, "") || "";
+        const normalizar = (txt: string) =>
+            txt?.toLowerCase().trim()
+                .normalize("NFD")
+                .replace(/[\u0300-\u036f]/g, "")
+                .replace(/\./g, "") || "";
 
-        // Encontra IDs de especialidades que dão match com os exames atuais
         const novosIdsMatch = especialidades
             .filter(esp =>
                 formFicha.exames.some(exDigitado =>
-                    esp.exames?.some((exBanco: { nome: string }) => normalizar(exBanco.nome) === normalizar(exDigitado.exame))
+                    esp.exames?.some((exBanco: { nome: string }) =>
+                        normalizar(exBanco.nome) === normalizar(exDigitado.exame)
+                    )
                 )
             )
             .map(esp => esp.id);
 
-        setFormFicha(prev => {
-            // Une os que já estavam selecionados manualmente com os novos matches (sem duplicar)
-            const totalSelecionados = Array.from(new Set([...prev.especialidadesSelecionadas, ...novosIdsMatch]));
+        setEspecialidadesAuto(novosIdsMatch);
 
-            // Só atualiza se houver mudança real para evitar loop infinito
-            if (JSON.stringify(totalSelecionados.sort()) !== JSON.stringify(prev.especialidadesSelecionadas.sort())) {
-                return { ...prev, especialidadesSelecionadas: totalSelecionados };
-            }
-            return prev;
-        });
     }, [formFicha.exames, especialidades]);
+
+    const getIdTriagem = () => {
+        return especialidades.find(e =>
+            e.nome.toLowerCase().includes("triagem")
+        )?.id;
+    };
+
+    const especialidadesSelecionadas = useMemo(() => {
+        return Array.from(new Set([
+            ...especialidadesAuto,
+            ...especialidadesManual
+        ]));
+    }, [especialidadesAuto, especialidadesManual]);
 
     const abrirModalImportacao = async (item: Atendimento) => {
         setLoadingAction("loading_edit");
@@ -382,7 +393,13 @@ export default function RecepcaoPage() {
             ? Array.from(new Set([idTriagem, ...idsSelecionados]))
             : idsSelecionados;
 
+        setEspecialidadesAuto([]);
+        setEspecialidadesManual(especialidadesFinal);
+
         if (detalhes) {
+            setEspecialidadesAuto([]);
+            setEspecialidadesManual(especialidadesFinal);
+
             setFormFicha({
                 sequencial: detalhes.ficha_sequencial || 0,
                 arquivo: null,
@@ -400,15 +417,16 @@ export default function RecepcaoPage() {
                 },
                 exame: { tipo: "" },
                 exames: detalhes.exames_list || [],
-                especialidadesSelecionadas: especialidadesFinal,
+                especialidadesSelecionadas: [],
                 observacao: detalhes.observacao || ""
             });
-
         } else {
-            setFormFicha(prev => ({
-                ...initialFormFicha,
-                especialidadesSelecionadas: idTriagem ? [idTriagem] : []
-            }));
+            const idTriagem = getIdTriagem();
+
+            setFormFicha(initialFormFicha);
+
+            setEspecialidadesAuto([]);
+            setEspecialidadesManual(idTriagem ? [idTriagem] : []);
         }
 
         setImportModal({ open: true, item });
@@ -1192,7 +1210,7 @@ export default function RecepcaoPage() {
                                 <div className="bg-slate-50 h-fit dark:bg-slate-800/50 border border-slate-100 rounded-xl p-3 h-38.75 overflow-y-auto space-y-1">
                                     {especialidades.map((esp) => {
                                         // Verifica se esta especialidade deve estar marcada (está no estado)
-                                        const isChecked = formFicha.especialidadesSelecionadas.includes(esp.id);
+                                        const isChecked = especialidadesSelecionadas.includes(esp.id);
 
                                         return (
                                             <label key={esp.id} className={`flex items-center justify-between p-2 rounded-md transition-all cursor-pointer ${isChecked ? 'bg-blue-100/50 dark:bg-blue-900/30' : 'opacity-50 hover:opacity-100'}`}>
@@ -1202,12 +1220,11 @@ export default function RecepcaoPage() {
                                                         checked={isChecked}
                                                         className="w-3.5 h-3.5"
                                                         onChange={(e) => {
-                                                            setFormFicha(prev => ({
-                                                                ...prev,
-                                                                especialidadesSelecionadas: e.target.checked
-                                                                    ? [...prev.especialidadesSelecionadas, esp.id]
-                                                                    : prev.especialidadesSelecionadas.filter(id => id !== esp.id)
-                                                            }))
+                                                            setEspecialidadesManual(prev =>
+                                                                e.target.checked
+                                                                    ? [...prev, esp.id]
+                                                                    : prev.filter(id => id !== esp.id)
+                                                            );
                                                         }}
                                                     />
                                                     <span className="text-[10px] font-black uppercase text-slate-600 dark:text-slate-300">{esp.nome}</span>

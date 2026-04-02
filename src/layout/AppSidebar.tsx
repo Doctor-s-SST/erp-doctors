@@ -131,17 +131,17 @@ const AppSidebar: React.FC = () => {
 
   return (
     <aside className={`fixed mt-16 flex flex-col lg:mt-0 top-0 px-5 left-0 bg-white dark:bg-gray-900 text-gray-900 h-screen transition-all duration-300 z-50 border-r border-gray-200 
-      ${isExpanded || isMobileOpen || isHovered ? "w-[290px]" : "w-[90px]"} 
+      ${isExpanded || isMobileOpen || isHovered ? "w-[250px]" : "w-[90px]"} 
       ${isMobileOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0`}
       onMouseEnter={() => !isExpanded && setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <div className={`py-8 flex ${!isExpanded && !isHovered ? "lg:justify-center" : "justify-start"}`}>
+      <div className={`py-2 flex ${!isExpanded && !isHovered ? "lg:justify-center" : "justify-center"}`}>
         <Link href="/">
           {isExpanded || isHovered || isMobileOpen ? (
-            <Image src="/images/logo/logo.svg" alt="Logo" width={150} height={40} className="dark:invert" />
+            <Image src="/images/logo/doctors-svg.svg" alt="Logo" width={100} height={50} className="" />
           ) : (
-            <Image src="/images/logo/logo-icon.svg" alt="Logo" width={32} height={32} />
+            <Image src="/images/logo/doctors-svg.svg" alt="Logo" width={100} height={100} />
           )}
         </Link>
       </div>

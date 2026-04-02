@@ -104,6 +104,7 @@ export default function FilaPage() {
         if ((item.num_sala === session?.sala) && (item.profissional === session?.profissional)) {
             isMinhaSala = true
         }
+        console.log("Item:", item, "Minha Sala?", isMinhaSala)
 
         if (item.status_atendimento.startsWith('EM_') && item.status === "EM_FILA") {
             return {
@@ -243,11 +244,6 @@ export default function FilaPage() {
         const dadosExame = examesDaEspecialidade.find(ex =>
             nomesExamesNormalizados.includes(normalizar(ex.nome))
         );
-
-        console.log("Especialidade atual:", id);
-        console.log("Exames da especialidade:", examesDaEspecialidade);
-        console.log("Exames do atendimento:", nomesExamesNormalizados);
-        console.log("Exame encontrado:", dadosExame);
 
         return dadosExame?.tempo_execucao_segundos || 20;
     };
@@ -624,7 +620,7 @@ export default function FilaPage() {
                                                                     </Button>
                                                                 )}
 
-                                                                {item.status === "EM_ATENDIMENTO" && (
+                                                                {item.status === "EM_ATENDIMENTO" && !isBloqueado && (
                                                                     <>
                                                                         {finalizandoIds[item.id] ? (
                                                                             <div className="flex items-center gap-2">
@@ -684,7 +680,7 @@ export default function FilaPage() {
                                                                     </>
                                                                 )}
 
-                                                                {item.status !== "AGUARDANDO" && (
+                                                                {item.status !== "AGUARDANDO" && !isBloqueado && (
                                                                     <Button
                                                                         size="sm"
                                                                         variant="ghost"
