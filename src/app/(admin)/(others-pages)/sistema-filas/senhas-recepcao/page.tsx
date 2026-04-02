@@ -38,7 +38,7 @@ type ConfigOrdenacao = {
     direcao: 'asc' | 'desc'
 }
 
-const RECEPCIONISTAS = ["Livia Beatriz", "Mariana Galvao", "Pietra Senatore", "Marcela Santos"]
+const RECEPCIONISTAS = ["Livia Noccioli", "Mariana Galvão", "Pietra Amaro", "Marcela Santos"]
 
 export default function RecepcaoPage() {
     const [data, setData] = useState<Atendimento[]>([])
@@ -188,7 +188,7 @@ export default function RecepcaoPage() {
             "AGUARDANDO_RECEPCAO": "bg-slate-600 text-slate-100",
             "EM_FILA": "bg-amber-600 text-amber-100 animate-pulse",
             "EM_RECEPCAO": "bg-blue-600 text-blue-100 animate-pulse",
-            "FINALIZADO": "bg-emerald-600 text-emerald-100",
+            "FINALIZADO": "bg-green-600 text-green-100",
             "CANCELADO": "bg-red-600 text-red-100",
             "NAO_ATENDIDO": "bg-orange-600 text-orange-100",
             "AGUARDANDO_EXAMES": "bg-green-600 text-green-100",
@@ -197,7 +197,7 @@ export default function RecepcaoPage() {
             "EM_TRIAGEM": "bg-green-600 text-green-100",
             "EM_TOXICOLÓGICO": "bg-green-600 text-green-100",
             "EM_LABORATÓRIO": "bg-green-600 text-green-100",
-            "EM_ECG/EEG/ESPIRO": "bg-green-600 text-green-100",
+            "EM_ECG_EEG_ESPIRO": "bg-green-600 text-green-100",
         }
         return <Badge className={`${styles[status] || 'bg-slate-100'} border-none text-[9px] font-black tracking-widest uppercase px-2`}>{(status) === "NAO_ATENDIDO" ? "NÃO ATENDIDO" : (status === "AGUARDANDO_RECEPCAO" ? "AGUARDANDO RECEPÇÃO" : (status === "EM_RECEPCAO" ? "EM RECEPÇÃO" : status.replace('_', ' ')))}</Badge>
     }
@@ -707,7 +707,7 @@ export default function RecepcaoPage() {
                                             const isFinalizado = item.status === "FINALIZADO";
                                             const isNaoAtendido = item.status === "NAO_ATENDIDO";
                                             const isCancelado = item.status === "CANCELADO";
-                                            const isAguardandoExames = item.status === "AGUARDANDO_EXAMES" || item.status === "EM_TRIAGEM" || item.status === "EM_CLÍNICO" || item.status === "EM_TOXICOLÓGICO" || item.status === "EM_LABORATÓRIO" || item.status === "EM_ECG/EEG/ESPIRO" || item.status === "EM_AUDIOMETRIA";
+                                            const isAguardandoExames = item.status === "AGUARDANDO_EXAMES" || item.status === "EM_TRIAGEM" || item.status === "EM_CLÍNICO" || item.status === "EM_TOXICOLÓGICO" || item.status === "EM_LABORATÓRIO" || item.status === "EM_ECG_EEG_ESPIRO" || item.status === "EM_AUDIOMETRIA";
                                             const isAguardandoRecepcao = item.status === "AGUARDANDO_RECEPCAO";
                                             const isEncerrado = isFinalizado || isCancelado;
 

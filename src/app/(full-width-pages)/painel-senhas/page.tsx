@@ -88,14 +88,15 @@ export default function PainelTV() {
         setUltimaChamada(proxima);
         setHistorico(prev => [proxima, ...prev.filter(h => h.id !== proxima.id)].slice(0, 7));
 
-        await executarChamadaSonora(proxima);
-
+        
         try {
           const tabela = proxima.origem === 'RECEPCAO' ? 'atendimentos' : 'atendimento_exames';
           const novoStatus = proxima.origem === 'RECEPCAO' ? 'EM_RECEPCAO' : 'EM_ATENDIMENTO';
           await supabase.from(tabela).update({ status: novoStatus }).eq('id', proxima.id);
         } catch (err) { console.error("Erro ao atualizar status:", err); }
-
+        
+        await executarChamadaSonora(proxima);
+        
         await new Promise(res => setTimeout(res, 3000));
         setFila(prev => prev.slice(1));
         setProcessando(false);
@@ -275,12 +276,12 @@ export default function PainelTV() {
           <div className="flex-1 flex flex-col">
             {historico.slice(1).map((item, idx) => (
               <div key={item.id + idx} className="flex-1 border-b border-gray-400 flex flex-col items-center justify-center p-2 last:border-0">
-                <p className="text-5xl font-black text-gray-800 leading-tight">{item.senha_codigo}</p>
-                <p className="text-lg font-bold text-[#3498db] uppercase">
+                <p className="text-[2.5em] font-black text-gray-800 leading-tight">{item.senha_codigo}</p>
+                <p className="text-[1.5em] font-bold text-[#3498db] uppercase">
                   {item.origem === 'RECEPCAO' ? 'Guichê' : 'Sala'} {item.guiche}
                 </p>
                 {item.nome_paciente && (
-                  <p className="text-sm text-gray-400 font-medium truncate w-full text-center uppercase italic">{item.nome_paciente}</p>
+                  <p className="text-[1.4em] text-gray-400 break-word font-medium w-full text-center uppercase italic px-4">{item.nome_paciente}</p>
                 )}
               </div>
             ))}

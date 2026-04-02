@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useMemo } from "react"
+import { useEffect, useState, useMemo, useRef } from "react"
 import { useParams } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { Card, CardContent } from "@/components/ui/card"
@@ -28,8 +28,11 @@ import {
     BellRing,
     Search,
     MessageSquare,
-    Filter
+    Filter,
+    Loader2,
+    X
 } from "lucide-react"
+import { is } from "zod/v4/locales"
 
 type ItemFila = {
     tipo_senha: string
@@ -70,6 +73,9 @@ export default function FilaPage() {
     const [showToxicologico, setShowToxicologico] = useState(false)
     const [filtroPesquisa, setFiltroPesquisa] = useState("")
     const [filtroTipo, setFiltroTipo] = useState<string>("TODOS")
+    const [listaGlobalExames, setListaGlobalExames] = useState<any[]>([]);
+    const [finalizandoIds, setFinalizandoIds] = useState<Record<string, number>>({});
+
 
     const TOX_SALA = "Toxicológico"
 
@@ -121,7 +127,7 @@ export default function FilaPage() {
 
         // 3. Status Finalizado
         if (item.status === "FINALIZADO") {
-            return { color: "text-emerald-600", bg: "bg-emerald-500/10", label: "FINALIZADO", podeAcoes: false }
+            return { color: "text-green-100", bg: "bg-green-600", label: "FINALIZADO", podeAcoes: false }
         }
 
         // 4. Padrão: AGUARDANDO (Disponível para chamar)
@@ -174,6 +180,13 @@ export default function FilaPage() {
         fetchFila()
         const interval = setInterval(fetchFila, 3000)
         const channel = supabase.channel(`fila-${id}`).on("postgres_changes", { event: "*", schema: "public", table: "atendimento_exames" }, () => fetchFila()).subscribe()
+        const fetchExames = async () => {
+            const { data } = await supabase.from('exames').select('*');
+            if (data) setListaGlobalExames(data);
+        };
+        fetchExames();
+
+
         return () => { clearInterval(interval); supabase.removeChannel(channel) }
     }, [id, showToxicologico])
 
@@ -203,12 +216,54 @@ export default function FilaPage() {
         checkUser();
     }, [id]);
 
+    const normalizar = (texto: string) =>
+        texto
+            .toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .trim();
+
+    const obterTempoExecucao = async (item: ItemFila) => {
+        const { data: atendimentoCompleto } = await supabase
+            .from('atendimentos')
+            .select('exames_list')
+            .eq('id', item.atendimento_id)
+            .single();
+
+        if (!atendimentoCompleto) return 20;
+
+        const nomesExamesNormalizados = atendimentoCompleto.exames_list.map((e: any) =>
+            normalizar(e.exame)
+        );
+
+        const examesDaEspecialidade = listaGlobalExames.filter(ex =>
+            ex.especialidade_id === id
+        );
+
+        const dadosExame = examesDaEspecialidade.find(ex =>
+            nomesExamesNormalizados.includes(normalizar(ex.nome))
+        );
+
+        console.log("Especialidade atual:", id);
+        console.log("Exames da especialidade:", examesDaEspecialidade);
+        console.log("Exames do atendimento:", nomesExamesNormalizados);
+        console.log("Exame encontrado:", dadosExame);
+
+        return dadosExame?.tempo_execucao_segundos || 20;
+    };
+
     async function executarAcao(rpcName: string, params: any) {
-        setLoadingAction(params.p_atendimento_id)
-        const { error } = await supabase.rpc(rpcName, params)
-        if (error) { toast.error("Erro na operação") }
-        else { toast.success("Sucesso!"); fetchFila() }
-        setLoadingAction(null)
+        setLoadingAction(params.p_atendimento_id);
+
+        const { error } = await supabase.rpc(rpcName, params);
+
+        if (error) {
+            toast.error("Erro na operação: " + error.message);
+        } else {
+            toast.success("Sucesso!");
+            fetchFila();
+        }
+        setLoadingAction(null);
     }
 
     async function salvarSessao() {
@@ -265,6 +320,68 @@ export default function FilaPage() {
     const onFichaClick = (item: any) => {
         window.navigator.clipboard.writeText(item.ficha_sequencial || "--");
         toast.success("Ficha copiada: " + (item.ficha_sequencial || "--"))
+    };
+
+    const timersRef = useRef<{ [key: string]: ReturnType<typeof setInterval> }>({});
+
+    const cancelarFinalizacao = (id: string) => {
+        const timer = timersRef.current[id];
+
+        if (timer) {
+            clearInterval(timer);
+            delete timersRef.current[id];
+        }
+
+        setFinalizandoIds(prev => {
+            const novo = { ...prev };
+            delete novo[id];
+            return novo;
+        });
+
+        toast.warning("Finalização cancelada");
+    };
+
+    const iniciarFinalizacao = async (item: ItemFila) => {
+        const tempo = await obterTempoExecucao(item);
+
+        setFinalizandoIds(prev => ({
+            ...prev,
+            [item.id]: tempo
+        }));
+
+        const interval = setInterval(() => {
+            setFinalizandoIds(prev => {
+                const atual = prev[item.id];
+
+                if (atual === undefined) {
+                    clearInterval(interval);
+                    return prev;
+                }
+
+                if (atual <= 1) {
+                    clearInterval(interval);
+                    delete timersRef.current[item.id];
+
+                    executarAcao("finalizar_especialidade", {
+                        p_atendimento_id: item.atendimento_id,
+                        p_atendimento_exame_id: item.id,
+                        p_sala: especialidadeNome,
+                        p_num_sala: session.sala,
+                    });
+
+                    const novo = { ...prev };
+                    delete novo[item.id];
+                    return novo;
+                }
+
+                return {
+                    ...prev,
+                    [item.id]: atual - 1
+                };
+            });
+        }, 1000);
+
+        timersRef.current[item.id] = interval;
     };
 
     if (loading) return <div className="flex h-screen items-center justify-center font-mono text-sm animate-pulse text-emerald-600 bg-slate-50 dark:bg-slate-950 uppercase tracking-widest">Sincronizando Fila...</div>
@@ -441,7 +558,15 @@ export default function FilaPage() {
 
                                                 {/* STATUS */}
                                                 <td className="p-4 text-center">
-                                                    {isBloqueado ? (
+                                                    {isFinalizado ? (
+                                                        <div className="flex flex-col items-center gap-1">
+                                                            <Badge variant="destructive" className={`uppercase bg-green-600 text-green-100 border-none text-[10px] font-bold tracking-wider`}>
+                                                                Finalizado
+                                                            </Badge>
+                                                            <span className="text-[11px] font-bold">{`${item.sala_atual} (Sala ${item.num_sala})`}</span>
+                                                        </div>
+
+                                                    ) : isBloqueado ? (
                                                         <div className="flex flex-col items-center gap-1">
                                                             <Badge variant="destructive" className={`uppercase ${styles.bg} ${styles.color} border-none text-[10px] font-bold tracking-wider ${styles.animate || ""}`}>
                                                                 {styles.label}
@@ -500,41 +625,86 @@ export default function FilaPage() {
                                                                 )}
 
                                                                 {item.status === "EM_ATENDIMENTO" && (
+                                                                    <>
+                                                                        {finalizandoIds[item.id] ? (
+                                                                            <div className="flex items-center gap-2">
+                                                                                <Button
+                                                                                    size="sm"
+                                                                                    disabled
+                                                                                    className="h-8 text-[11px] font-bold bg-slate-600 min-w-[90px] text-white"
+                                                                                >
+                                                                                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                                                                    {finalizandoIds[item.id]}s
+                                                                                </Button>
+
+                                                                                <TooltipProvider>
+                                                                                    <Tooltip>
+                                                                                        <TooltipTrigger asChild>
+                                                                                            <Button
+                                                                                                size="sm"
+                                                                                                variant="destructive"
+                                                                                                className="h-8 w-8 p-0"
+                                                                                                onClick={() => cancelarFinalizacao(item.id)}
+                                                                                            >
+                                                                                                <X className="w-4 h-4" />
+                                                                                            </Button>
+                                                                                        </TooltipTrigger>
+                                                                                        <TooltipContent>Interromper finalização</TooltipContent>
+                                                                                    </Tooltip>
+                                                                                </TooltipProvider>
+                                                                            </div>
+                                                                        ) : (
+                                                                            <Button
+                                                                                size="sm"
+                                                                                className="h-8 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700"
+                                                                                onClick={() => iniciarFinalizacao(item)}
+                                                                            >
+                                                                                <CheckCircle2 className="w-3 h-3 mr-1" />
+                                                                                Finalizar
+                                                                            </Button>
+                                                                        )}
+
+                                                                        <Button
+                                                                            size="sm"
+                                                                            variant="outline"
+                                                                            className="h-8 text-[11px] border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white"
+                                                                            onClick={() =>
+                                                                                executarAcao("chamar_paciente", {
+                                                                                    p_atendimento_id: item.atendimento_id,
+                                                                                    p_atendimento_exame_id: item.id,
+                                                                                    p_sala: especialidadeNome,
+                                                                                    p_num_sala: session.sala,
+                                                                                    p_profissional: session.profissional,
+                                                                                })
+                                                                            }
+                                                                        >
+                                                                            <BellRing className="w-3 h-3 mr-1" />
+                                                                            Chamar Novamente
+                                                                        </Button>
+                                                                    </>
+                                                                )}
+
+                                                                {item.status !== "AGUARDANDO" && (
                                                                     <Button
                                                                         size="sm"
-                                                                        className="h-8 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700"
-                                                                        onClick={() =>
-                                                                            executarAcao(
-                                                                                "finalizar_atendimento",
-                                                                                { atendimento_exame_id: item.id },
-                                                                            )
-                                                                        }
+                                                                        variant="ghost"
+                                                                        className="h-8 text-[11px] bg-orange-600 font-bold text-white hover:text-orange-500 border-orange-500/50 transition-colors dark:text-white/80"
+                                                                        onClick={() => executarAcao("nao_atendido_especialidade", {
+                                                                            p_atendimento_id: item.atendimento_id,
+                                                                            p_atendimento_exame_id: item.id
+                                                                        })}
                                                                     >
-                                                                        <CheckCircle2 className="w-3 h-3 mr-1" />
-                                                                        Finalizar
+                                                                        Não Atendido
                                                                     </Button>
                                                                 )}
 
-                                                                {/* CANCELAR */}
-                                                                <TooltipProvider>
-                                                                    <Tooltip>
-                                                                        <TooltipTrigger asChild>
-                                                                            <Button
-                                                                                size="sm"
-                                                                                className="h-8 w-8 p-0 text-white hover:text-red-600 hover:border-red-500 bg-red-500"
-                                                                                onClick={() =>
-                                                                                    executarAcao(
-                                                                                        "cancelar_atendimento",
-                                                                                        { p_atendimento_id: item.atendimento_id }
-                                                                                    )
-                                                                                }
-                                                                            >
-                                                                                <XCircle className="w-3.5 h-3.5" />
-                                                                            </Button>
-                                                                        </TooltipTrigger>
-                                                                        <TooltipContent>Cancelar</TooltipContent>
-                                                                    </Tooltip>
-                                                                </TooltipProvider>
+                                                                {isBloqueado && (
+                                                                    <Badge
+                                                                        className={`${styles.bg} ${styles.color} border-none text-[10px] uppercase font-bold tracking-wider ${styles.animate || ""}`}
+                                                                    >
+                                                                        Atendimento Bloqueado
+                                                                    </Badge>
+                                                                )}
                                                             </>
                                                         ) : (
                                                             <span className="text-[10px] font-bold uppercase italic text-slate-400">
