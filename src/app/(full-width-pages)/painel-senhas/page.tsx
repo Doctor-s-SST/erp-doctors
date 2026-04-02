@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 "use client";
 
 import { useEffect, useState, useRef } from "react";
@@ -111,10 +112,10 @@ export default function PainelTV() {
         .from('atendimentos')
         .select('id, senha_codigo, guiche, updated_at, pacientes(nome)')
         .eq('status', 'EM_FILA')
-        .order('updated_at', { ascending: true });
+        .order('updated_at', { ascending: true })
+        .limit(3);
 
       // 2. Busca Exames - FOCO AQUI
-      // Usamos !inner para garantir que o join com atendimentos funcione
       const { data: exm } = await supabase
         .from('atendimento_exames')
         .select(`
@@ -127,9 +128,10 @@ export default function PainelTV() {
             pacientes(nome)
           )
         `)
-        .eq('status', 'EM_FILA');
-
-      let novosParaFila: Chamada[] = [];
+        .eq('status', 'EM_FILA')
+        .limit(3);
+        
+      const novosParaFila: Chamada[] = [];
 
       // Processa Recepção
       rec?.forEach(r => {
@@ -204,9 +206,9 @@ export default function PainelTV() {
       <audio ref={audioRef} src="/sounds/call-bell.wav" preload="auto" />
 
       {/* HEADER */}
-      <header className="h-[80px] flex justify-between items-center px-5 py-2 bg-white shadow-[0px_2px_5px_0px_rgba(0,_0,_0,_0.2)] z-10">
+      <header className="h-20 flex justify-between items-center px-5 py-2 bg-white shadow-[0px_2px_5px_0px_rgba(0,0,0,0.2)] z-10">
         <div className="flex items-center gap-2">
-          <img src="/images/logo/doctors-svg.svg" alt="Doctors" className="h-[60px]" />
+          <img src="/images/logo/doctors-svg.svg" alt="Doctors" className="h-15" />
         </div>
         <p className="text-black font-medium text-lg capitalize">
           {dataAtual.weekday}, {dataAtual.day} <span className="lowercase">de {dataAtual.month} de</span> {dataAtual.year}
@@ -224,15 +226,15 @@ export default function PainelTV() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="relative w-full h-full shadow-[0px_4px_15px_0px_rgba(0,_0,_0,_0.2)] bg-[#3498db] p-5 flex flex-col items-center justify-center overflow-hidden text-white rounded-lg"
+              className="relative w-full h-full shadow-[0px_4px_15px_0px_rgba(0,0,0,0.2)] bg-[#3498db] p-5 flex flex-col items-center justify-center overflow-hidden text-white rounded-lg"
             >
               {/* CABEÇALHO INTERNO: Posicionado no topo */}
-              <div className="text-[40px] absolute top-10 flex flex-col items-center text-white">
-                <h3 className="font-bold uppercase tracking-widest">
+              <div className="text-[2.2em] absolute top-10 flex flex-col items-center text-white font-bold uppercase" >
+                <h3 className="tracking-widest">
                   Senha Atual
                 </h3>
                 {ultimaChamada?.nome_paciente && (
-                  <p className="font-bold">
+                  <p>
                     {ultimaChamada.senha_codigo}
                   </p>
                 )}
@@ -241,7 +243,7 @@ export default function PainelTV() {
               {/* CONTEÚDO CENTRAL: Sempre no centro do main */}
               <div className="flex flex-col items-center w-full">
                 {ultimaChamada?.nome_paciente ? (
-                  <h2 className="text-[7.5rem] leading-[1.1] font-black text-center break-words px-10 uppercase drop-shadow-md">
+                  <h2 className="text-[7.5rem] leading-[1.1] font-black text-center wrap-break-word px-10 uppercase drop-shadow-md">
                     {ultimaChamada.nome_paciente}
                     {/* Abel Joaquim Dantas Pereira Marcondes */}
                   </h2>
@@ -257,7 +259,7 @@ export default function PainelTV() {
                 <span>
                   {ultimaChamada?.origem !== 'RECEPCAO' ? 'Sala' : 'Guichê'}
                 </span>
-                <span className="px-8 py-2">
+                <span >
                   {ultimaChamada?.guiche || '-'}
                 </span>
               </div>
@@ -266,7 +268,7 @@ export default function PainelTV() {
         </div>
 
         {/* LADO DIREITO: HISTÓRICO */}
-        <aside className="shadow-[0px_4px_15px_0px_rgba(0,_0,_0,_0.2)] flex-1 bg-white flex flex-col overflow-hidden">
+        <aside className="shadow-[0px_4px_15px_0px_rgba(0,0,0,0.2)] flex-1 bg-white flex flex-col overflow-hidden">
           <div className="p-5 border-b-2 border-[#3498db] mx-5">
             <h3 className="text-2xl font-bold text-black text-center">Últimas Senhas Chamadas</h3>
           </div>
@@ -291,7 +293,7 @@ export default function PainelTV() {
         </aside>
       </div>
       {/* FOOTER MARQUEE */}
-      <footer className="h-[60px] flex justify-between items-center px-5 py-2 bg-white shadow-[0px_0px_5px_2px_rgba(0,_0,_0,_0.2)] z-10">
+      <footer className="h-15 flex justify-between items-center px-5 py-2 bg-white shadow-[0px_0px_5px_2px_rgba(0,0,0,0.2)] z-10">
         <div className="animate-marquee whitespace-nowrap text-black text-[18px] font-medium px-4">
           Aviso: Realizamos diversos exames, porém, você será chamado somente para salas correspondentes ao seu tipo de atendimento.
         </div>

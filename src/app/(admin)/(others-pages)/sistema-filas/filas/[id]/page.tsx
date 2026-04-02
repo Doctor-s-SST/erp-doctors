@@ -27,7 +27,8 @@ import {
     FlaskConical,
     BellRing,
     Search,
-    MessageSquare
+    MessageSquare,
+    Filter
 } from "lucide-react"
 
 type ItemFila = {
@@ -67,7 +68,8 @@ export default function FilaPage() {
     const [session, setSession] = useState<any>(null)
     const [ordenacao, setOrdenacao] = useState<ConfigOrdenacao>({ coluna: 'tempo_espera', direcao: 'desc' })
     const [showToxicologico, setShowToxicologico] = useState(false)
-    const [filtro, setFiltro] = useState("")
+    const [filtroPesquisa, setFiltroPesquisa] = useState("")
+    const [filtroTipo, setFiltroTipo] = useState<string>("TODOS")
 
     const TOX_SALA = "Toxicológico"
 
@@ -92,24 +94,26 @@ export default function FilaPage() {
     }
 
     const getStatusStyles = (item: ItemFila) => {
-        const isMinhaSala = item.num_sala === session?.sala;
-
-        // 1. Prioridade para Bloqueados (em outra sala)
-        if (item.bloqueado && item.sala_atual && !isMinhaSala) {
-            return {
-                color: "text-red-600",
-                bg: "bg-red-500/10",
-                label: "OCUPADO EM OUTRA SALA",
-                podeAcoes: false
-            }
+        let isMinhaSala = false;
+        if ((item.num_sala === session?.sala) && (item.profissional === session?.profissional)) {
+            isMinhaSala = true
         }
 
-        // 2. Se o status_atendimento for EM_CLÍNICO ou similar, ele já foi chamado
-        if (item.status_atendimento === "EM_CLÍNICO" && item.status === "EM_FILA") {
+        if (item.status_atendimento.startsWith('EM_') && item.status === "EM_FILA") {
             return {
                 color: isMinhaSala ? "text-emerald-600" : "text-blue-600",
                 bg: isMinhaSala ? "bg-emerald-500/10" : "bg-blue-500/10",
-                label: isMinhaSala ? "EM FILA" : "EM CONSULTA",
+                label: isMinhaSala ? "EM FILA" : "BLOQUEADO",
+                animate: isMinhaSala ? "animate-pulse" : "",
+                podeAcoes: isMinhaSala
+            }
+        }
+
+        if (item.bloqueado || item.status_atendimento.startsWith('EM_') && item.status === "EM_ATENDIMENTO") {
+            return {
+                color: isMinhaSala ? "text-orange-600" : "text-red-600",
+                bg: isMinhaSala ? "bg-orange-500/10" : "bg-red-500/10",
+                label: isMinhaSala ? "ATENDENDO" : "BLOQUEADO",
                 animate: isMinhaSala ? "animate-pulse" : "",
                 podeAcoes: isMinhaSala
             }
@@ -122,8 +126,8 @@ export default function FilaPage() {
 
         // 4. Padrão: AGUARDANDO (Disponível para chamar)
         return {
-            color: "text-slate-600",
-            bg: "bg-slate-100",
+            color: "text-blue-600",
+            bg: "bg-blue-500/10",
             label: "AGUARDANDO",
             podeAcoes: true
         }
@@ -145,7 +149,7 @@ export default function FilaPage() {
             setEspecialidadeNome(esp.nome)
 
             // 2. USA O VALOR DIRETO DA VARIÁVEL 'esp.nome' e não do estado
-            const { data: result, error } = await supabase.rpc("get_fila_especialidade", {
+            const { data: result } = await supabase.rpc("get_fila_especialidade", {
                 p_sala: esp.nome
             })
 
@@ -223,13 +227,15 @@ export default function FilaPage() {
         // Remove duplicatas
         lista = Array.from(new Map(lista.map(item => [item.id, item])).values());
 
-        // Aplicar Filtro de busca
-        if (filtro) {
-            const f = filtro.toLowerCase();
+        // Aplicar Filtro
+        if (filtroTipo !== "TODOS") {
+            lista = lista.filter(i => i.tipo_senha === filtroTipo)
+        }
+
+        if (filtroPesquisa) {
+            const f = filtroPesquisa.toLowerCase();
             lista = lista.filter(i =>
-                i.nome.toLowerCase().includes(f) ||
-                i.senha.toLowerCase().includes(f) ||
-                i.ficha_sequencial?.toLowerCase().includes(f)
+                i.nome.toLowerCase().includes(f)
             );
         }
 
@@ -247,7 +253,7 @@ export default function FilaPage() {
                 ? getTempoEsperaTotal(a) - getTempoEsperaTotal(b)
                 : getTempoEsperaTotal(b) - getTempoEsperaTotal(a);
         })
-    }, [data, dataTox, showToxicologico, ordenacao, filtro])
+    }, [data, dataTox, showToxicologico, ordenacao, filtroPesquisa, filtroTipo])
 
     const ThOrdenavel = ({ label, coluna }: { label: string, coluna: keyof ItemFila | 'tempo_espera' }) => (
         <th className="text-left p-4 font-bold text-slate-500 uppercase tracking-widest text-[10px] cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
@@ -293,9 +299,40 @@ export default function FilaPage() {
                 </div>
 
                 {/* CONTROLES E FILTRO */}
-                <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center justify-center gap-3">
+                    <div className="w-full flex gap-3">
+                        <div className="flex items-center gap-3 bg-white dark:bg-slate-900 p-2 px-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800">
+                            <Filter className="w-4 h-4 text-slate-400" />
+                            <div className="flex gap-2">
+                                {["TODOS", "NORMAL", "PREFERENCIAL"].map((tipo) => (
+                                    <Button
+                                        key={tipo}
+                                        variant={filtroTipo === tipo ? "default" : "outline"}
+                                        size="sm"
+                                        className={`h-8 text-[10px] font-black uppercase tracking-widest ${filtroTipo === tipo
+                                            ? 'bg-slate-900 text-white'
+                                            : 'bg-transparent text-slate-500 border-slate-200'
+                                            }`}
+                                        onClick={() => setFiltroTipo(tipo)}
+                                    >
+                                        {tipo}
+                                    </Button>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-3 bg-white dark:bg-slate-900 p-2 px-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800">
+                            <Search className="w-4 h-4 text-slate-400" />
+                            <Input
+                                placeholder="Buscar por nome..."
+                                className="w-80"
+                                value={filtroPesquisa}
+                                onChange={(e) => setFiltroPesquisa(e.target.value)}
+                            />
+                        </div>
+                    </div>
+
                     <div className="flex gap-2">
-                        <Button onClick={fetchFila} disabled={isRefreshing} variant="outline" className="h-10 text-[10px] font-black uppercase border-slate-200">
+                        <Button onClick={fetchFila} disabled={isRefreshing} variant="outline" className="h-12 bg-white dark:bg-slate-900 p-2 px-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800">
                             <RefreshCw className={`w-3 h-3 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} /> Atualizar
                         </Button>
                         {especialidadeNome === "Triagem" && (
@@ -305,16 +342,6 @@ export default function FilaPage() {
                         )}
                     </div>
 
-                    {/* BARRA DE PESQUISA (Igual recepção) */}
-                    <div className="relative w-full md:w-80">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                        <Input
-                            placeholder="Buscar por nome, senha ou ficha..."
-                            className="pl-10 h-10 bg-white border-slate-200 text-sm"
-                            value={filtro}
-                            onChange={(e) => setFiltro(e.target.value)}
-                        />
-                    </div>
                 </div>
 
                 {/* TABELA */}
@@ -340,11 +367,12 @@ export default function FilaPage() {
                                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                                     {dadosProcessados.map((item) => {
                                         const styles = getStatusStyles(item);
-                                        const waitTime = getTempoEsperaTotal(item);
+                                        // const waitTime = getTempoEsperaTotal(item);
 
                                         const isFinalizado = item.status === "FINALIZADO"
                                         const isCancelado = item.status === "CANCELADO"
                                         const isNaoAtendido = item.status === "NAO_ATENDIDO"
+                                        const isBloqueado = item.bloqueado || styles.label === "BLOQUEADO"
                                         const isEncerrado = isFinalizado || isCancelado
 
                                         const rowStyles =
@@ -354,7 +382,9 @@ export default function FilaPage() {
                                                     ? "bg-red-200/70 dark:bg-red-900/30"
                                                     : isNaoAtendido
                                                         ? "bg-orange-200/70 dark:bg-orange-900/30"
-                                                        : "hover:bg-slate-50/80 dark:hover:bg-slate-800/40"
+                                                        : isBloqueado
+                                                            ? "bg-red-200/70 dark:bg-red-900/30" :
+                                                            "hover:bg-slate-50/80 dark:hover:bg-slate-800/40"
 
                                         return (
                                             <tr
@@ -411,7 +441,7 @@ export default function FilaPage() {
 
                                                 {/* STATUS */}
                                                 <td className="p-4 text-center">
-                                                    {item.bloqueado ? (
+                                                    {isBloqueado ? (
                                                         <div className="flex flex-col items-center gap-1">
                                                             <Badge variant="destructive" className={`uppercase ${styles.bg} ${styles.color} border-none text-[10px] font-bold tracking-wider ${styles.animate || ""}`}>
                                                                 {styles.label}
@@ -428,7 +458,7 @@ export default function FilaPage() {
                                                 </td>
 
                                                 {/* CAMPO OBSERVAÇÃO */}
-                                                <td className="p-4 text-slate-500 italic max-w-[200px] truncate">
+                                                <td className="p-4 text-slate-500 italic max-w-50 truncate">
                                                     {item.observacao ? (
                                                         <TooltipProvider>
                                                             <Tooltip>
@@ -446,7 +476,7 @@ export default function FilaPage() {
                                                     <div className="flex justify-end gap-1.5 items-center">
                                                         {!isEncerrado ? (
                                                             <>
-                                                                {item.status === "AGUARDANDO" && !item.bloqueado && (
+                                                                {item.status === "AGUARDANDO" && !isBloqueado && (
                                                                     <Button
                                                                         size="sm"
                                                                         variant="outline"

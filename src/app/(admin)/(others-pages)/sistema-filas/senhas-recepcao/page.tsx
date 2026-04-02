@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
-import { FileEdit, CheckCircle2, RefreshCw, User, Monitor, XCircle, Filter, ArrowUpDown, Clock, PlusCircle, MonitorCheck, UploadCloud, Save, Building2, Stethoscope, BellRing, Loader2, X } from "lucide-react"
+import { FileEdit, CheckCircle2, RefreshCw, User, Monitor, XCircle, Filter, ArrowUpDown, Clock, PlusCircle, MonitorCheck, UploadCloud, Save, Building2, Stethoscope, BellRing, Loader2, X, Search } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { on } from "events"
@@ -43,6 +43,7 @@ const RECEPCIONISTAS = ["Livia Beatriz", "Mariana Galvao", "Pietra Senatore", "M
 export default function RecepcaoPage() {
     const [data, setData] = useState<Atendimento[]>([])
     const [filtroTipo, setFiltroTipo] = useState<string>("TODOS")
+    const [filtroPesquisa, setFiltroPesquisa] = useState("")
     const [loadingAction, setLoadingAction] = useState<string | null>(null)
     const [session, setSession] = useState<{ guiche?: string, nome?: string }>({})
     const [openModal, setOpenModal] = useState(false)
@@ -50,6 +51,7 @@ export default function RecepcaoPage() {
     const generatingRef = useRef(false)
     const [exameInput, setExameInput] = useState("")
     const [finalizandoIds, setFinalizandoIds] = useState<Record<string, number>>({});
+
 
     // ESTADOS DO MODAL DE IMPORTAÇÃO
     const [importModal, setImportModal] = useState<{ open: boolean, item: Atendimento | null }>({ open: false, item: null })
@@ -150,7 +152,7 @@ export default function RecepcaoPage() {
         checkUser();
     }, []);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     const getTempoEsperaEvolutivo = (item: any) => {
         if (!item.created_at) return { texto: "--", isCancelado: false };
 
@@ -191,10 +193,10 @@ export default function RecepcaoPage() {
             "NAO_ATENDIDO": "bg-orange-600 text-orange-100",
             "AGUARDANDO_EXAMES": "bg-green-600 text-green-100",
             "EM_AUDIOMETRIA": "bg-green-600 text-green-100",
-            "EM_CLINICO": "bg-green-600 text-green-100",
+            "EM_CLÍNICO": "bg-green-600 text-green-100",
             "EM_TRIAGEM": "bg-green-600 text-green-100",
-            "EM_TOXICOLOGICO": "bg-green-600 text-green-100",
-            "EM_LABORATORIO": "bg-green-600 text-green-100",
+            "EM_TOXICOLÓGICO": "bg-green-600 text-green-100",
+            "EM_LABORATÓRIO": "bg-green-600 text-green-100",
             "EM_ECG/EEG/ESPIRO": "bg-green-600 text-green-100",
         }
         return <Badge className={`${styles[status] || 'bg-slate-100'} border-none text-[9px] font-black tracking-widest uppercase px-2`}>{(status) === "NAO_ATENDIDO" ? "NÃO ATENDIDO" : (status === "AGUARDANDO_RECEPCAO" ? "AGUARDANDO RECEPÇÃO" : (status === "EM_RECEPCAO" ? "EM RECEPÇÃO" : status.replace('_', ' ')))}</Badge>
@@ -208,7 +210,18 @@ export default function RecepcaoPage() {
     }
 
     const dadosProcessados = useMemo(() => {
-        const filtrados = data.filter(item => filtroTipo === "TODOS" ? true : item.tipo_senha === filtroTipo)
+        let filtrados = data.filter(item =>
+            filtroTipo === "TODOS" ? true : item.tipo_senha === filtroTipo
+        );
+
+        if (filtroPesquisa) {
+            const f = filtroPesquisa.toLowerCase();
+
+            filtrados = filtrados.filter(i =>
+                i.nome && i.nome.toLowerCase().includes(f)
+            );
+        }
+
 
         return filtrados.sort((a, b) => {
             // 1. PRIORIDADE POR STATUS (Mantém EM_RECEPCAO no topo, etc)
@@ -247,7 +260,7 @@ export default function RecepcaoPage() {
 
             return direcao === 'asc' ? comparacao : -comparacao
         })
-    }, [data, filtroTipo, ordenacao])
+    }, [data, filtroTipo, filtroPesquisa, ordenacao])
 
     async function fetchData() {
         const { data: result, error } = await supabase.rpc("get_painel_recepcao")
@@ -371,25 +384,25 @@ export default function RecepcaoPage() {
 
         if (detalhes) {
             setFormFicha({
-                            sequencial: detalhes.ficha_sequencial || 0,
-                            arquivo: null,
-                            empresa: {
-                                razao_social: detalhes.pacientes?.empresa_razao || "",
-                                cnpj: detalhes.pacientes?.empresa_cnpj || ""
-                            },
-                            funcionario: {
-                                nome: detalhes.pacientes?.nome || item.nome || "",
-                                rg: detalhes.pacientes?.rg || "",
-                                nascimento: detalhes.pacientes?.data_nascimento || "",
-                                cargo: detalhes.pacientes?.cargo || "",
-                                setor: detalhes.pacientes?.setor || "",
-                                cpf: detalhes.pacientes?.cpf || ""
-                            },
-                            exame: { tipo: "" },
-                            exames: detalhes.exames_list || [],
-                            especialidadesSelecionadas: especialidadesFinal,
-                            observacao: detalhes.observacao || ""
-                        });
+                sequencial: detalhes.ficha_sequencial || 0,
+                arquivo: null,
+                empresa: {
+                    razao_social: detalhes.pacientes?.empresa_razao || "",
+                    cnpj: detalhes.pacientes?.empresa_cnpj || ""
+                },
+                funcionario: {
+                    nome: detalhes.pacientes?.nome || item.nome || "",
+                    rg: detalhes.pacientes?.rg || "",
+                    nascimento: detalhes.pacientes?.data_nascimento || "",
+                    cargo: detalhes.pacientes?.cargo || "",
+                    setor: detalhes.pacientes?.setor || "",
+                    cpf: detalhes.pacientes?.cpf || ""
+                },
+                exame: { tipo: "" },
+                exames: detalhes.exames_list || [],
+                especialidadesSelecionadas: especialidadesFinal,
+                observacao: detalhes.observacao || ""
+            });
 
         } else {
             setFormFicha(prev => ({
@@ -594,20 +607,34 @@ export default function RecepcaoPage() {
                     <div className="flex flex-col md:flex-row justify-between items-center gap-6 w-full">
 
                         {/* LADO ESQUERDO: FILTROS */}
-                        <div className="flex items-center gap-3 bg-white dark:bg-slate-900 p-2 px-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800">
-                            <Filter className="w-4 h-4 text-slate-400" />
-                            <div className="flex gap-2">
-                                {["TODOS", "NORMAL", "PREFERENCIAL"].map((tipo) => (
-                                    <Button
-                                        key={tipo}
-                                        variant={filtroTipo === tipo ? "default" : "outline"}
-                                        size="sm"
-                                        className={`h-8 text-[10px] font-black uppercase tracking-widest transition-all ${filtroTipo === tipo ? 'bg-slate-900 text-white' : 'bg-transparent text-slate-500 border-slate-200'}`}
-                                        onClick={() => setFiltroTipo(tipo)}
-                                    >
-                                        {tipo}
-                                    </Button>
-                                ))}
+                        <div className="w-full flex gap-3">
+                            <div className="flex items-center gap-3 bg-white dark:bg-slate-900 p-2 px-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800">
+                                <Filter className="w-4 h-4 text-slate-400" />
+                                <div className="flex gap-2">
+                                    {["TODOS", "NORMAL", "PREFERENCIAL"].map((tipo) => (
+                                        <Button
+                                            key={tipo}
+                                            variant={filtroTipo === tipo ? "default" : "outline"}
+                                            size="sm"
+                                            className={`h-8 text-[10px] font-black uppercase tracking-widest ${filtroTipo === tipo
+                                                ? 'bg-slate-900 text-white'
+                                                : 'bg-transparent text-slate-500 border-slate-200'
+                                                }`}
+                                            onClick={() => setFiltroTipo(tipo)}
+                                        >
+                                            {tipo}
+                                        </Button>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-3 bg-white dark:bg-slate-900 p-2 px-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800">
+                                <Search className="w-4 h-4 text-slate-400" />
+                                <Input
+                                    placeholder="Buscar por nome..."
+                                    className="w-80"
+                                    value={filtroPesquisa}
+                                    onChange={(e) => setFiltroPesquisa(e.target.value)}
+                                />
                             </div>
                         </div>
 
@@ -680,7 +707,7 @@ export default function RecepcaoPage() {
                                             const isFinalizado = item.status === "FINALIZADO";
                                             const isNaoAtendido = item.status === "NAO_ATENDIDO";
                                             const isCancelado = item.status === "CANCELADO";
-                                            const isAguardandoExames = item.status === "AGUARDANDO_EXAMES" || item.status === "EM_TRIAGEM" || item.status === "EM_CLINICO" || item.status === "EM_TOXICOLOGICO" || item.status === "EM_LABORATORIO" || item.status === "EM_ECG/EEG/ESPIRO" || item.status === "EM_AUDIOMETRIA";
+                                            const isAguardandoExames = item.status === "AGUARDANDO_EXAMES" || item.status === "EM_TRIAGEM" || item.status === "EM_CLÍNICO" || item.status === "EM_TOXICOLÓGICO" || item.status === "EM_LABORATÓRIO" || item.status === "EM_ECG/EEG/ESPIRO" || item.status === "EM_AUDIOMETRIA";
                                             const isAguardandoRecepcao = item.status === "AGUARDANDO_RECEPCAO";
                                             const isEncerrado = isFinalizado || isCancelado;
 
