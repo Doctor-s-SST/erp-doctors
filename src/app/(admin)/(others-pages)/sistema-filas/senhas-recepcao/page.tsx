@@ -10,9 +10,11 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
-import { FileEdit, CheckCircle2, RefreshCw, User, Monitor, XCircle, Filter, ArrowUpDown, Clock, PlusCircle, MonitorCheck, UploadCloud, Save, Building2, Stethoscope, BellRing, Loader2, X, Search } from "lucide-react"
+import { FileEdit, CheckCircle2, RefreshCw, User, Monitor, XCircle, Filter, ArrowUpDown, Clock, PlusCircle, MonitorCheck, UploadCloud, Save, Building2, Stethoscope, BellRing, Loader2, X, Search, Printer } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { useReactToPrint } from "react-to-print";
+import { TemplateFicha } from "@/components/ficha-impressao/TemplateFicha";
 import { on } from "events"
 
 type Atendimento = {
@@ -38,8 +40,6 @@ type ConfigOrdenacao = {
     direcao: 'asc' | 'desc'
 }
 
-const RECEPCIONISTAS = ["Livia Noccioli", "Mariana Galvão", "Pietra Amaro", "Marcela Santos"]
-
 export default function RecepcaoPage() {
     const [data, setData] = useState<Atendimento[]>([])
     const [filtroTipo, setFiltroTipo] = useState<string>("TODOS")
@@ -53,6 +53,10 @@ export default function RecepcaoPage() {
     const [finalizandoIds, setFinalizandoIds] = useState<Record<string, number>>({});
     const [especialidadesAuto, setEspecialidadesAuto] = useState<number[]>([]);
     const [especialidadesManual, setEspecialidadesManual] = useState<number[]>([]);
+    const [recepcionistas, setRecepcionistas] = useState<{ id: string; nome: string }[]>([])
+    const [loadingRecepcionistas, setLoadingRecepcionistas] = useState(true)
+    const componentRef = useRef<HTMLDivElement>(null);
+    const [salvoComSucesso, setSalvoComSucesso] = useState(false);
 
     // ESTADOS DO MODAL DE IMPORTAÇÃO
     const [importModal, setImportModal] = useState<{ open: boolean, item: Atendimento | null }>({ open: false, item: null })
@@ -92,6 +96,25 @@ export default function RecepcaoPage() {
             }
         }
         fetchEspecialidades();
+
+        const fetchRecepcionistas = async () => {
+            setLoadingRecepcionistas(true)
+            try {
+                const { data, error } = await supabase
+                    .from("profissionais")
+                    .select("id, nome")
+                    .eq("recepcao", true) // Filtra pelo campo booleano
+                    .order("nome")
+
+                if (error) throw error
+                setRecepcionistas(data || [])
+            } catch (err) {
+                console.error("Erro ao carregar recepcionistas:", err)
+            } finally {
+                setLoadingRecepcionistas(false)
+            }
+        }
+        fetchRecepcionistas()
     }, []);
 
     const formatarNome = (str: string) => {
@@ -326,6 +349,7 @@ export default function RecepcaoPage() {
             toast.error("Erro: " + error.message);
         } else {
             toast.success("Dados salvos com sucesso!");
+            setSalvoComSucesso(true);
             setImportModal({ open: false, item: null });
             fetchData();
         }
@@ -567,6 +591,11 @@ export default function RecepcaoPage() {
             setLoadingAction(null);
         }
     };
+
+    const handlePrint = useReactToPrint({
+        contentRef: componentRef,
+        documentTitle: `Ficha_${formFicha.sequencial}`,
+    });
 
     const obterIdsConsolidados = () => {
         return especialidades
@@ -959,6 +988,31 @@ export default function RecepcaoPage() {
                                                                         </Tooltip>
                                                                     </TooltipProvider>
 
+                                                                    {fichaPronta && (
+                                                                        <div>
+                                                                            <TooltipProvider>
+                                                                                <Tooltip>
+                                                                                    <TooltipTrigger asChild>
+                                                                                        <Button
+                                                                                            size="sm"
+                                                                                            variant="secondary"
+                                                                                            className={`h-8 w-8 p-0 ${fichaPronta ? 'bg-emerald-600 text-muted' : 'bg-blue-600 text-white'} ${fichaPronta ? "hover:bg-emerald-300" : "hover:bg-blue-300"} transition-colors`}
+                                                                                            onClick={() => {
+                                                                                                abrirModalImportacao(item).then(() => {
+                                                                                                    // delay para garantir que o estado carregou antes de imprimir
+                                                                                                    setTimeout(handlePrint, 500);
+                                                                                                });
+                                                                                            }}
+                                                                                        >
+                                                                                            <Printer className="w-3.5 h-3.5" />
+                                                                                        </Button>
+                                                                                    </TooltipTrigger>
+                                                                                    <TooltipContent>Imprimir Ficha</TooltipContent>
+                                                                                </Tooltip>
+                                                                            </TooltipProvider>
+                                                                        </div>
+                                                                    )}
+
                                                                     {/* BOTÃO CANCELAR */}
                                                                     <TooltipProvider>
                                                                         <Tooltip>
@@ -1000,15 +1054,16 @@ export default function RecepcaoPage() {
                         </CardContent>
                     </Card>
                 </div>
-            </div>
+            </div >
 
             {/* MODAL DE IMPORTAÇÃO DE FICHA */}
-            <Dialog
+            < Dialog
                 open={importModal.open}
                 onOpenChange={(val) => {
                     setImportModal({ ...importModal, open: val });
                     if (!val) setFormFicha(initialFormFicha);
-                }}
+                }
+                }
             >
                 <DialogContent className="sm:max-w-200 bg-white dark:bg-slate-900 border-none shadow-2xl max-h-[95vh] overflow-y-auto p-0">
                     <DialogHeader className="p-6 pb-0">
@@ -1249,11 +1304,11 @@ export default function RecepcaoPage() {
                         </Button>
                     </DialogFooter>
                 </DialogContent>
-            </Dialog>
+            </Dialog >
 
 
             {/* MODAL DE GUICHÊ */}
-            <Dialog open={openModal} onOpenChange={setOpenModal}>
+            < Dialog open={openModal} onOpenChange={setOpenModal} >
                 <DialogContent className="sm:max-w-100 border-none shadow-2xl bg-white dark:bg-slate-900">
                     <DialogHeader className="space-y-4">
                         <div className="bg-emerald-500/10 w-fit p-3 rounded-2xl mx-auto"><MonitorCheck className="w-8 h-8 text-emerald-500" /></div>
@@ -1261,8 +1316,8 @@ export default function RecepcaoPage() {
                     </DialogHeader>
 
                     <div className="space-y-5 py-4 flex flex-col items-center">
-                        <div className=" flex justify-center items-center gap-2">
-                            <Label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Número do Guichê</Label>
+                        <div className="flex justify-center items-center gap-2">
+                            <Label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Selecione o Guichê</Label>
                             <Select
                                 value={session?.guiche}
                                 onValueChange={(val) => setSession(prev => ({ ...prev, guiche: val }))}
@@ -1280,18 +1335,28 @@ export default function RecepcaoPage() {
                         </div>
 
                         <div className="flex justify-center items-center gap-2">
-                            <Label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Seu Nome</Label>
+                            <Label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">
+                                Seu Nome
+                            </Label>
                             <Select
                                 value={session?.nome}
                                 onValueChange={(val) => setSession(prev => ({ ...prev, nome: val }))}
                             >
-                                <SelectTrigger className="h-12 bg-slate-50 border-slate-200">
-                                    <SelectValue placeholder="Selecione seu nome" />
+                                <SelectTrigger className="h-12 bg-slate-50 border-slate-200 dark:bg-slate-800 dark:border-slate-700">
+                                    <SelectValue placeholder={loadingRecepcionistas ? "CARREGANDO..." : "QUEM ESTÁ ATENDENDO?"} />
                                 </SelectTrigger>
-                                <SelectContent>
-                                    {RECEPCIONISTAS.map(nome => (
-                                        <SelectItem key={nome} value={nome}>{nome}</SelectItem>
-                                    ))}
+                                <SelectContent className="bg-white dark:bg-slate-900">
+                                    {recepcionistas.length > 0 ? (
+                                        recepcionistas.map((p) => (
+                                            <SelectItem key={p.id} value={p.nome} className="font-bold">
+                                                {p.nome}
+                                            </SelectItem>
+                                        ))
+                                    ) : (
+                                        <div className="p-2 text-xs text-center text-slate-500">
+                                            Nenhum recepcionista encontrado
+                                        </div>
+                                    )}
                                 </SelectContent>
                             </Select>
                         </div>
@@ -1302,7 +1367,15 @@ export default function RecepcaoPage() {
                         </Button>
                     </DialogFooter>
                 </DialogContent>
-            </Dialog>
+            </Dialog >
+
+            {/* TEMPLATE FICHA */}
+            <div style={{ display: 'none' }}>
+                <TemplateFicha
+                    ref={componentRef}
+                    dados={formFicha}
+                />
+            </div>
         </>
     );
 }

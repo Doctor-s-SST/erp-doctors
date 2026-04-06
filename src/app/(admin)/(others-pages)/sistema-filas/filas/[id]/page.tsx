@@ -30,9 +30,11 @@ import {
     MessageSquare,
     Filter,
     Loader2,
-    X
+    X,
+    UserCog
 } from "lucide-react"
 import { is } from "zod/v4/locales"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 type ItemFila = {
     tipo_senha: string
@@ -59,25 +61,61 @@ type ConfigOrdenacao = {
     direcao: 'asc' | 'desc'
 }
 
+type Sala = { id: string; numero: string; especialidade_id: string }
+type Profissional = {
+    id: string;
+    nome: string;
+    profissional_especialidades: { especialidade_id: string }[];
+}
+
+
 export default function FilaPage() {
     const { id } = useParams()
     const [especialidadeNome, setEspecialidadeNome] = useState("Carregando...")
     const [data, setData] = useState<ItemFila[]>([])
-    const [dataTox, setDataTox] = useState<ItemFila[]>([])
     const [loading, setLoading] = useState(true)
     const [isRefreshing, setIsRefreshing] = useState(false)
     const [loadingAction, setLoadingAction] = useState<string | null>(null)
     const [openModal, setOpenModal] = useState(false)
     const [session, setSession] = useState<any>(null)
     const [ordenacao, setOrdenacao] = useState<ConfigOrdenacao>({ coluna: 'tempo_espera', direcao: 'desc' })
-    const [showToxicologico, setShowToxicologico] = useState(false)
     const [filtroPesquisa, setFiltroPesquisa] = useState("")
     const [filtroTipo, setFiltroTipo] = useState<string>("TODOS")
     const [listaGlobalExames, setListaGlobalExames] = useState<any[]>([]);
     const [finalizandoIds, setFinalizandoIds] = useState<Record<string, number>>({});
 
+    const [salas, setSalas] = useState<Sala[]>([])
+    const [profissionais, setProfissionais] = useState<Profissional[]>([])
+    const [form, setForm] = useState({ sala: "", profissional: "" });
+    const [isOutraSala, setIsOutraSala] = useState(false);
+    const [isOutroProfissional, setIsOutroProfissional] = useState(false);
+    const salasFiltradas = useMemo(() => {
+        return salas.filter(s => s.especialidade_id === id)
+    }, [salas, id])
 
-    const TOX_SALA = "Toxicológico"
+    const profissionaisFiltrados = useMemo(() => {
+        if (!id) return []
+        return profissionais.filter(p =>
+            p.profissional_especialidades?.some(
+                (v: any) => v.especialidade_id === id
+            )
+        )
+    }, [profissionais, id])
+
+    const entrar = async () => {
+        if (!form.sala || !form.profissional) {
+            alert("Por favor, preencha a sala e o profissional.");
+            return;
+        }
+
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+            const userKey = `fila_session_${user.id}`;
+            localStorage.setItem(userKey, JSON.stringify(form));
+            setSession(form);
+            setOpenModal(false);
+        }
+    };
 
     const getTempoEsperaTotal = (item: ItemFila) => {
         if (!item.created_at) return 0
@@ -104,7 +142,6 @@ export default function FilaPage() {
         if ((item.num_sala === session?.sala) && (item.profissional === session?.profissional)) {
             isMinhaSala = true
         }
-        console.log("Item:", item, "Minha Sala?", isMinhaSala)
 
         if (item.status_atendimento.startsWith('EM_') && item.status === "EM_FILA") {
             return {
@@ -161,16 +198,7 @@ export default function FilaPage() {
             })
 
             if (result) setData(result)
-
-            // Lógica do Toxicológico (se aplicável)
-            if (showToxicologico) {
-                const { data: resultTox } = await supabase.rpc("get_fila_especialidade", {
-                    p_sala: TOX_SALA
-                })
-                if (resultTox) setDataTox(resultTox)
-            }
         } catch (err) {
-            console.error("Erro ao buscar fila:", err)
         } finally {
             setLoading(false)
             setIsRefreshing(false)
@@ -189,7 +217,7 @@ export default function FilaPage() {
 
 
         return () => { clearInterval(interval); supabase.removeChannel(channel) }
-    }, [id, showToxicologico])
+    }, [id])
 
     useEffect(() => {
         const checkUser = async () => {
@@ -217,6 +245,25 @@ export default function FilaPage() {
         checkUser();
     }, [id]);
 
+    useEffect(() => {
+        async function fetchConfig() {
+            setLoading(true);
+            const { data: s } = await supabase.from("salas").select("*").order("numero");
+            const { data: p } = await supabase.from("profissionais").select(`
+                id,
+                nome,
+                profissional_especialidades (especialidade_id)
+            `).order("nome");
+
+            setSalas(s || []);
+            // Não use .map se for remover a lista de especialidades, 
+            // ou garanta que ela continue lá:
+            setProfissionais(p || []);
+            setLoading(false);
+        }
+        fetchConfig();
+    }, [id]); // Adicione id como dependência
+
     const normalizar = (texto: string) =>
         texto
             .toLowerCase()
@@ -225,27 +272,28 @@ export default function FilaPage() {
             .trim();
 
     const obterTempoExecucao = async (item: ItemFila) => {
+        // 1. Busca os exames vinculados a esse atendimento
         const { data: atendimentoCompleto } = await supabase
             .from('atendimentos')
             .select('exames_list')
             .eq('id', item.atendimento_id)
             .single();
 
-        if (!atendimentoCompleto) return 20;
+        // Se não encontrar dados, retorna o padrão de 20s
+        if (!atendimentoCompleto || !atendimentoCompleto.exames_list) return 20;
 
-        const nomesExamesNormalizados = atendimentoCompleto.exames_list.map((e: any) =>
-            normalizar(e.exame)
-        );
+        // 2. Verifica se algum exame na lista corresponde aos termos de EEG
+        // Usamos o normalizar para evitar problemas com acentos ou maiúsculas
+        const temEEG = atendimentoCompleto.exames_list.some((e: any) => {
+            const nomeExame = normalizar(e.exame || "");
+            return (
+                nomeExame.includes(normalizar("Eletroencefalograma-EEG")) ||
+                nomeExame.includes(normalizar("Eletroencefalograma"))
+            );
+        });
 
-        const examesDaEspecialidade = listaGlobalExames.filter(ex =>
-            ex.especialidade_id === id
-        );
-
-        const dadosExame = examesDaEspecialidade.find(ex =>
-            nomesExamesNormalizados.includes(normalizar(ex.nome))
-        );
-
-        return dadosExame?.tempo_execucao_segundos || 20;
+        // 3. Retorna 300s se for EEG, caso contrário 20s
+        return temEEG ? 300 : 20;
     };
 
     async function executarAcao(rpcName: string, params: any) {
@@ -262,18 +310,8 @@ export default function FilaPage() {
         setLoadingAction(null);
     }
 
-    async function salvarSessao() {
-        if (!session?.sala || !session?.profissional) return toast.warning("Preencha todos os campos")
-        const { data: { user } } = await supabase.auth.getUser()
-        if (user) {
-            localStorage.setItem(`fila_session_${user.id}`, JSON.stringify(session))
-            setOpenModal(false)
-            toast.success("Turno iniciado!")
-        }
-    }
-
     const dadosProcessados = useMemo(() => {
-        let lista = showToxicologico ? [...data, ...dataTox] : [...data];
+        let lista = [...data];
 
         // Remove duplicatas
         lista = Array.from(new Map(lista.map(item => [item.id, item])).values());
@@ -304,7 +342,7 @@ export default function FilaPage() {
                 ? getTempoEsperaTotal(a) - getTempoEsperaTotal(b)
                 : getTempoEsperaTotal(b) - getTempoEsperaTotal(a);
         })
-    }, [data, dataTox, showToxicologico, ordenacao, filtroPesquisa, filtroTipo])
+    }, [data, ordenacao, filtroPesquisa, filtroTipo])
 
     const ThOrdenavel = ({ label, coluna }: { label: string, coluna: keyof ItemFila | 'tempo_espera' }) => (
         <th className="text-left p-4 font-bold text-slate-500 uppercase tracking-widest text-[10px] cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
@@ -448,11 +486,6 @@ export default function FilaPage() {
                         <Button onClick={fetchFila} disabled={isRefreshing} variant="outline" className="h-12 bg-white dark:bg-slate-900 p-2 px-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800">
                             <RefreshCw className={`w-3 h-3 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} /> Atualizar
                         </Button>
-                        {especialidadeNome === "Triagem" && (
-                            <Button onClick={() => setShowToxicologico(!showToxicologico)} variant={showToxicologico ? "default" : "outline"} className={`h-10 text-[10px] font-black uppercase ${showToxicologico ? 'bg-orange-600' : ''}`}>
-                                <Beaker className="w-3 h-3 mr-2" /> Toxicológico
-                            </Button>
-                        )}
                     </div>
 
                 </div>
@@ -520,12 +553,6 @@ export default function FilaPage() {
                                                         <span className="font-bold text-slate-700 dark:text-slate-200">
                                                             {item.nome}
                                                         </span>
-
-                                                        {showToxicologico && item.especialidade_nome && (
-                                                            <span className="text-[9px] text-slate-400 uppercase font-black">
-                                                                {item.especialidade_nome}
-                                                            </span>
-                                                        )}
                                                     </div>
                                                 </td>
 
@@ -720,30 +747,93 @@ export default function FilaPage() {
             </div>
 
             {/* MODAL CONFIGURAÇÃO */}
-            <Dialog open={openModal} onOpenChange={setOpenModal}>
-                <DialogContent className="sm:max-w-[400px] border-none shadow-2xl bg-white dark:bg-slate-900">
-                    <DialogHeader className="space-y-4">
-                        <div className="bg-emerald-500/10 w-fit p-3 rounded-2xl mx-auto"><LayoutGrid className="w-8 h-8 text-emerald-500" /></div>
-                        <DialogTitle className="text-center text-xl font-black uppercase tracking-tight text-slate-800 dark:text-white">Sala de Atendimento</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-5 py-4">
-                        <div className="space-y-2">
-                            <Label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Número da Sala</Label>
-                            <div className="relative">
-                                <DoorOpen className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
-                                <Input className="pl-10 h-12 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:ring-emerald-500" placeholder="Ex: Consultório 01" onChange={(e) => setSession({ ...session, sala: e.target.value })} />
+            <Dialog open={openModal} onOpenChange={(open) => !loading && setOpenModal(open)}>
+                <DialogContent className="sm:max-w-[450px] bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 p-0 overflow-hidden shadow-2xl">
+
+                    <DialogHeader className="p-6 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+                        <div className="flex items-center gap-4">
+                            <div className="bg-emerald-500/20 p-3 rounded-xl">
+                                <UserCog className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
+                            </div>
+                            <div>
+                                <DialogTitle className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">
+                                    Identificação
+                                </DialogTitle>
+                                <p className="text-slate-500 dark:text-slate-400 text-[10px] font-bold uppercase tracking-[0.2em] mt-1">
+                                    {especialidadeNome}
+                                </p>
                             </div>
                         </div>
-                        <div className="space-y-2">
-                            <Label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Nome do Profissional</Label>
-                            <div className="relative">
-                                <User className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
-                                <Input className="pl-10 h-12 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:ring-emerald-500" placeholder="Nome do especialista" value={session?.profissional || ""} onChange={(e) => setSession({ ...session, profissional: e.target.value })} />
-                            </div>
+                    </DialogHeader>
+
+                    <div className="p-8 space-y-6">
+                        {/* SALA */}
+                        <div className="space-y-3">
+                            <Label className="text-[10px] font-black uppercase text-slate-500 ml-1">Sala de Atendimento</Label>
+                            {!isOutraSala ? (
+                                <Select
+                                    value={form.sala}
+                                    onValueChange={(val) => val === "OUTRO" ? (setIsOutraSala(true), setForm({ ...form, sala: "" })) : setForm({ ...form, sala: val })}
+                                >
+                                    <SelectTrigger className="h-12 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white font-bold uppercase">
+                                        <SelectValue placeholder="QUAL SALA?" />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
+                                        {salasFiltradas.map(s => (
+                                            <SelectItem key={s.id} value={s.numero} className="font-bold uppercase text-slate-900 dark:text-slate-100">SALA {s.numero}</SelectItem>
+                                        ))}
+                                        <SelectItem value="OUTRO" className="font-black text-emerald-600 dark:text-emerald-400">-- DIGITAR OUTRO --</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            ) : (
+                                <div className="relative">
+                                    <Input
+                                        autoFocus
+                                        className="h-12 bg-slate-50 dark:bg-slate-900 border-emerald-500/50 text-slate-900 dark:text-white font-bold uppercase"
+                                        value={form.sala}
+                                        onChange={(e) => setForm({ ...form, sala: e.target.value.toUpperCase() })}
+                                    />
+                                    <X className="absolute right-3 top-4 w-4 h-4 text-slate-400 cursor-pointer" onClick={() => setIsOutraSala(false)} />
+                                </div>
+                            )}
+                        </div>
+
+                        {/* PROFISSIONAL */}
+                        <div className="space-y-3">
+                            <Label className="text-[10px] font-black uppercase text-slate-500 ml-1">Profissional</Label>
+                            {!isOutroProfissional ? (
+                                <Select
+                                    value={form.profissional}
+                                    onValueChange={(val) => val === "OUTRO" ? (setIsOutroProfissional(true), setForm({ ...form, profissional: "" })) : setForm({ ...form, profissional: val })}
+                                >
+                                    <SelectTrigger className="h-12 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white font-bold uppercase">
+                                        <SelectValue placeholder="QUEM ATENDE?" />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
+                                        {profissionaisFiltrados.map(p => (
+                                            <SelectItem key={p.id} value={p.nome} className="font-bold uppercase text-slate-900 dark:text-slate-100">{p.nome}</SelectItem>
+                                        ))}
+                                        <SelectItem value="OUTRO" className="font-black text-emerald-600 dark:text-emerald-400">-- OUTRO --</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            ) : (
+                                <div className="relative">
+                                    <Input
+                                        autoFocus
+                                        className="h-12 bg-slate-50 dark:bg-slate-900 border-emerald-500/50 text-slate-900 dark:text-white font-bold uppercase"
+                                        value={form.profissional}
+                                        onChange={(e) => setForm({ ...form, profissional: e.target.value.toUpperCase() })}
+                                    />
+                                    <X className="absolute right-3 top-4 w-4 h-4 text-slate-400 cursor-pointer" onClick={() => setIsOutroProfissional(false)} />
+                                </div>
+                            )}
                         </div>
                     </div>
-                    <DialogFooter>
-                        <Button className="w-full h-12 bg-slate-900 hover:bg-emerald-600 text-white font-black uppercase tracking-widest transition-all shadow-lg" onClick={salvarSessao}>Confirmar Entrada</Button>
+
+                    <DialogFooter className="p-6 bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800">
+                        <Button onClick={entrar} className="w-full h-12 bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase tracking-widest">
+                            Entrar na Fila
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

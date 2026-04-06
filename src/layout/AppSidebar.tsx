@@ -10,7 +10,7 @@ import {
   HorizontaLDots,
   UserCircleIcon,
 } from "../icons/index";
-import { House, MonitorCog } from 'lucide-react';
+import { House, MonitorCog, Settings } from 'lucide-react';
 import { supabase } from "@/lib/supabase";
 
 type NavItem = {
@@ -21,7 +21,7 @@ type NavItem = {
   subItems?: {
     name: string;
     path: string;
-    roles?: string[]
+    roles?: string[];
   }[];
 };
 
@@ -40,21 +40,29 @@ const navItems: NavItem[] = [
       { name: "Kanban", path: "/sistema-filas/kanban", roles: ["admin"] },
       { name: "Chamada de Senhas", path: "/sistema-filas/senhas-recepcao", roles: ["admin", "recepcao"] },
       { name: "Filas", path: "/sistema-filas/filas", roles: ["admin", "recepcao", "especialista"] },
-      { name: "Painel", path: "/painel-senhas", roles: ["admin"] },
-      { name: "Gerenciar Usuários", path: "/sistema-filas/users", roles: ["admin"] },
+      { name: "Painel TV", path: "/painel-senhas", roles: ["admin"] },
     ],
   },
   {
-    icon: <CalenderIcon />,
-    name: "Agenda",
-    path: "/calendar",
-    roles: ["admin", "especialista"],
+    name: "Configurações",
+    icon: <Settings />, // Certifique-se de importar o ícone Settings da lucide-react
+    roles: ["admin"],
+    subItems: [
+      { name: "Usuários", path: "/configuracoes/users", roles: ["admin"] },
+      { name: "Salas e Profissionais", path: "/configuracoes/salas-profissionais", roles: ["admin"] },
+    ],
   },
-  {
-    icon: <UserCircleIcon />,
-    name: "Perfil",
-    path: "/profile",
-  },
+  // {
+  //   icon: <CalenderIcon />,
+  //   name: "Agenda",
+  //   path: "/calendar",
+  //   roles: ["admin", "especialista"],
+  // },
+  // {
+  //   icon: <UserCircleIcon />,
+  //   name: "Perfil",
+  //   path: "/profile",
+  // },
 ];
 
 const AppSidebar: React.FC = () => {
