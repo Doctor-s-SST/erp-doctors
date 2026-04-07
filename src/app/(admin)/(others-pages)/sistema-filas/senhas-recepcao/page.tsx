@@ -1,16 +1,16 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
-import { useEffect, useState, useRef, useMemo } from "react"
+import { useEffect, useState, useRef, useMemo, JSXElementConstructor, Key, ReactElement, ReactNode, ReactPortal } from "react"
 import { supabase } from "@/lib/supabase"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
-import { FileEdit, CheckCircle2, RefreshCw, User, Monitor, XCircle, Filter, ArrowUpDown, Clock, PlusCircle, MonitorCheck, UploadCloud, Save, Building2, Stethoscope, BellRing, Loader2, X, Search, Printer } from "lucide-react"
+import { FileEdit, CheckCircle2, RefreshCw, User, Monitor, XCircle, Filter, ArrowUpDown, Clock, PlusCircle, MonitorCheck, UploadCloud, Save, Building2, Stethoscope, BellRing, Loader2, X, Search, Printer, Plus, ClipboardPlus, ClipboardList, Activity } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useReactToPrint } from "react-to-print";
@@ -56,7 +56,10 @@ export default function RecepcaoPage() {
     const [recepcionistas, setRecepcionistas] = useState<{ id: string; nome: string }[]>([])
     const [loadingRecepcionistas, setLoadingRecepcionistas] = useState(true)
     const componentRef = useRef<HTMLDivElement>(null);
-    const [salvoComSucesso, setSalvoComSucesso] = useState(false);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const [printers, setPrinters] = useState<any[]>([]);
+    const [selectedPrinter, setSelectedPrinter] = useState<any>(null);
+    const [printerModal, setPrinterModal] = useState(false);
 
     // ESTADOS DO MODAL DE IMPORTAÇÃO
     const [importModal, setImportModal] = useState<{ open: boolean, item: Atendimento | null }>({ open: false, item: null })
@@ -122,16 +125,31 @@ export default function RecepcaoPage() {
         return str.toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
     }
 
-    const handleAddExameManual = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter' && exameInput.trim()) {
-            e.preventDefault();
-            const novoExame = { exame: exameInput.trim().toUpperCase() };
+    const sugestoesExames = useMemo(() => {
+        const lista: string[] = [];
+        especialidades.forEach(esp => {
+            esp.exames?.forEach((ex: any) => {
+                if (!lista.includes(ex.nome.toUpperCase())) {
+                    lista.push(ex.nome.toUpperCase());
+                }
+            });
+        });
+        return lista.sort();
+    }, [especialidades]);
+
+    const handleAddExameManual = (nomeExame: string) => {
+        const nomeFormatado = nomeExame.trim().toUpperCase();
+
+        // Verifica se o exame já está na lista para não duplicar
+        const jaExiste = formFicha.exames.some(ex => ex.exame.toUpperCase() === nomeFormatado);
+
+        if (nomeFormatado && !jaExiste) {
             setFormFicha(prev => ({
                 ...prev,
-                exames: [...prev.exames, novoExame]
+                exames: [...prev.exames, { exame: nomeFormatado }]
             }));
-            setExameInput("");
         }
+        setExameInput("");
     };
 
     const removeExame = (index: number) => {
@@ -349,11 +367,11 @@ export default function RecepcaoPage() {
             toast.error("Erro: " + error.message);
         } else {
             toast.success("Dados salvos com sucesso!");
-            setSalvoComSucesso(true);
             setImportModal({ open: false, item: null });
             fetchData();
         }
         setLoadingAction(null);
+        handlePrint();
     }
 
     useEffect(() => {
@@ -457,21 +475,41 @@ export default function RecepcaoPage() {
         setLoadingAction(null);
     };
 
+
     async function gerarSenha(tipo: "NORMAL" | "PREFERENCIAL") {
-        if (generatingRef.current) return
-        generatingRef.current = true
-        setLoadingAction(tipo)
+        if (generatingRef.current) return;
+        generatingRef.current = true;
+        setLoadingAction(tipo);
+
         try {
-            const { error } = await supabase.rpc("gerar_senha", { tipo_param: tipo, guiche_param: session?.guiche || "0", atendente_param: session?.nome || "" })
-            if (error) throw error
-            toast.success(`Senha ${tipo} gerada!`)
-            fetchData()
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const { data: senhaGerada, error } = await supabase.rpc("gerar_senha", {
+                tipo_param: tipo,
+                guiche_param: session?.guiche || "0",
+                atendente_param: session?.nome || ""
+            });
+
+            if (error) throw error;
+
+            // Chamada para a API com os campos separados
+            await fetch("/api/imprimir-senha", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    senha: senhaGerada,
+                    tipo: tipo,
+                    ip: selectedPrinter?.ip
+                })
+            });
+
+            toast.success(`Senha ${senhaGerada} gerada!`);
+            fetchData();
+
         } catch (err) {
-            toast.error("Erro ao gerar senha")
+            console.error(err);
+            toast.error("Erro ao gerar senha");
         } finally {
-            generatingRef.current = false
-            setLoadingAction(null)
+            generatingRef.current = false;
+            setLoadingAction(null);
         }
     }
 
@@ -546,27 +584,57 @@ export default function RecepcaoPage() {
 
     const handleUploadPDF = async (file: File) => {
         setLoadingAction("processing_pdf");
-        const toastId = toast.loading("Extraindo dados da ficha...");
+        const toastId = toast.loading("Validando exames...");
 
         try {
+            // 1. Busca oficial
+            const { data: examesCadastrados, error: dbError } = await supabase
+                .from("exames")
+                .select("nome");
+
+            if (dbError) throw dbError;
+
+            // Função auxiliar para remover acentos e normalizar
+            const normalizar = (str: string) =>
+                str.normalize("NFD")
+                    .replace(/[\u0300-\u036f]/g, "") // Remove acentos
+                    .trim()
+                    .toUpperCase();
+
+            // Criamos o Set com os nomes do BANCO normalizados
+            const listaOficialNormalizada = new Set(
+                examesCadastrados.map(e => normalizar(e.nome))
+            );
+
+            // 2. Processamento do PDF
             const formData = new FormData();
             formData.append("file", file);
-
             const response = await fetch("/api/importar-ficha", { method: "POST", body: formData });
-            if (!response.ok) throw new Error("Erro no processamento");
-
             const dataArray = await response.json();
             const data = dataArray[0];
+            console.log("tipo exames do PDF:", data.exame?.tipo, data.exames);
 
+            const hoje = new Date().toLocaleDateString("pt-BR");
+
+            // 3. Filtragem com normalização temporária
+            const examesFiltrados = (data.exames || []).filter((ex: any) => {
+                // Normaliza o que veio do PDF para comparar
+                const nomeExamePDF = normalizar(ex.exame || "");
+
+                const existeNoBanco = listaOficialNormalizada.has(nomeExamePDF);
+                const dataValida = !ex.data || ex.data === hoje;
+
+                return existeNoBanco && dataValida;
+            });
+
+            // 4. Update State (Mantendo os dados originais do PDF no estado)
             setFormFicha(prev => ({
                 ...prev,
-                sequencial: data.funcionario.ficha || prev.sequencial,
-
+                sequencial: data.funcionario?.ficha || prev.sequencial,
                 empresa: {
                     razao_social: data.empresa?.razao_social || "",
                     cnpj: data.empresa?.cnpj || ""
                 },
-
                 funcionario: {
                     nome: formatarNome(data.funcionario?.nome) || "",
                     rg: data.funcionario?.rg || "",
@@ -575,18 +643,16 @@ export default function RecepcaoPage() {
                     setor: data.funcionario?.setor || "",
                     cpf: data.funcionario?.cpf || ""
                 },
-
                 exame: {
                     tipo: data.exame?.tipo || ""
                 },
+                exames: examesFiltrados
+            }));
 
-                exames: data.exames || []
-            }))
+            toast.success("Ficha processada com sucesso!", { id: toastId });
 
-            toast.success("Ficha identificada!", { id: toastId });
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        } catch (error) {
-            toast.error("Erro ao ler PDF", { id: toastId });
+        } catch (error: any) {
+            toast.error("Falha na importação", { id: toastId });
         } finally {
             setLoadingAction(null);
         }
@@ -596,6 +662,26 @@ export default function RecepcaoPage() {
         contentRef: componentRef,
         documentTitle: `Ficha_${formFicha.sequencial}`,
     });
+
+    const loadPrinters = async () => {
+        const { data, error } = await supabase
+            .from("impressoras")
+            .select("*")
+            .eq("ativa", true);
+
+        if (data) {
+            setPrinters(data);
+
+            const padrao = data.find(p => p.padrao);
+            if (padrao && !selectedPrinter) {
+                setSelectedPrinter(padrao);
+            }
+        }
+    };
+
+    useEffect(() => {
+        loadPrinters();
+    }, []);
 
     const obterIdsConsolidados = () => {
         return especialidades
@@ -687,6 +773,14 @@ export default function RecepcaoPage() {
 
                         {/* LADO DIREITO: BOTÕES DE GERAR SENHA E ATUALIZAR */}
                         <div className="flex flex-row justify-end items-center gap-4 w-full">
+                            <Button
+                                variant="outline"
+                                className="h-8 text-[11px]"
+                                onClick={() => setPrinterModal(true)}
+                            >
+                                <Printer className="w-4 h-4 mr-1" />
+                                Impressora
+                            </Button>
                             <div
                                 className="flex h-8 items-center gap-1 bg-blue-600 text-muted p-1 rounded-full hover:bg-blue-500 hover:text-white cursor-pointer transition-all shrink-0"
                                 onClick={() => gerarSenha("NORMAL")}
@@ -1221,43 +1315,118 @@ export default function RecepcaoPage() {
                         </section>
 
                         {/* 4. LANÇAMENTO DE EXAMES E ESPECIALIDADES */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4 border-t border-slate-100">
-                            <div className="space-y-4">
+                        <div className="flex flex-col gap-8 pt-4 border-t border-slate-100">
+                            <div className="space-y-3">
                                 <div className="flex items-center gap-2">
                                     <PlusCircle className="w-4 h-4 text-blue-500" />
-                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-blue-500">Exames do Prontuário</h4>
+                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-blue-500">
+                                        Exames do ASO
+                                    </h4>
                                 </div>
-                                <Input
-                                    placeholder="Adicionar exame manual..."
-                                    className="h-10 border-slate-200"
-                                    value={exameInput}
-                                    onChange={(e) => setExameInput(e.target.value)}
-                                    onKeyDown={handleAddExameManual}
-                                />
-                                <div className="flex flex-wrap gap-1.5 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl min-h-25 align-top">
-                                    {formFicha.exames.map((ex, i) => (
-                                        <Badge
-                                            key={i}
-                                            className="bg-white dark:bg-slate-700 text-slate-700 border border-slate-200 font-bold py-1 px-2 flex items-center gap-2"
-                                        >
-                                            {ex.exame.toUpperCase()}
-                                            <Button onClick={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                removeExame(i);
-                                            }}
-                                                className="cursor-pointer text-slate-400 hover:text-red-500 transition-colors bg-transparent p-0">
 
-                                                <XCircle
-                                                    className="w-3 h-3"
-                                                />
-                                            </Button>
-                                        </Badge>
-                                    ))}
+                                {/* Container do Input + Sugestões Customizadas */}
+                                <div className="relative">
+                                    <Input
+                                        placeholder="Clique para ver a lista ou digite para buscar..."
+                                        className="h-10 border-slate-200 focus-visible:ring-blue-500 bg-white dark:bg-slate-900"
+                                        value={exameInput}
+                                        onChange={(e) => {
+                                            setExameInput(e.target.value);
+                                            setShowSuggestions(true);
+                                        }}
+                                        onFocus={() => setShowSuggestions(true)}
+                                        onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' && exameInput) {
+                                                e.preventDefault();
+                                                const match = sugestoesExames.find(s => s.toLowerCase() === exameInput.toLowerCase());
+                                                if (match) handleAddExameManual(match);
+                                            }
+                                        }}
+                                    />
+
+                                    {/* Lista de Sugestões Estilizada */}
+                                    {showSuggestions && (
+                                        <div className="absolute z-50 w-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                                            <div className="max-h-56 overflow-y-auto p-1 custom-scrollbar">
+                                                {sugestoesExames
+                                                    // Se houver texto, filtra. Se não, mostra todos.
+                                                    .filter(s => !exameInput || s.toLowerCase().includes(exameInput.toLowerCase()))
+                                                    .map((sugestao, idx) => (
+                                                        <button
+                                                            key={idx}
+                                                            onClick={() => {
+                                                                handleAddExameManual(sugestao);
+                                                                setShowSuggestions(false);
+                                                            }}
+                                                            className="w-full text-left px-3 py-2.5 text-[11px] font-bold uppercase tracking-tight text-slate-700 dark:text-slate-200 hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:text-blue-600 rounded-lg transition-colors flex items-center justify-between group"
+                                                        >
+                                                            <div className="flex items-center gap-2">
+                                                                <div className="w-1 h-1 rounded-full bg-slate-300 group-hover:bg-blue-500 transition-colors" />
+                                                                {sugestao}
+                                                            </div>
+                                                            <Plus className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                        </button>
+                                                    ))}
+
+                                                {/* Caso a busca não retorne nada */}
+                                                {exameInput && sugestoesExames.filter(s => s.toLowerCase().includes(exameInput.toLowerCase())).length === 0 && (
+                                                    <div className="px-3 py-6 text-center text-[10px] text-slate-400 uppercase font-black tracking-widest">
+                                                        Nenhum exame cadastrado
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Lista de Selecionados */}
+                                <div className="rounded-xl border border-slate-100 bg-slate-50/50 dark:bg-slate-800/30 overflow-hidden shadow-inner">
+                                    {/* Ajuste na classe grid: condicional para colunas */}
+                                    <div className={`h-full grid gap-1 items-center overflow-y-auto p-2 custom-scrollbar ${formFicha.exames.length === 0 ? "grid-cols-1" : "grid-cols-2"
+                                        }`}>
+                                        {formFicha.exames.length === 0 ? (
+                                            <div className="p-8 text-center flex flex-col items-center justify-center">
+                                                <div className="inline-flex p-3 rounded-2xl bg-white dark:bg-slate-800 shadow-sm mb-3">
+                                                    <ClipboardList className="w-5 h-5 text-slate-300" />
+                                                </div>
+                                                <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest">
+                                                    Nenhum exame na lista
+                                                </p>
+                                            </div>
+                                        ) : (
+                                            formFicha.exames.map((ex, i) => (
+                                                <div
+                                                    key={i}
+                                                    className="flex items-center justify-between bg-white dark:bg-slate-800 px-3 py-2 rounded-xl border border-slate-200/50 shadow-sm group hover:border-blue-400/50 hover:shadow-md transition-all duration-200"
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 border border-blue-100 dark:border-blue-800/50 group-hover:scale-110 transition-transform">
+                                                            <Activity className="w-3 h-3" />
+                                                        </div>
+                                                        <span className="text-[11px] font-black text-slate-700 dark:text-slate-100 uppercase tracking-tight line-clamp-1">
+                                                            {ex.exame}
+                                                        </span>
+                                                    </div>
+
+                                                    <Button
+                                                        onClick={(e) => {
+                                                            e.preventDefault();
+                                                            removeExame(i);
+                                                        }}
+                                                        variant="ghost"
+                                                        className="h-8 w-8 p-0 text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-full transition-colors"
+                                                    >
+                                                        <XCircle className="w-4 h-4" />
+                                                    </Button>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
                                 </div>
                             </div>
 
-                            <div className="space-y-4">
+                            <div className="space-y-4  border-t border-slate-100 pt-4">
                                 <div className="flex items-center gap-2">
                                     <Filter className="w-4 h-4 text-blue-500" />
                                     <h4 className="text-[10px] font-black uppercase tracking-widest text-blue-500">Destinos de Atendimento</h4>
@@ -1368,6 +1537,194 @@ export default function RecepcaoPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog >
+
+            {/* MODAL DE IMPRESSORA */}
+            <Dialog open={printerModal} onOpenChange={setPrinterModal}>
+                <DialogContent className="max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl p-0 overflow-hidden">
+
+                    {/* Cabeçalho Acessível */}
+                    <div className="bg-slate-900 px-6 py-4 flex items-center justify-between border-b border-slate-800">
+                        <div className="flex items-center gap-3">
+                            <div className="bg-blue-500/20 p-2 rounded-lg">
+                                <Printer className="w-4 h-4 text-blue-400" />
+                            </div>
+                            <div>
+                                <DialogTitle className="text-sm font-black text-white uppercase tracking-widest">
+                                    Impressora
+                                </DialogTitle>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="p-6 space-y-5">
+                        {/* SELECIONAR EXISTENTE */}
+                        <div className="space-y-2">
+                            <Label className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                Impressoras Salvas
+                            </Label>
+
+                            <Select
+                                // Use o ID como valor, garantindo que seja string ou string vazia
+                                value={selectedPrinter?.id || ""}
+                                onValueChange={(value) => {
+                                    const selected = printers.find((p) => p.id === value);
+                                    if (selected) setSelectedPrinter(selected);
+                                }}
+                            >
+                                <SelectTrigger className="h-9 text-[12px] w-full">
+                                    {/* O SelectValue mostrará o que estiver selecionado ou o placeholder */}
+                                    <SelectValue placeholder="Selecionar impressora..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {printers.length > 0 ? (
+                                        printers.map((p) => (
+                                            <SelectItem key={p.id} value={p.id}>
+                                                {p.nome} - {p.ip}
+                                            </SelectItem>
+                                        ))
+                                    ) : (
+                                        <SelectItem value="none" disabled>
+                                            Nenhuma impressora cadastrada
+                                        </SelectItem>
+                                    )}
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div className="border-t border-slate-200 dark:border-slate-800" />
+
+                        {/* FORMULÁRIO - USANDO selectedPrinter */}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="col-span-2">
+                                <Label className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                    Nome
+                                </Label>
+                                <Input
+                                    className="h-9 text-[12px]"
+                                    placeholder="Ex: Recepção"
+                                    value={selectedPrinter?.nome || ""}
+                                    onChange={(e) =>
+                                        setSelectedPrinter((p: any) => ({ ...p, nome: e.target.value }))
+                                    }
+                                />
+                            </div>
+
+                            <div>
+                                <Label className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                    IP
+                                </Label>
+                                <Input
+                                    className="h-9 text-[12px]"
+                                    placeholder="192.168.0.100"
+                                    value={selectedPrinter?.ip || ""}
+                                    onChange={(e) =>
+                                        setSelectedPrinter((p: any) => ({ ...p, ip: e.target.value }))
+                                    }
+                                />
+                            </div>
+
+                            <div>
+                                <Label className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                    Porta
+                                </Label>
+                                <Input
+                                    className="h-9 text-[12px]"
+                                    type="number"
+                                    value={selectedPrinter?.porta || 9100}
+                                    onChange={(e) =>
+                                        setSelectedPrinter((p: any) => ({
+                                            ...p,
+                                            porta: Number(e.target.value)
+                                        }))
+                                    }
+                                />
+                            </div>
+                        </div>
+
+                        {/* SWITCH PADRÃO */}
+                        <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200 dark:border-slate-800">
+                            <div>
+                                <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">
+                                    Definir como padrão
+                                </p>
+                                <p className="text-[10px] text-slate-400">
+                                    Será usada automaticamente ao gerar senha
+                                </p>
+                            </div>
+
+                            <input
+                                type="checkbox"
+                                checked={selectedPrinter?.padrao || false}
+                                onChange={(e) =>
+                                    setSelectedPrinter((p: any) => ({
+                                        ...p,
+                                        padrao: e.target.checked
+                                    }))
+                                }
+                            />
+                        </div>
+                    </div>
+
+                    {/* FOOTER */}
+                    <div className="flex justify-between items-center px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900">
+                        <Button
+                            variant="ghost"
+                            className="text-[11px] uppercase font-bold"
+                            onClick={() => setPrinterModal(false)}
+                        >
+                            Cancelar
+                        </Button>
+
+                        <div className="flex gap-2">
+                            <Button
+                                variant="outline"
+                                className="text-[11px] uppercase font-bold"
+                                onClick={async () => {
+                                    await fetch("/api/imprimir-senha", {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({
+                                            texto: "TESTE DE IMPRESSÃO\n\nOK\n\n",
+                                            ip: selectedPrinter?.ip
+                                        })
+                                    })
+                                }}
+                            >
+                                Testar
+                            </Button>
+
+                            <Button
+                                className="bg-blue-600 hover:bg-blue-700 text-white text-[11px] uppercase font-black tracking-widest"
+                                onClick={async () => {
+                                    if (!selectedPrinter?.nome || !selectedPrinter?.ip) {
+                                        return toast.warning("Preencha nome e IP")
+                                    }
+
+                                    if (selectedPrinter?.padrao) {
+                                        await supabase
+                                            .from("impressoras")
+                                            .update({ padrao: false })
+                                            .neq("id", selectedPrinter.id || "")
+                                    }
+
+                                    const { error } = await supabase
+                                        .from("impressoras")
+                                        .upsert(selectedPrinter)
+
+                                    if (error) return toast.error("Erro ao salvar")
+
+                                    toast.success("Impressora salva!")
+                                    fetchData()
+                                    setPrinterModal(false)
+                                }}
+                            >
+                                <Save className="w-3 h-3 mr-1" />
+                                Salvar
+                            </Button>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
 
             {/* TEMPLATE FICHA */}
             <div style={{ display: 'none' }}>

@@ -244,7 +244,7 @@ export default function PainelTV() {
               {/* CONTEÚDO CENTRAL: Sempre no centro do main */}
               <div className="flex flex-col items-center w-full">
                 {ultimaChamada?.nome_paciente ? (
-                  <h2 className="text-[7.5rem] leading-[1.1] font-black text-center wrap-break-word px-10 uppercase drop-shadow-md">
+                  <h2 className="text-[6vw] leading-[1.1] font-black text-center wrap-break-word px-10 uppercase drop-shadow-md">
                     {ultimaChamada.nome_paciente}
                     {/* Abel Joaquim Dantas Pereira Marcondes */}
                   </h2>
@@ -276,8 +276,8 @@ export default function PainelTV() {
           <div className="flex-1 flex flex-col">
             {historico.slice(1).map((item, idx) => (
               <div key={item.id + idx} className="flex-1 border-b border-gray-400 flex flex-col items-center justify-center p-2 last:border-0">
-                <p className="text-[2.5em] font-black text-gray-800 leading-tight">{item.senha_codigo}</p>
-                <p className="text-[1.5em] font-bold text-[#3498db] uppercase">
+                <p className="text-[3.5vw] font-black text-gray-800 leading-tight">{item.senha_codigo}</p>
+                <p className="text-[1.8vw] font-bold text-[#3498db] uppercase">
                   {item.origem === 'RECEPCAO' ? 'Guichê' : 'Sala'} {item.guiche}
                 </p>
                 {item.nome_paciente && (
@@ -307,7 +307,7 @@ export default function PainelTV() {
         }
         .animate-marquee {
           display: inline-block;
-          animation: marquee 15s linear infinite;
+          animation: marquee 25s linear infinite;
         }
       `}</style>
     </div>

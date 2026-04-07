@@ -224,29 +224,28 @@ export default function KanbanExames() {
         return (
             <Card className={`border-none bg-white dark:bg-slate-800 shadow-sm transition-all ${!isOverlay ? 'hover:ring-1 ring-emerald-500 cursor-grab' : 'shadow-2xl ring-2 ring-emerald-500 scale-105'}`}>
                 <CardContent className="p-3 space-y-2">
-                    {/* Aumentei para text-[11px] e font-black */}
-                    <div className="font-black text-slate-800 dark:text-slate-100 uppercase text-[11px] leading-tight line-clamp-2">
+                    <div className="font-black text-slate-800 dark:text-slate-100 uppercase text-[12px] leading-tight line-clamp-2">
                         {exame.nome}
                     </div>
-                    
+
                     <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-700/50 pt-2">
-                        <div className="flex items-center gap-3">
-                            {/* Tempo de Execução */}
-                            <div className="flex items-center gap-1">
+                        {/* <div className="flex items-center gap-3"> */}
+                        {/* Tempo de Execução */}
+                        {/* <div className="flex items-center gap-1">
                                 <Activity className="w-3 h-3 text-emerald-500" />
                                 <span className="text-[10px] font-black text-slate-500 uppercase">{exame.tempo_execucao_segundos}s</span>
-                            </div>
+                            </div> */}
 
-                            {/* Dependência Visual ao lado do tempo */}
-                            {exame.depende_de_exame_id && (
-                                <div className="flex items-center gap-1 bg-blue-50 dark:bg-blue-900/20 px-1.5 py-0.5 rounded border border-blue-100 dark:border-blue-800">
-                                    <Link2 className="w-2.5 h-2.5 text-blue-600 dark:text-blue-400" />
-                                    <span className="text-[8px] font-bold text-blue-600 dark:text-blue-400 uppercase truncate max-w-[80px]">
-                                        {nomeDependencia || "DEP"}
-                                    </span>
-                                </div>
-                            )}
-                        </div>
+                        {/* Dependência Visual ao lado do tempo */}
+                        {exame.depende_de_exame_id && (
+                            <div className="flex items-center gap-1 bg-blue-50 dark:bg-blue-900/20 px-1.5 py-0.5 rounded border border-blue-100 dark:border-blue-800">
+                                <Link2 className="w-2.5 h-2.5 text-blue-600 dark:text-blue-400" />
+                                <span className="text-[8px] font-bold text-blue-600 dark:text-blue-400 uppercase truncate max-w-[80px]">
+                                    {nomeDependencia || "DEP"}
+                                </span>
+                            </div>
+                        )}
+                        {/* </div> */}
                     </div>
                 </CardContent>
             </Card>
@@ -260,7 +259,7 @@ export default function KanbanExames() {
     )
 
     return (
-        <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-4">
+        <div className="min-h-full bg-slate-50 dark:bg-slate-950 p-4">
             <div className="max-w-[100%] mx-auto space-y-4">
                 {/* HEADER */}
                 <div className="bg-slate-900 rounded-xl p-4 flex justify-between items-center border border-slate-800 shadow-xl">
@@ -284,33 +283,45 @@ export default function KanbanExames() {
                 {/* KANBAN BOARD */}
                 <div className="overflow-x-auto pb-4 scrollbar-hide">
                     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-                        <div className="flex gap-4 min-w-max md:min-w-0 md:grid md:grid-cols-3 lg:grid-cols-6 items-start">
+                        <div className="flex gap-4 overflow-x-auto pb-4 items-start custom-scroll">
                             {data.map((col) => (
-                                <div key={col.id} className="w-[280px] md:w-auto bg-slate-200/40 dark:bg-slate-900/40 rounded-xl p-2 border border-slate-200 dark:border-slate-800 shrink-0">
-                                    <div className="flex justify-between items-center mb-3 px-1 group cursor-pointer"
+                                <div
+                                    key={col.id}
+                                    className="flex flex-col w-[250px] max-h-[70vh] bg-slate-200/40 dark:bg-slate-900/40 rounded-xl p-2 border border-slate-200 dark:border-slate-800 shrink-0"
+                                >
+                                    {/* Título Fixo no topo da coluna */}
+                                    <div className="flex justify-between items-center mb-3 px-1 group cursor-pointer shrink-0"
                                         onClick={() => { setTipoModal("especialidade"); setEditandoEspecialidade(col.id); setForm({ nome: col.nome }); setOpenModal(true); }}>
                                         <h2 className="font-black text-slate-700 dark:text-slate-300 uppercase text-[9px] tracking-widest truncate group-hover:text-emerald-500 transition-colors">
                                             {col.nome}
                                         </h2>
-                                        <Badge className="h-4 px-1 text-[9px] bg-white dark:bg-slate-800 text-slate-500 border-none shadow-sm">{col.exames.length}</Badge>
+                                        <Badge className="h-4 px-2 py-1 text-[12px] bg-white dark:bg-slate-800 text-slate-500 border-none shadow-sm">{col.exames.length}</Badge>
                                     </div>
 
-                                    <SortableContext items={col.exames.map(e => e.id)} strategy={verticalListSortingStrategy}>
-                                        <DroppableColumn id={col.id}>
-                                            {col.exames.map((exame) => (
-                                                <SortableItem key={exame.id} id={exame.id}>
-                                                    <div onClick={() => {
-                                                        setTipoModal("exame");
-                                                        setEditandoExame(exame);
-                                                        setForm({ ...exame, tempo: exame.tempo_execucao_segundos });
-                                                        setOpenModal(true);
-                                                    }}>
-                                                        {renderExameCard(exame)}
-                                                    </div>
-                                                </SortableItem>
-                                            ))}
-                                        </DroppableColumn>
-                                    </SortableContext>
+                                    {/* Lista de Exames */}
+                                    <div className="overflow-y-auto flex-1 custom-scroll px-2 pt-2 pb-4">
+                                        <SortableContext items={col.exames.map(e => e.id)} strategy={verticalListSortingStrategy}>
+                                            <DroppableColumn id={col.id}>
+                                                <div className="flex flex-col gap-2"> {/* Wrapper para garantir espaçamento entre cards */}
+                                                    {col.exames.map((exame) => (
+                                                        <SortableItem key={exame.id} id={exame.id}>
+                                                            <div
+                                                                className="p-[1px]" // Pequeno respiro para a borda do card não ser cortada
+                                                                onClick={() => {
+                                                                    setTipoModal("exame");
+                                                                    setEditandoExame(exame);
+                                                                    setForm({ ...exame, tempo: exame.tempo_execucao_segundos });
+                                                                    setOpenModal(true);
+                                                                }}
+                                                            >
+                                                                {renderExameCard(exame)}
+                                                            </div>
+                                                        </SortableItem>
+                                                    ))}
+                                                </div>
+                                            </DroppableColumn>
+                                        </SortableContext>
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -344,24 +355,24 @@ export default function KanbanExames() {
                         </div>
 
                         {tipoModal === "exame" && (
-    <>
-        {/* NOVO CAMPO: SELEÇÃO DE ESPECIALIDADE */}
-        <div className="space-y-2">
-            <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Especialidade</Label>
-            <select
-                className="flex h-12 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-xs font-bold uppercase focus:ring-2 focus:ring-emerald-500 outline-none"
-                value={form.especialidade_id || ""}
-                onChange={e => setForm({ ...form, especialidade_id: e.target.value })}
-            >
-                <option value="" disabled>SELECIONE UMA ESPECIALIDADE</option>
-                {data.map(esp => (
-                    <option key={esp.id} value={esp.id}>
-                        {esp.nome}
-                    </option>
-                ))}
-            </select>
-        </div>
+                            <>
+                                {/* NOVO CAMPO: SELEÇÃO DE ESPECIALIDADE */}
                                 <div className="space-y-2">
+                                    <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Especialidade</Label>
+                                    <select
+                                        className="flex h-12 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-xs font-bold uppercase focus:ring-2 focus:ring-emerald-500 outline-none"
+                                        value={form.especialidade_id || ""}
+                                        onChange={e => setForm({ ...form, especialidade_id: e.target.value })}
+                                    >
+                                        <option value="" disabled>SELECIONE UMA ESPECIALIDADE</option>
+                                        {data.map(esp => (
+                                            <option key={esp.id} value={esp.id}>
+                                                {esp.nome}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                {/* <div className="space-y-2">
                                     <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Tempo (segundos)</Label>
                                     <Input
                                         type="number"
@@ -369,7 +380,7 @@ export default function KanbanExames() {
                                         value={form.tempo || ""}
                                         onChange={e => setForm({ ...form, tempo: e.target.value })}
                                     />
-                                </div>
+                                </div> */}
                                 <div className="space-y-2">
                                     <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Depende de qual exame?</Label>
                                     <select

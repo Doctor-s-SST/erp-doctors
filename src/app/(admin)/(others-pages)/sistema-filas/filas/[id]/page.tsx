@@ -272,18 +272,24 @@ export default function FilaPage() {
             .trim();
 
     const obterTempoExecucao = async (item: ItemFila) => {
-        // 1. Busca os exames vinculados a esse atendimento
+        // 1. Verificação por Especialidade (Sua nova regra)
+        // Normalizamos para garantir que a comparação funcione independente de maiúsculas/minúsculas
+        const nomeEsp = especialidadeNome?.toUpperCase();
+        const especialidadesLongas = ["ECG", "EEG", "ESPIRO"];
+
+        if (especialidadesLongas.some(esp => nomeEsp.includes(esp))) {
+            return 300;
+        }
+
+        // 2. Verificação residual por exames específicos (Lógica anterior que você já tinha)
         const { data: atendimentoCompleto } = await supabase
             .from('atendimentos')
             .select('exames_list')
             .eq('id', item.atendimento_id)
             .single();
 
-        // Se não encontrar dados, retorna o padrão de 20s
         if (!atendimentoCompleto || !atendimentoCompleto.exames_list) return 20;
 
-        // 2. Verifica se algum exame na lista corresponde aos termos de EEG
-        // Usamos o normalizar para evitar problemas com acentos ou maiúsculas
         const temEEG = atendimentoCompleto.exames_list.some((e: any) => {
             const nomeExame = normalizar(e.exame || "");
             return (
@@ -292,7 +298,6 @@ export default function FilaPage() {
             );
         });
 
-        // 3. Retorna 300s se for EEG, caso contrário 20s
         return temEEG ? 300 : 20;
     };
 
