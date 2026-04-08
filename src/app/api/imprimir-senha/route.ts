@@ -140,7 +140,8 @@ export async function POST(req: Request) {
     // 👆 MUITO melhor que double
 
     // alternativa ainda maior:
-    // printer.setTextSize(7, 7);
+    printer.setTextSize(7, 7);
+    printer.println("999");
 
     printer.bold(true);
     printer.println(senha);
