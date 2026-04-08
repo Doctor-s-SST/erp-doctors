@@ -60,6 +60,8 @@ export default function RecepcaoPage() {
     const [printers, setPrinters] = useState<any[]>([]);
     const [selectedPrinter, setSelectedPrinter] = useState<any>(null);
     const [printerModal, setPrinterModal] = useState(false);
+    const [userRole, setUserRole] = useState<string | null>(null);
+
 
     // ESTADOS DO MODAL DE IMPORTAÇÃO
     const [importModal, setImportModal] = useState<{ open: boolean, item: Atendimento | null }>({ open: false, item: null })
@@ -227,7 +229,7 @@ export default function RecepcaoPage() {
     function getStatusBadge(status: string) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const styles: any = {
-            "AGUARDANDO_RECEPCAO": "bg-slate-600 text-slate-100",
+            "AGUARDANDO_RECEPCAO": "bg-gray-600 text-gray-100",
             "EM_FILA": "bg-amber-600 text-amber-100 animate-pulse",
             "EM_RECEPCAO": "bg-blue-600 text-blue-100 animate-pulse",
             "FINALIZADO": "bg-green-600 text-green-100",
@@ -241,7 +243,7 @@ export default function RecepcaoPage() {
             "EM_LABORATÓRIO": "bg-green-600 text-green-100",
             "EM_ECG_EEG_ESPIRO": "bg-green-600 text-green-100",
         }
-        return <Badge className={`${styles[status] || 'bg-slate-100'} border-none text-[9px] font-black tracking-widest uppercase px-2`}>{(status) === "NAO_ATENDIDO" ? "NÃO ATENDIDO" : (status === "AGUARDANDO_RECEPCAO" ? "AGUARDANDO RECEPÇÃO" : (status === "EM_RECEPCAO" ? "EM RECEPÇÃO" : status.replace('_', ' ')))}</Badge>
+        return <Badge className={`${styles[status] || 'bg-gray-100'} border-none text-[9px] font-black tracking-widest uppercase px-2`}>{(status) === "NAO_ATENDIDO" ? "NÃO ATENDIDO" : (status === "AGUARDANDO_RECEPCAO" ? "AGUARDANDO RECEPÇÃO" : (status === "EM_RECEPCAO" ? "EM RECEPÇÃO" : status.replace('_', ' ')))}</Badge>
     }
 
     const handleSort = (coluna: keyof Atendimento | 'tempo_espera') => {
@@ -491,15 +493,15 @@ export default function RecepcaoPage() {
             if (error) throw error;
 
             // Chamada para a API com os campos separados
-            await fetch("/api/imprimir-senha", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    senha: senhaGerada,
-                    tipo: tipo,
-                    ip: selectedPrinter?.ip
-                })
-            });
+            // await fetch("/api/imprimir-senha", {
+            //     method: "POST",
+            //     headers: { "Content-Type": "application/json" },
+            //     body: JSON.stringify({
+            //         senha: senhaGerada,
+            //         tipo: tipo,
+            //         ip: selectedPrinter?.ip
+            //     })
+            // });
 
             toast.success(`Senha ${senhaGerada} gerada!`);
             fetchData();
@@ -572,12 +574,12 @@ export default function RecepcaoPage() {
 
     const ThOrdenavel = ({ label, coluna }: { label: string, coluna: keyof Atendimento | 'tempo_espera' }) => (
         <th
-            className={`text-left p-4 font-black uppercase tracking-[0.15em] text-[9px] cursor-pointer transition-colors ${ordenacao.coluna === coluna ? 'text-blue-500' : 'text-slate-400 hover:text-blue-500'}`}
+            className={`text-left p-4 font-black uppercase tracking-[0.15em] text-[9px] cursor-pointer transition-colors ${ordenacao.coluna === coluna ? 'text-blue-500' : 'hover:text-blue-500'}`}
             onClick={() => handleSort(coluna)}
         >
             <div className="flex items-center gap-1">
                 {label}
-                <ArrowUpDown className={`w-3 h-3 ${ordenacao.coluna === coluna ? 'opacity-100' : 'opacity-30'}`} />
+                <ArrowUpDown className={`w-3 h-3 ${ordenacao.coluna === coluna ? 'opacity-100' : 'opacity-50'}`} />
             </div>
         </th>
     )
@@ -681,6 +683,24 @@ export default function RecepcaoPage() {
 
     useEffect(() => {
         loadPrinters();
+
+        async function getRole() {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                const { data, error } = await supabase
+                    .from('profiles')
+                    .select('role')
+                    .eq('id', user.id)
+                    .single();
+
+                if (data && !error) {
+                    setUserRole(data.role);
+                } else {
+                    setUserRole("user");
+                }
+            }
+        }
+        getRole();
     }, []);
 
     const obterIdsConsolidados = () => {
@@ -706,52 +726,52 @@ export default function RecepcaoPage() {
 
     return (
         <>
-            <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-4 md:p-8 space-y-8">
-                <div className="max-w-7xl mx-auto space-y-6">
+            <div className="min-h-fit mt-2 space-y-8 bg-gray-500/20 rounded-xl p-2">
+                <div className="w-full mx-auto space-y-5">
 
                     {/* HEADER RECEPCAO */}
-                    <div className="bg-slate-900 rounded-2xl shadow-2xl p-6 flex flex-col md:flex-row justify-between items-center gap-6 border border-slate-800">
+                    <div className="bg-gray-900 rounded-2xl shadow-2xl p-2 flex flex-col md:flex-row justify-between items-center gap-6 border border-gray-600">
                         <div className="flex items-center gap-4">
                             <div className="bg-blue-500/20 p-3 rounded-xl">
-                                <Monitor className="w-6 h-6 text-blue-400" />
+                                <Monitor className="w-5 h-5 text-blue-400" />
                             </div>
                             <div className="space-y-1">
                                 <h1 className="text-xl md:text-2xl font-black text-white tracking-tight uppercase">Chamada de Senhas - Recepção</h1>
-                                <p className="text-slate-400 text-[11px] font-bold tracking-[0.2em] uppercase">{new Date().toLocaleDateString("pt-BR")}</p>
+                                <p className="text-gray-400 text-[11px] font-bold tracking-[0.2em]">{new Date().toLocaleDateString("pt-BR")}</p>
                             </div>
                         </div>
 
-                        <div className="flex items-center gap-4 bg-slate-800/40 p-3 rounded-xl border border-slate-700/50">
-                            <div className="flex items-center gap-3 pr-6 border-r border-slate-700">
+                        <div className="flex items-center gap-2 bg-gray-800/40 p-2 rounded-xl border border-gray-700/50">
+                            <div className="flex items-center gap-3 pr-6 border-r border-gray-700">
                                 <User className="w-4 h-4 text-blue-400" />
                                 <div>
-                                    <p className="text-[9px] uppercase text-slate-500 font-black leading-none mb-1">Atendente</p>
-                                    <p className="text-sm font-bold text-slate-200">{session?.nome || "---"}</p>
+                                    <p className="text-[9px] uppercase text-gray-500 font-black leading-none mb-1">Atendente</p>
+                                    <p className="text-sm font-bold text-gray-200">{session?.nome || "---"}</p>
                                 </div>
                             </div>
                             <div className="px-2 text-center">
-                                <p className="text-[9px] uppercase text-slate-500 font-black leading-none mb-1">GUICHÊ</p>
+                                <p className="text-[9px] uppercase text-gray-500 font-black leading-none mb-1">GUICHÊ</p>
                                 <p className="text-lg font-black text-blue-400 leading-none">{session?.guiche || "--"}</p>
                             </div>
-                            <Button variant="ghost" size="sm" onClick={() => setOpenModal(true)} className="ml-2 h-8 text-[9px] font-black uppercase tracking-widest bg-slate-700 hover:bg-blue-600 text-white">Alterar</Button>
+                            <Button variant="ghost" size="sm" onClick={() => setOpenModal(true)} className="ml-2 h-8 text-[9px] font-black uppercase tracking-widest bg-gray-700 hover:bg-blue-600 text-white">Alterar</Button>
                         </div>
                     </div>
 
                     <div className="flex flex-col md:flex-row justify-between items-center gap-6 w-full">
 
                         {/* LADO ESQUERDO: FILTROS */}
-                        <div className="w-full flex gap-3">
-                            <div className="flex items-center gap-3 bg-white dark:bg-slate-900 p-2 px-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800">
-                                <Filter className="w-4 h-4 text-slate-400" />
+                        <div className="w-full flex gap-2">
+                            <div className="flex items-center gap-2 bg-white dark:bg-black px-2 rounded-xl shadow-sm border dark:border-gray-600">
+                                <Filter className="w-4 h-4 font-black" />
                                 <div className="flex gap-2">
                                     {["TODOS", "NORMAL", "PREFERENCIAL"].map((tipo) => (
                                         <Button
                                             key={tipo}
                                             variant={filtroTipo === tipo ? "default" : "outline"}
                                             size="sm"
-                                            className={`h-8 text-[10px] font-black uppercase tracking-widest ${filtroTipo === tipo
-                                                ? 'bg-slate-900 text-white'
-                                                : 'bg-transparent text-slate-500 border-slate-200'
+                                            className={`h-8 text-[9px] font-black uppercase tracking-widest ${filtroTipo === tipo
+                                                ? 'bg-gray-700 text-white'
+                                                : 'bg-transparent font-black border-gray-200'
                                                 }`}
                                             onClick={() => setFiltroTipo(tipo)}
                                         >
@@ -760,8 +780,8 @@ export default function RecepcaoPage() {
                                     ))}
                                 </div>
                             </div>
-                            <div className="flex items-center gap-3 bg-white dark:bg-slate-900 p-2 px-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800">
-                                <Search className="w-4 h-4 text-slate-400" />
+                            <div className="flex items-center gap-2 bg-white dark:bg-gray-900 p-2 rounded-xl shadow-sm border dark:border-gray-600">
+                                <Search className="w-4 h-4 text-gray-400" />
                                 <Input
                                     placeholder="Buscar por nome..."
                                     className="w-80"
@@ -772,17 +792,18 @@ export default function RecepcaoPage() {
                         </div>
 
                         {/* LADO DIREITO: BOTÕES DE GERAR SENHA E ATUALIZAR */}
-                        <div className="flex flex-row justify-end items-center gap-4 w-full">
-                            <Button
+                        <div className="flex flex-row justify-end items-center gap-2 w-full">
+                            {userRole == "admin" && (
+                                <Button
                                 variant="outline"
-                                className="h-8 text-[11px]"
+                                className="bg-blue-300  border-gray-600"
                                 onClick={() => setPrinterModal(true)}
                             >
-                                <Printer className="w-4 h-4 mr-1" />
-                                Impressora
+                                <Printer className="w-5 h-5" />
                             </Button>
+                            )}
                             <div
-                                className="flex h-8 items-center gap-1 bg-blue-600 text-muted p-1 rounded-full hover:bg-blue-500 hover:text-white cursor-pointer transition-all shrink-0"
+                                className="flex h-8 items-center gap-1 bg-blue-600 text-muted p-1 rounded-full hover:bg-blue-500 hover:text-white cursor-pointer transition-all shrink-0 "
                                 onClick={() => gerarSenha("NORMAL")}
                             >
                                 <PlusCircle className="w-5 h-5 font-bold ml-1" />
@@ -824,11 +845,11 @@ export default function RecepcaoPage() {
                         </div>
                     </div>
 
-                    <Card className="border-none shadow-2xl overflow-hidden bg-white dark:bg-slate-900">
+                    <Card className="border-none shadow-2xl overflow-hidden bg-gray-1200 dark:bg-gray-900 p-0">
                         <CardContent className="p-0">
                             <div className="overflow-x-auto">
                                 <table className="w-full text-[13px]">
-                                    <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
+                                    <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
                                         <tr>
                                             <ThOrdenavel label="Senha" coluna="senha_codigo" />
                                             <ThOrdenavel label="Nome" coluna="nome" />
@@ -837,10 +858,10 @@ export default function RecepcaoPage() {
                                             <ThOrdenavel label="Tempo Espera" coluna="tempo_espera" />
                                             <ThOrdenavel label="Status" coluna="status" />
                                             <ThOrdenavel label="Guichê" coluna="guiche" />
-                                            <th className="text-right p-4 font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest text-[10px]">Ações</th>
+                                            <th className="text-right p-4 font-bold uppercase tracking-widest text-[10px]">Ações</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                    <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                                         {dadosProcessados.map((item) => {
                                             const tempo = getTempoEsperaEvolutivo(item);
 
@@ -858,36 +879,36 @@ export default function RecepcaoPage() {
                                             // Estilização da Linha baseada no Status
                                             const rowStyles =
                                                 isFinalizado
-                                                    ? "bg-emerald-200/70 dark:bg-emerald-900/30"
+                                                    ? "bg-emerald-300/70 dark:bg-emerald-900/30"
                                                     : isCancelado
-                                                        ? "bg-red-200/70 dark:bg-red-900/30"
+                                                        ? "bg-red-300/70 dark:bg-red-900/30"
                                                         : isAguardandoExames
-                                                            ? "bg-green-200/30 dark:bg-green-900/30"
+                                                            ? "bg-green-300/30 dark:bg-green-900/30"
                                                             : isNaoAtendido
-                                                                ? "bg-orange-200/70 dark:bg-orange-900/30"
+                                                                ? "bg-orange-300/70 dark:bg-orange-900/30"
                                                                 : isAguardandoRecepcao
-                                                                    ? "hover:bg-slate-50/80 dark:hover:bg-slate-800/40"
+                                                                    ? "hover:bg-gray-50/80 dark:hover:bg-gray-800/40"
                                                                     : fichaPronta
                                                                         ? "bg-blue-50/30 dark:bg-blue-900/5"
-                                                                        : "hover:bg-slate-50/80 dark:hover:bg-slate-800/40";
+                                                                        : "hover:bg-gray-50/80 dark:hover:bg-gray-800/40";
 
                                             return (
                                                 <tr
                                                     key={item.id}
-                                                    className={`${rowStyles} transition-all border-b border-slate-100 dark:border-slate-800`}
+                                                    className={`${rowStyles} transition-all border-b border-gray-100 dark:border-gray-800`}
                                                 >
                                                     <td className="p-4">
                                                         <div className="flex flex-col gap-1">
                                                             <span className={`text-lg font-black leading-none ${item.tipo_senha === "PREFERENCIAL" ? "text-orange-600" : "text-blue-600"}`}>
                                                                 {item.senha_codigo}
                                                             </span>
-                                                            <span className="text-[9px] font-bold text-slate-400 uppercase">{item.tipo_senha}</span>
+                                                            <span className="text-[9px] font-bold text-gray-400 uppercase">{item.tipo_senha}</span>
                                                         </div>
                                                     </td>
 
                                                     <td className="p-4">
                                                         <div className="flex items-center gap-2">
-                                                            <span className={`${!item.nome ? "text-slate-400 italic" : "font-bold text-slate-700 dark:text-slate-200"}`}>
+                                                            <span className={`${!item.nome ? "text-gray-400 italic" : "font-bold text-gray-700 dark:text-gray-200"}`}>
                                                                 {item.nome || "Aguardando ficha..."}
                                                             </span>
 
@@ -912,12 +933,12 @@ export default function RecepcaoPage() {
                                                     </td>
 
                                                     <td className="p-4 text-[13px] font-bold font-mono cursor-pointer text-center" onClick={() => onFichaClick(item)}>
-                                                        <span className="p-1 rounded bg-slate-500/20 hover:bg-slate-500/50 transition-all">{item.ficha_sequencial || "--"}</span>
+                                                        <span className="p-1 rounded bg-gray-500/20 hover:bg-gray-500/50 transition-all">{item.ficha_sequencial || "--"}</span>
                                                     </td>
 
-                                                    <td className="p-4 text-slate-600 dark:text-slate-400 font-medium">{getHora(item.created_at)}</td>
+                                                    <td className="p-4 text-gray-600 dark:text-gray-400 font-medium">{getHora(item.created_at)}</td>
 
-                                                    <td className={`p-4 font-bold ${isEncerrado ? "text-slate-400" : getColorTempoEspera(parseInt(tempo.texto), tempo.isCancelado)}`}>
+                                                    <td className={`p-4 font-bold ${isEncerrado ? "text-gray-400" : getColorTempoEspera(parseInt(tempo.texto), tempo.isCancelado)}`}>
                                                         <div className="flex items-center gap-1">
                                                             <Clock className="w-3 h-3 opacity-70" />
                                                             {tempo.texto}
@@ -930,13 +951,13 @@ export default function RecepcaoPage() {
                                                         ) : (
                                                             <div className="flex flex-col items-center gap-1">
                                                                 {getStatusBadge(item.status)}
-                                                                <span className="text-[12px] font-bold text-slate-500">
+                                                                <span className="text-[12px] font-bold text-gray-500">
                                                                     Sala: {item.sala_atual}
                                                                 </span>
                                                             </div>
                                                         )}
                                                     </td>
-                                                    <td className="p-4 text-center font-black text-slate-700 dark:text-white">
+                                                    <td className="p-4 text-center font-black text-gray-700 dark:text-white">
                                                         {item.guiche || "--"}
                                                     </td>
 
@@ -980,7 +1001,7 @@ export default function RecepcaoPage() {
                                                                                     <Button
                                                                                         size="sm"
                                                                                         disabled
-                                                                                        className="h-8 text-[11px] font-bold bg-slate-600 min-w-[90px] text-white"
+                                                                                        className="h-8 text-[11px] font-bold bg-gray-600 min-w-[90px] text-white"
                                                                                     >
                                                                                         <Loader2 className="w-3 h-3 mr-1 animate-spin" />
                                                                                         {finalizandoIds[item.id]}s
@@ -1008,7 +1029,7 @@ export default function RecepcaoPage() {
                                                                                 <Button
                                                                                     size="sm"
                                                                                     disabled={!fichaPronta}
-                                                                                    className={`h-8 text-[11px] font-bold ${fichaPronta ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-300'
+                                                                                    className={`h-8 text-[11px] font-bold ${fichaPronta ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-gray-300'
                                                                                         }`}
                                                                                     onClick={() => iniciarFinalizacaoComDelay(item.id)}
                                                                                 >
@@ -1132,7 +1153,7 @@ export default function RecepcaoPage() {
                                                                 </>
                                                             ) : (
                                                                 <div className="flex items-center gap-2">
-                                                                    <span className={`text-[10px] font-bold uppercase italic ${isCancelado ? 'text-red-500' : 'text-slate-400'}`}>
+                                                                    <span className={`text-[10px] font-bold uppercase italic ${isCancelado ? 'text-red-500' : 'text-gray-400'}`}>
                                                                         {isFinalizado ? "Atendido" : isCancelado ? "Cancelado" : "Não Atendido"}
                                                                     </span>
                                                                 </div>
@@ -1159,7 +1180,7 @@ export default function RecepcaoPage() {
                 }
                 }
             >
-                <DialogContent className="sm:max-w-200 bg-white dark:bg-slate-900 border-none shadow-2xl max-h-[95vh] overflow-y-auto p-0">
+                <DialogContent className="sm:max-w-200 bg-white dark:bg-gray-900 border-none shadow-2xl max-h-[95vh] overflow-y-auto p-0">
                     <DialogHeader className="p-6 pb-0">
                         <DialogTitle className="flex items-center gap-2 text-2xl font-black uppercase tracking-tighter">
                             <FileEdit className="w-6 h-6 text-blue-600" />
@@ -1171,12 +1192,12 @@ export default function RecepcaoPage() {
                         {/* 1. UPLOAD E BOTÃO DE IMPORTAÇÃO */}
                         <div className="relative group">
                             {loadingAction === "processing_pdf" && (
-                                <div className="absolute inset-0 z-50 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm rounded-xl flex flex-col items-center justify-center border-2 border-blue-500 border-dashed">
+                                <div className="absolute inset-0 z-50 bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm rounded-xl flex flex-col items-center justify-center border-2 border-blue-500 border-dashed">
                                     <RefreshCw className="w-10 h-10 animate-spin text-blue-600 mb-2" />
                                     <p className="font-black text-blue-600 uppercase tracking-widest text-[10px]">Lendo PDF...</p>
                                 </div>
                             )}
-                            <div className="border-2 border-dashed border-slate-200 dark:border-slate-800 hover:border-blue-400 bg-slate-50/50 dark:bg-slate-800/50 transition-all rounded-xl p-4 text-center relative cursor-pointer">
+                            <div className="border-2 border-dashed border-gray-200 dark:border-gray-800 hover:border-blue-400 bg-gray-50/50 dark:bg-gray-800/50 transition-all rounded-xl p-4 text-center relative cursor-pointer">
                                 <input
                                     type="file"
                                     accept="application/pdf"
@@ -1184,8 +1205,8 @@ export default function RecepcaoPage() {
                                     onChange={(e) => e.target.files?.[0] && handleUploadPDF(e.target.files[0])}
                                 />
                                 <div className="flex items-center justify-center gap-3">
-                                    <UploadCloud className="w-6 h-6 text-slate-400" />
-                                    <p className="text-sm font-bold text-slate-500">
+                                    <UploadCloud className="w-6 h-6 text-gray-400" />
+                                    <p className="text-sm font-bold text-gray-500">
                                         {formFicha.arquivo?.name ?? "Importar PDF da Ficha (Preenchimento Automático)"}
                                     </p>
                                 </div>
@@ -1194,23 +1215,23 @@ export default function RecepcaoPage() {
 
                         {/* 2. DADOS DO FUNCIONÁRIO (FOCO PRINCIPAL) */}
                         <section className="space-y-4">
-                            <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+                            <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
                                 <User className="w-4 h-4 text-blue-500" />
-                                <h3 className="text-xs font-black uppercase tracking-widest text-slate-500">Dados do Funcionário</h3>
+                                <h3 className="text-xs font-black uppercase tracking-widest text-gray-500">Dados do Funcionário</h3>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                                 <div className="md:col-span-3 space-y-1.5">
-                                    <Label className="text-[10px] font-black uppercase text-slate-400">Nome Completo</Label>
+                                    <Label className="text-[10px] font-black uppercase text-gray-400">Nome Completo</Label>
                                     <Input className="h-10 font-bold" value={formFicha.funcionario.nome} onChange={(e) => setFormFicha({ ...formFicha, funcionario: { ...formFicha.funcionario, nome: e.target.value } })} />
                                 </div>
                                 <div className="space-y-1.5">
-                                    <Label className="text-[10px] font-black uppercase text-slate-400">Nº Sequencial</Label>
+                                    <Label className="text-[10px] font-black uppercase text-gray-400">Nº Sequencial</Label>
                                     <Input className="h-10 font-black text-blue-600 text-center text-lg" value={formFicha.sequencial} onChange={(e) => setFormFicha({ ...formFicha, sequencial: e.target.value })} />
                                 </div>
                             </div>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                 <div className="space-y-1.5">
-                                    <Label className="text-[10px] font-black uppercase text-slate-400">CPF</Label>
+                                    <Label className="text-[10px] font-black uppercase text-gray-400">CPF</Label>
                                     <Input
                                         className="h-9"
                                         value={formFicha.funcionario.cpf || ""}
@@ -1218,7 +1239,7 @@ export default function RecepcaoPage() {
                                     />
                                 </div>
                                 <div className="space-y-1.5">
-                                    <Label className="text-[10px] font-black uppercase text-slate-400">RG</Label>
+                                    <Label className="text-[10px] font-black uppercase text-gray-400">RG</Label>
                                     <Input
                                         className="h-9"
                                         value={formFicha.funcionario.rg || ""}
@@ -1226,7 +1247,7 @@ export default function RecepcaoPage() {
                                     />
                                 </div>
                                 <div className="space-y-1.5">
-                                    <Label className="text-[10px] font-black uppercase text-slate-400">Nascimento</Label>
+                                    <Label className="text-[10px] font-black uppercase text-gray-400">Nascimento</Label>
                                     <Input
                                         className="h-9 text-center"
                                         value={formFicha.funcionario.nascimento || ""}
@@ -1236,7 +1257,7 @@ export default function RecepcaoPage() {
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1.5">
-                                    <Label className="text-[10px] font-black uppercase text-slate-400">Cargo</Label>
+                                    <Label className="text-[10px] font-black uppercase text-gray-400">Cargo</Label>
                                     <Input
                                         className="h-9"
                                         value={formFicha.funcionario.cargo || ""}
@@ -1244,7 +1265,7 @@ export default function RecepcaoPage() {
                                     />
                                 </div>
                                 <div className="space-y-1.5">
-                                    <Label className="text-[10px] font-black uppercase text-slate-400">Setor</Label>
+                                    <Label className="text-[10px] font-black uppercase text-gray-400">Setor</Label>
                                     <Input
                                         className="h-9"
                                         value={formFicha.funcionario.setor || ""}
@@ -1257,9 +1278,9 @@ export default function RecepcaoPage() {
                         {/* 3. DADOS DA EMPRESA E MÉDICO */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             <section className="space-y-4">
-                                <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
-                                    <Building2 className="w-4 h-4 text-slate-400" />
-                                    <h3 className="text-xs font-black uppercase tracking-widest text-slate-500">Empresa</h3>
+                                <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
+                                    <Building2 className="w-4 h-4 text-gray-400" />
+                                    <h3 className="text-xs font-black uppercase tracking-widest text-gray-500">Empresa</h3>
                                 </div>
                                 <div className="space-y-3">
                                     <div className="space-y-1.5">
@@ -1282,9 +1303,9 @@ export default function RecepcaoPage() {
                             </section>
 
                             <section className="space-y-4">
-                                <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
-                                    <Stethoscope className="w-4 h-4 text-slate-400" />
-                                    <h3 className="text-xs font-black uppercase tracking-widest text-slate-500">Informações ASO</h3>
+                                <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
+                                    <Stethoscope className="w-4 h-4 text-gray-400" />
+                                    <h3 className="text-xs font-black uppercase tracking-widest text-gray-500">Informações ASO</h3>
                                 </div>
                                 <div className="space-y-3">
                                     <div className="space-y-1.5">
@@ -1300,14 +1321,14 @@ export default function RecepcaoPage() {
                         </div>
 
                         {/* 3.5 OBSERVAÇÕES DO ATENDIMENTO */}
-                        <section className="space-y-4 pt-4 border-t border-slate-100">
+                        <section className="space-y-4 pt-4 border-t border-gray-100">
                             <div className="flex items-center gap-2 pb-2">
                                 <BellRing className="w-4 h-4 text-amber-500" />
-                                <h3 className="text-xs font-black uppercase tracking-widest text-slate-500">Observações</h3>
+                                <h3 className="text-xs font-black uppercase tracking-widest text-gray-500">Observações</h3>
                             </div>
                             <div className="space-y-1.5">
                                 <textarea
-                                    className="w-full min-h-[80px] p-3 text-sm font-medium dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                                    className="w-full min-h-[80px] p-3 text-sm font-medium dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                                     value={formFicha.observacao}
                                     onChange={(e) => setFormFicha({ ...formFicha, observacao: e.target.value })}
                                 />
@@ -1315,7 +1336,7 @@ export default function RecepcaoPage() {
                         </section>
 
                         {/* 4. LANÇAMENTO DE EXAMES E ESPECIALIDADES */}
-                        <div className="flex flex-col gap-8 pt-4 border-t border-slate-100">
+                        <div className="flex flex-col gap-8 pt-4 border-t border-gray-100">
                             <div className="space-y-3">
                                 <div className="flex items-center gap-2">
                                     <PlusCircle className="w-4 h-4 text-blue-500" />
@@ -1328,7 +1349,7 @@ export default function RecepcaoPage() {
                                 <div className="relative">
                                     <Input
                                         placeholder="Clique para ver a lista ou digite para buscar..."
-                                        className="h-10 border-slate-200 focus-visible:ring-blue-500 bg-white dark:bg-slate-900"
+                                        className="h-10 border-gray-200 focus-visible:ring-blue-500 bg-white dark:bg-gray-900"
                                         value={exameInput}
                                         onChange={(e) => {
                                             setExameInput(e.target.value);
@@ -1347,7 +1368,7 @@ export default function RecepcaoPage() {
 
                                     {/* Lista de Sugestões Estilizada */}
                                     {showSuggestions && (
-                                        <div className="absolute z-50 w-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                                        <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
                                             <div className="max-h-56 overflow-y-auto p-1 custom-scrollbar">
                                                 {sugestoesExames
                                                     // Se houver texto, filtra. Se não, mostra todos.
@@ -1359,10 +1380,10 @@ export default function RecepcaoPage() {
                                                                 handleAddExameManual(sugestao);
                                                                 setShowSuggestions(false);
                                                             }}
-                                                            className="w-full text-left px-3 py-2.5 text-[11px] font-bold uppercase tracking-tight text-slate-700 dark:text-slate-200 hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:text-blue-600 rounded-lg transition-colors flex items-center justify-between group"
+                                                            className="w-full text-left px-3 py-2.5 text-[11px] font-bold uppercase tracking-tight text-gray-700 dark:text-gray-200 hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:text-blue-600 rounded-lg transition-colors flex items-center justify-between group"
                                                         >
                                                             <div className="flex items-center gap-2">
-                                                                <div className="w-1 h-1 rounded-full bg-slate-300 group-hover:bg-blue-500 transition-colors" />
+                                                                <div className="w-1 h-1 rounded-full bg-gray-300 group-hover:bg-blue-500 transition-colors" />
                                                                 {sugestao}
                                                             </div>
                                                             <Plus className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -1371,7 +1392,7 @@ export default function RecepcaoPage() {
 
                                                 {/* Caso a busca não retorne nada */}
                                                 {exameInput && sugestoesExames.filter(s => s.toLowerCase().includes(exameInput.toLowerCase())).length === 0 && (
-                                                    <div className="px-3 py-6 text-center text-[10px] text-slate-400 uppercase font-black tracking-widest">
+                                                    <div className="px-3 py-6 text-center text-[10px] text-gray-400 uppercase font-black tracking-widest">
                                                         Nenhum exame cadastrado
                                                     </div>
                                                 )}
@@ -1381,16 +1402,16 @@ export default function RecepcaoPage() {
                                 </div>
 
                                 {/* Lista de Selecionados */}
-                                <div className="rounded-xl border border-slate-100 bg-slate-50/50 dark:bg-slate-800/30 overflow-hidden shadow-inner">
+                                <div className="rounded-xl border border-gray-100 bg-gray-50/50 dark:bg-gray-800/30 overflow-hidden shadow-inner">
                                     {/* Ajuste na classe grid: condicional para colunas */}
                                     <div className={`h-full grid gap-1 items-center overflow-y-auto p-2 custom-scrollbar ${formFicha.exames.length === 0 ? "grid-cols-1" : "grid-cols-2"
                                         }`}>
                                         {formFicha.exames.length === 0 ? (
                                             <div className="p-8 text-center flex flex-col items-center justify-center">
-                                                <div className="inline-flex p-3 rounded-2xl bg-white dark:bg-slate-800 shadow-sm mb-3">
-                                                    <ClipboardList className="w-5 h-5 text-slate-300" />
+                                                <div className="inline-flex p-3 rounded-2xl bg-white dark:bg-gray-800 shadow-sm mb-3">
+                                                    <ClipboardList className="w-5 h-5 text-gray-300" />
                                                 </div>
-                                                <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest">
+                                                <p className="text-[10px] text-gray-400 uppercase font-black tracking-widest">
                                                     Nenhum exame na lista
                                                 </p>
                                             </div>
@@ -1398,13 +1419,13 @@ export default function RecepcaoPage() {
                                             formFicha.exames.map((ex, i) => (
                                                 <div
                                                     key={i}
-                                                    className="flex items-center justify-between bg-white dark:bg-slate-800 px-3 py-2 rounded-xl border border-slate-200/50 shadow-sm group hover:border-blue-400/50 hover:shadow-md transition-all duration-200"
+                                                    className="flex items-center justify-between bg-white dark:bg-gray-800 px-3 py-2 rounded-xl border border-gray-200/50 shadow-sm group hover:border-blue-400/50 hover:shadow-md transition-all duration-200"
                                                 >
                                                     <div className="flex items-center gap-3">
                                                         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 border border-blue-100 dark:border-blue-800/50 group-hover:scale-110 transition-transform">
                                                             <Activity className="w-3 h-3" />
                                                         </div>
-                                                        <span className="text-[11px] font-black text-slate-700 dark:text-slate-100 uppercase tracking-tight line-clamp-1">
+                                                        <span className="text-[11px] font-black text-gray-700 dark:text-gray-100 uppercase tracking-tight line-clamp-1">
                                                             {ex.exame}
                                                         </span>
                                                     </div>
@@ -1415,7 +1436,7 @@ export default function RecepcaoPage() {
                                                             removeExame(i);
                                                         }}
                                                         variant="ghost"
-                                                        className="h-8 w-8 p-0 text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-full transition-colors"
+                                                        className="h-8 w-8 p-0 text-gray-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-full transition-colors"
                                                     >
                                                         <XCircle className="w-4 h-4" />
                                                     </Button>
@@ -1426,12 +1447,12 @@ export default function RecepcaoPage() {
                                 </div>
                             </div>
 
-                            <div className="space-y-4  border-t border-slate-100 pt-4">
+                            <div className="space-y-4  border-t border-gray-100 pt-4">
                                 <div className="flex items-center gap-2">
                                     <Filter className="w-4 h-4 text-blue-500" />
                                     <h4 className="text-[10px] font-black uppercase tracking-widest text-blue-500">Destinos de Atendimento</h4>
                                 </div>
-                                <div className="bg-slate-50 h-fit dark:bg-slate-800/50 border border-slate-100 rounded-xl p-3 h-38.75 overflow-y-auto space-y-1">
+                                <div className="bg-gray-50 h-fit dark:bg-gray-800/50 border border-gray-100 rounded-xl p-3 h-38.75 overflow-y-auto space-y-1">
                                     {especialidades.map((esp) => {
                                         // Verifica se esta especialidade deve estar marcada (está no estado)
                                         const isChecked = especialidadesSelecionadas.includes(esp.id);
@@ -1451,7 +1472,7 @@ export default function RecepcaoPage() {
                                                             );
                                                         }}
                                                     />
-                                                    <span className="text-[10px] font-black uppercase text-slate-600 dark:text-slate-300">{esp.nome}</span>
+                                                    <span className="text-[10px] font-black uppercase text-gray-600 dark:text-gray-300">{esp.nome}</span>
                                                 </div>
                                                 {isChecked && <CheckCircle2 className="w-3 h-3 text-blue-600" />}
                                             </label>
@@ -1462,7 +1483,7 @@ export default function RecepcaoPage() {
                         </div>
                     </div>
 
-                    <DialogFooter className="p-6 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-800">
+                    <DialogFooter className="p-6 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-100 dark:border-gray-800">
                         <Button
                             className="w-full h-14 bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-widest shadow-lg shadow-blue-500/20"
                             onClick={handleSalvarDadosFicha}
@@ -1478,21 +1499,21 @@ export default function RecepcaoPage() {
 
             {/* MODAL DE GUICHÊ */}
             < Dialog open={openModal} onOpenChange={setOpenModal} >
-                <DialogContent className="sm:max-w-100 border-none shadow-2xl bg-white dark:bg-slate-900">
+                <DialogContent className="sm:max-w-100 border-none shadow-2xl bg-white dark:bg-gray-900">
                     <DialogHeader className="space-y-4">
                         <div className="bg-emerald-500/10 w-fit p-3 rounded-2xl mx-auto"><MonitorCheck className="w-8 h-8 text-emerald-500" /></div>
-                        <DialogTitle className="text-center text-xl font-black uppercase tracking-tight text-slate-800 dark:text-white">Guichê de Atendimento</DialogTitle>
+                        <DialogTitle className="text-center text-xl font-black uppercase tracking-tight text-gray-800 dark:text-white">Guichê de Atendimento</DialogTitle>
                     </DialogHeader>
 
                     <div className="space-y-5 py-4 flex flex-col items-center">
                         <div className="flex justify-center items-center gap-2">
-                            <Label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Selecione o Guichê</Label>
+                            <Label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Selecione o Guichê</Label>
                             <Select
                                 value={session?.guiche}
                                 onValueChange={(val) => setSession(prev => ({ ...prev, guiche: val }))}
 
                             >
-                                <SelectTrigger className="h-12 bg-slate-50 border-slate-200">
+                                <SelectTrigger className="h-12 bg-gray-50 border-gray-200">
                                     <SelectValue placeholder="Selecione o Guichê" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1504,17 +1525,17 @@ export default function RecepcaoPage() {
                         </div>
 
                         <div className="flex justify-center items-center gap-2">
-                            <Label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">
+                            <Label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">
                                 Seu Nome
                             </Label>
                             <Select
                                 value={session?.nome}
                                 onValueChange={(val) => setSession(prev => ({ ...prev, nome: val }))}
                             >
-                                <SelectTrigger className="h-12 bg-slate-50 border-slate-200 dark:bg-slate-800 dark:border-slate-700">
+                                <SelectTrigger className="h-12 bg-gray-50 border-gray-200 dark:bg-gray-800 dark:border-gray-700">
                                     <SelectValue placeholder={loadingRecepcionistas ? "CARREGANDO..." : "QUEM ESTÁ ATENDENDO?"} />
                                 </SelectTrigger>
-                                <SelectContent className="bg-white dark:bg-slate-900">
+                                <SelectContent className="bg-white dark:bg-gray-900">
                                     {recepcionistas.length > 0 ? (
                                         recepcionistas.map((p) => (
                                             <SelectItem key={p.id} value={p.nome} className="font-bold">
@@ -1522,7 +1543,7 @@ export default function RecepcaoPage() {
                                             </SelectItem>
                                         ))
                                     ) : (
-                                        <div className="p-2 text-xs text-center text-slate-500">
+                                        <div className="p-2 text-xs text-center text-gray-500">
                                             Nenhum recepcionista encontrado
                                         </div>
                                     )}
@@ -1530,8 +1551,8 @@ export default function RecepcaoPage() {
                             </Select>
                         </div>
                     </div>
-                    <DialogFooter className="bg-slate-800">
-                        <Button className="w-full h-12 text-muted bg-slate-900 dark:bg-blue-600 dark:hover:bg-blue-400 hover:bg-blue-600" onClick={salvarSessao}>
+                    <DialogFooter className="bg-gray-800">
+                        <Button className="w-full h-12 text-muted bg-gray-900 dark:bg-blue-600 dark:hover:bg-blue-400 hover:bg-blue-600" onClick={salvarSessao}>
                             Ativar Guichê
                         </Button>
                     </DialogFooter>
@@ -1540,10 +1561,10 @@ export default function RecepcaoPage() {
 
             {/* MODAL DE IMPRESSORA */}
             <Dialog open={printerModal} onOpenChange={setPrinterModal}>
-                <DialogContent className="max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl p-0 overflow-hidden">
+                <DialogContent className="max-w-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-2xl p-0 overflow-hidden">
 
                     {/* Cabeçalho Acessível */}
-                    <div className="bg-slate-900 px-6 py-4 flex items-center justify-between border-b border-slate-800">
+                    <div className="bg-gray-900 px-6 py-4 flex items-center justify-between border-b border-gray-800">
                         <div className="flex items-center gap-3">
                             <div className="bg-blue-500/20 p-2 rounded-lg">
                                 <Printer className="w-4 h-4 text-blue-400" />
@@ -1559,7 +1580,7 @@ export default function RecepcaoPage() {
                     <div className="p-6 space-y-5">
                         {/* SELECIONAR EXISTENTE */}
                         <div className="space-y-2">
-                            <Label className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                            <Label className="text-[10px] font-black uppercase tracking-widest text-gray-500">
                                 Impressoras Salvas
                             </Label>
 
@@ -1591,12 +1612,12 @@ export default function RecepcaoPage() {
                             </Select>
                         </div>
 
-                        <div className="border-t border-slate-200 dark:border-slate-800" />
+                        <div className="border-t border-gray-200 dark:border-gray-800" />
 
                         {/* FORMULÁRIO - USANDO selectedPrinter */}
                         <div className="grid grid-cols-2 gap-4">
                             <div className="col-span-2">
-                                <Label className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                <Label className="text-[10px] font-black uppercase tracking-widest text-gray-500">
                                     Nome
                                 </Label>
                                 <Input
@@ -1610,7 +1631,7 @@ export default function RecepcaoPage() {
                             </div>
 
                             <div>
-                                <Label className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                <Label className="text-[10px] font-black uppercase tracking-widest text-gray-500">
                                     IP
                                 </Label>
                                 <Input
@@ -1624,7 +1645,7 @@ export default function RecepcaoPage() {
                             </div>
 
                             <div>
-                                <Label className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                <Label className="text-[10px] font-black uppercase tracking-widest text-gray-500">
                                     Porta
                                 </Label>
                                 <Input
@@ -1642,12 +1663,12 @@ export default function RecepcaoPage() {
                         </div>
 
                         {/* SWITCH PADRÃO */}
-                        <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200 dark:border-slate-800">
+                        <div className="flex items-center justify-between bg-gray-50 dark:bg-gray-800/50 p-3 rounded-xl border border-gray-200 dark:border-gray-800">
                             <div>
-                                <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">
+                                <p className="text-[11px] font-bold text-gray-700 dark:text-gray-200">
                                     Definir como padrão
                                 </p>
-                                <p className="text-[10px] text-slate-400">
+                                <p className="text-[10px] text-gray-400">
                                     Será usada automaticamente ao gerar senha
                                 </p>
                             </div>
@@ -1666,7 +1687,7 @@ export default function RecepcaoPage() {
                     </div>
 
                     {/* FOOTER */}
-                    <div className="flex justify-between items-center px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900">
+                    <div className="flex justify-between items-center px-6 py-4 border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900">
                         <Button
                             variant="ghost"
                             className="text-[11px] uppercase font-bold"

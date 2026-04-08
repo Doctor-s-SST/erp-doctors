@@ -27,14 +27,14 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   {
-    icon: <House />,
+    icon: <House className="w-5 h-5"/>,
     name: "Home",
     path: "/",
     roles: ["admin", "recepcao", "especialista"],
   },
   {
     name: "Painel de Senhas",
-    icon: <MonitorCog />,
+    icon: <MonitorCog className="w-5 h-5" />,
     roles: ["admin", "recepcao", "especialista"],
     subItems: [
       { name: "Kanban", path: "/sistema-filas/kanban", roles: ["admin"] },
@@ -45,7 +45,7 @@ const navItems: NavItem[] = [
   },
   {
     name: "Configurações",
-    icon: <Settings />, // Certifique-se de importar o ícone Settings da lucide-react
+    icon: <Settings className="w-5 h-5" />,
     roles: ["admin"],
     subItems: [
       { name: "Usuários", path: "/configuracoes/users", roles: ["admin"] },
@@ -138,29 +138,29 @@ const AppSidebar: React.FC = () => {
   };
 
   return (
-    <aside className={`fixed mt-16 flex flex-col lg:mt-0 top-0 px-5 left-0 bg-white dark:bg-gray-900 text-gray-900 h-screen transition-all duration-300 z-50 border-r border-gray-200 
-      ${isExpanded || isMobileOpen || isHovered ? "w-[250px]" : "w-[90px]"} 
+    <aside className={`fixed mt-16 flex flex-col lg:mt-0 top-0 px-2 left-0 bg-white dark:bg-gray-900 text-gray-900 h-screen transition-all duration-300 z-50 border-r border-gray-200 dark:border-gray-800 
+      ${isExpanded || isMobileOpen || isHovered ? "w-[250px]" : "w-[50px]"} 
       ${isMobileOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0`}
       onMouseEnter={() => !isExpanded && setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <div className={`py-2 flex ${!isExpanded && !isHovered ? "lg:justify-center" : "justify-center"}`}>
+      <div className={`py-2 my-1 flex ${!isExpanded && !isHovered ? "lg:justify-center" : "justify-center"}`}>
         <Link href="/">
           {isExpanded || isHovered || isMobileOpen ? (
             <Image src="/images/logo/doctors-svg.svg" alt="Logo" width={100} height={50} className="" />
           ) : (
-            <Image src="/images/logo/doctors-svg.svg" alt="Logo" width={100} height={100} />
+            <Image src="/images/logo/doctors-fav.svg" alt="Logo" width={100} height={100} />
           )}
         </Link>
       </div>
 
       <div className="flex flex-col overflow-y-auto no-scrollbar">
         <nav className="mb-6">
-          <h2 className={`mb-4 text-xs uppercase text-gray-400 flex ${!isExpanded && !isHovered ? "lg:justify-center" : "justify-start"}`}>
+          <h2 className={`mb-2 text-xs uppercase text-gray-400 flex ${!isExpanded && !isHovered ? "lg:justify-center" : "justify-start"}`}>
             {isExpanded || isHovered || isMobileOpen ? "Menu Principal" : <HorizontaLDots />}
           </h2>
 
-          <ul className="flex flex-col gap-4">
+          <ul className="flex flex-col gap-2">
             {filteredNavItems.map((nav, index) => (
               <li key={nav.name}>
                 {nav.subItems ? (

@@ -15,6 +15,19 @@ interface Chamada {
   updated_at: string;
 }
 
+const salasAndar = {
+  '1': 'térreo',
+  '2': 'térreo',
+  '3': 'térreo',
+  '4': 'térreo',
+  '5': 'térreo',
+  '6': 'térreo',
+  '7': 'primeiro andar',
+  '8': 'primeiro andar',
+  '9': 'primeiro andar',
+  '10': 'primeiro andar',
+};
+
 export default function PainelTV() {
   const [ultimaChamada, setUltimaChamada] = useState<Chamada | null>(null);
   const [historico, setHistorico] = useState<Chamada[]>([]);
@@ -58,7 +71,7 @@ export default function PainelTV() {
 
       const local = chamada.origem === 'RECEPCAO'
         ? `comparecer ao guichê ${chamada.guiche}`
-        : `comparecer à sala ${chamada.guiche}`;
+        : `comparecer à sala ${chamada.guiche}, ${salasAndar[chamada.guiche as keyof typeof salasAndar]}`;
 
       const textoFinal = `${identificador}, ${local}`;
 
@@ -88,15 +101,15 @@ export default function PainelTV() {
         setUltimaChamada(proxima);
         setHistorico(prev => [proxima, ...prev.filter(h => h.id !== proxima.id)].slice(0, 7));
 
-        
+
         try {
           const tabela = proxima.origem === 'RECEPCAO' ? 'atendimentos' : 'atendimento_exames';
           const novoStatus = proxima.origem === 'RECEPCAO' ? 'EM_RECEPCAO' : 'EM_ATENDIMENTO';
           await supabase.from(tabela).update({ status: novoStatus }).eq('id', proxima.id);
         } catch (err) { console.error("Erro ao atualizar status:", err); }
-        
+
         await executarChamadaSonora(proxima);
-        
+
         await new Promise(res => setTimeout(res, 3000));
         setFila(prev => prev.slice(1));
         setProcessando(false);
@@ -131,7 +144,7 @@ export default function PainelTV() {
         `)
         .eq('status', 'EM_FILA')
         .limit(3);
-        
+
       const novosParaFila: Chamada[] = [];
 
       // Processa Recepção
@@ -257,12 +270,19 @@ export default function PainelTV() {
 
               {/* RODAPÉ INTERNO: Posicionado na base */}
               <div className="absolute bottom-12 text-7xl font-bold uppercase tracking-tight flex items-center gap-4">
-                <span>
-                  {ultimaChamada?.origem !== 'RECEPCAO' ? 'Sala' : 'Guichê'}
-                </span>
-                <span >
-                  {ultimaChamada?.guiche || '-'}
-                </span>
+                <div className="flex flex-col items-center text-center gap-2">
+                  <div className="flex gap-5">
+                    <span>
+                      {ultimaChamada?.origem !== 'RECEPCAO' ? 'Sala' : 'Guichê'}
+                    </span>
+                    <span >
+                      {ultimaChamada?.guiche || '-'} {/* {ultimaChamada?.guiche || '-'} - {salasAndar[ultimaChamada?.guiche as keyof typeof salasAndar]} */}
+                    </span>
+                  </div>
+                  <span className="text-5xl tracking-tight">
+                    {salasAndar[ultimaChamada?.guiche as keyof typeof salasAndar]}
+                  </span>
+                </div>
               </div>
             </motion.main>
           </AnimatePresence>

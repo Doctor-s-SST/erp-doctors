@@ -63,8 +63,8 @@
 
   --color-current: currentColor;
   --color-transparent: transparent;
-  --color-white: #ffffff;
-  --color-black: #101828;
+  --color-white: #f5f5f5;
+  --color-black: #121212; /*#101828*/
 
   --color-brand-25: #f2f7ff;
   --color-brand-50: #ecf3ff;
@@ -102,7 +102,7 @@
   --color-gray-600: #475467;
   --color-gray-700: #344054;
   --color-gray-800: #1d2939;
-  --color-gray-900: #101828;
+  --color-gray-900: #121212; /*#101828*/
   --color-gray-950: #0c111d;
   --color-gray-dark: #1a2231;
 

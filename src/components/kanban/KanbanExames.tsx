@@ -259,10 +259,10 @@ export default function KanbanExames() {
     )
 
     return (
-        <div className="min-h-full bg-slate-50 dark:bg-slate-950 p-4">
-            <div className="max-w-[100%] mx-auto space-y-4">
+        <div className="min-h-fit mt-2 space-y-8 bg-gray-500/20 rounded-xl p-2">
+            <div className="w-full mx-auto space-y-4">
                 {/* HEADER */}
-                <div className="bg-slate-900 rounded-xl p-4 flex justify-between items-center border border-slate-800 shadow-xl">
+                <div className="bg-gray-900 rounded-2xl shadow-2xl p-3 flex flex-col md:flex-row justify-between items-center gap-6 border border-gray-600">
                     <div className="flex items-center gap-3">
                         <div className="bg-emerald-500/20 p-1.5 rounded-lg"><Stethoscope className="w-5 h-5 text-emerald-400" /></div>
                         <div>
@@ -281,18 +281,18 @@ export default function KanbanExames() {
                 </div>
 
                 {/* KANBAN BOARD */}
-                <div className="overflow-x-auto pb-4 scrollbar-hide">
+                <div className="pb-4 scrollbar-hide">
                     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-                        <div className="flex gap-4 overflow-x-auto pb-4 items-start custom-scroll">
+                        <div className="w-full flex gap-4 overflow-x-auto pb-4 items-start custom-scroll justify-center">
                             {data.map((col) => (
                                 <div
                                     key={col.id}
-                                    className="flex flex-col w-[250px] max-h-[70vh] bg-slate-200/40 dark:bg-slate-900/40 rounded-xl p-2 border border-slate-200 dark:border-slate-800 shrink-0"
+                                    className="flex flex-col max-w-[200px] max-h-[70vh] bg-gray-500 dark:bg-gray-900/40 rounded-xl p-2 border border-gray-800 dark:border-gray-600 shrink-0"
                                 >
                                     {/* Título Fixo no topo da coluna */}
                                     <div className="flex justify-between items-center mb-3 px-1 group cursor-pointer shrink-0"
                                         onClick={() => { setTipoModal("especialidade"); setEditandoEspecialidade(col.id); setForm({ nome: col.nome }); setOpenModal(true); }}>
-                                        <h2 className="font-black text-slate-700 dark:text-slate-300 uppercase text-[9px] tracking-widest truncate group-hover:text-emerald-500 transition-colors">
+                                        <h2 className="font-black text-slate-900 dark:text-slate-300 uppercase text-[9px] tracking-widest truncate group-hover:text-emerald-500 transition-colors">
                                             {col.nome}
                                         </h2>
                                         <Badge className="h-4 px-2 py-1 text-[12px] bg-white dark:bg-slate-800 text-slate-500 border-none shadow-sm">{col.exames.length}</Badge>

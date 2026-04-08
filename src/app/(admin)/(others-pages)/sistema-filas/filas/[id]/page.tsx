@@ -68,7 +68,6 @@ type Profissional = {
     profissional_especialidades: { especialidade_id: string }[];
 }
 
-
 export default function FilaPage() {
     const { id } = useParams()
     const [especialidadeNome, setEspecialidadeNome] = useState("Carregando...")
@@ -92,6 +91,12 @@ export default function FilaPage() {
     const salasFiltradas = useMemo(() => {
         return salas.filter(s => s.especialidade_id === id)
     }, [salas, id])
+
+    // Estados para o Alerta de Inatividade/Tempo Extrapolado
+    const [showTempoAlerta, setShowTempoAlerta] = useState(false);
+    const [atendimentoAtualId, setAtendimentoAtualId] = useState<string | null>(null);
+    const [inicioAtendimento, setInicioAtendimento] = useState<number | null>(null);
+    const ultimoAlertaRef = useRef<number | null>(null);
 
     const profissionaisFiltrados = useMemo(() => {
         if (!id) return []
@@ -129,7 +134,10 @@ export default function FilaPage() {
         return new Date(date).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
     }
 
-    const getColorTempoEspera = (minutos: number, isCancelado: boolean) => {
+    const getColorTempoEspera = (created_at: string, isCancelado: boolean) => {
+       const minutos = Math.floor((Date.now() - new Date(created_at).getTime()) / 1000 / 60); 
+
+
         if (isCancelado) return "text-red-500";
         if (minutos < 10) return "text-emerald-500"; // Até 10 min: Verde (Ok)
         if (minutos < 20) return "text-amber-500";   // 10-20 min: Amarelo (Atenção)
@@ -204,6 +212,49 @@ export default function FilaPage() {
             setIsRefreshing(false)
         }
     }
+
+    useEffect(() => {
+        // Busca se existe alguém sendo atendido por VOCÊ nesta sala
+        const emAtendimento = data.find(item =>
+            item.status === "EM_ATENDIMENTO" &&
+            item.num_sala === session?.sala &&
+            item.profissional === session?.profissional
+        );
+
+
+        if (emAtendimento) {
+            // Se mudou o paciente ou começou agora
+            if (atendimentoAtualId !== emAtendimento.id) {
+                setAtendimentoAtualId(emAtendimento.id);
+                setInicioAtendimento(Date.now());
+                ultimoAlertaRef.current = null; // Reseta o rastreador de alertas
+            }
+        } else {
+            // Se não tem ninguém em atendimento, limpa os estados
+            setAtendimentoAtualId(null);
+            setInicioAtendimento(null);
+            ultimoAlertaRef.current = null;
+            setShowTempoAlerta(false);
+        }
+    }, [data, session]);
+
+    useEffect(() => {
+        if (!inicioAtendimento || !atendimentoAtualId) return;
+
+        const interval = setInterval(() => {
+            const agora = Date.now();
+            const decorridoMinutos = (agora - inicioAtendimento) / 1000 / 60;
+
+            if (decorridoMinutos >= 1) {
+                // Se nunca alertou OU se o último alerta foi há mais de 5 minutos
+                if (!ultimoAlertaRef.current || (agora - ultimoAlertaRef.current) / 1000 / 60 >= 5) {
+                    setShowTempoAlerta(true);
+                    ultimoAlertaRef.current = agora;
+                }
+            }
+        }, 10000);
+        return () => clearInterval(interval);
+    }, [inicioAtendimento, atendimentoAtualId]);
 
     useEffect(() => {
         fetchFila()
@@ -577,7 +628,7 @@ export default function FilaPage() {
                                                 </td>
 
                                                 {/* TEMPO */}
-                                                <td className={`p-4 font-bold ${isEncerrado ? "text-slate-400" : getColorTempoEspera(parseInt(item.created_at), isCancelado)}`}>
+                                                <td className={`p-4 font-bold ${isEncerrado ? "text-slate-400" : getColorTempoEspera(item.created_at, isCancelado)}`}>
                                                     <div className="flex items-center gap-1">
                                                         <Clock className="w-3 h-3 opacity-70" />
                                                         {getTempoEsperaTotal(item)} min
@@ -838,6 +889,48 @@ export default function FilaPage() {
                     <DialogFooter className="p-6 bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800">
                         <Button onClick={entrar} className="w-full h-12 bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase tracking-widest">
                             Entrar na Fila
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Modal de Alerta de Tempo de Atendimento */}
+            <Dialog open={showTempoAlerta} onOpenChange={setShowTempoAlerta}>
+                <DialogContent className="sm:max-w-[35vw] border-orange-500 border-3 overflow-hidden">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-orange-600">
+                            <Clock className="w-5 h-5 animate-pulse" />
+                            ALERTA DE TEMPO
+                        </DialogTitle>
+                    </DialogHeader>
+                    <div className="py-4 text-center space-y-3">
+                        <p className="text-sm font-medium">
+                            O atendimento atual já ultrapassou <span className="text-orange-600 font-bold">30 minutos</span>.
+                        </p>
+                        <p className="text-xs text-slate-500">
+                            Você ainda está em atendimento com este paciente?
+                        </p>
+                    </div>
+                    <DialogFooter className="flex flex-col sm:flex-col gap-2 items-center justify-center">
+                        <Button
+                            className="font-black bg-orange-400 hover:bg-orange-400"
+                            onClick={() => {
+                                setShowTempoAlerta(false);
+                            }}
+                        >
+                            CONTINUAR ATENDENDO
+                        </Button>
+                        <Button
+                            className="bg-emerald-600 hover:bg-emerald-700 font-black"
+                            onClick={() => {
+                                const item = data.find(i => i.id === atendimentoAtualId);
+                                if (item) {
+                                    setShowTempoAlerta(false);
+                                    iniciarFinalizacao(item)
+                                }
+                            }}
+                        >
+                            FINALIZAR ATENDIMENTO
                         </Button>
                     </DialogFooter>
                 </DialogContent>
