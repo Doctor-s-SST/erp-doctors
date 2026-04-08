@@ -76,63 +76,116 @@
 // }
 
 import { NextResponse } from "next/server";
-import net from "net";
-
-import { buildPrint } from "@/lib/impressora/print-engine";
-import { senhaTemplate } from "@/lib/impressora/templates/senha-recep";
+import {
+  ThermalPrinter,
+  PrinterTypes,
+  CharacterSet,
+  BreakLine,
+} from "node-thermal-printer";
 
 export async function POST(req: Request) {
-    try {
-        const { senha, tipo, guiche, ip, porta } = await req.json();
+  try {
+    const { senha, ip, porta } = await req.json();
 
-        if (!senha || !ip) {
-            return NextResponse.json(
-                { error: "Dados inválidos" },
-                { status: 400 }
-            );
-        }
-
-        const printerIP = ip;
-        const port = porta || 9100;
-
-        const template = senhaTemplate({
-            senha,
-            //   tipo,
-        });
-
-        const buffer = buildPrint(template as any);
-
-        // envia para impressora
-        await new Promise((resolve, reject) => {
-            const client = new net.Socket();
-
-            client.setTimeout(5000);
-
-            client.connect(port, printerIP, () => {
-                client.write(buffer, () => {
-                    client.end();
-                    resolve(true);
-                });
-            });
-
-            client.on("error", (err) => {
-                client.destroy();
-                reject(err);
-            });
-
-            client.on("timeout", () => {
-                client.destroy();
-                reject(new Error("Timeout ao conectar na impressora"));
-            });
-        });
-
-        return NextResponse.json({ ok: true });
-    } catch (err: any) {
-        console.error("Erro impressão:", err);
-
-        return NextResponse.json(
-            { error: err.message || "Erro ao imprimir" },
-            { status: 500 }
-        );
+    if (!senha || !ip) {
+      return NextResponse.json(
+        { error: "Dados inválidos" },
+        { status: 400 }
+      );
     }
+
+    const printer = new ThermalPrinter({
+      type: PrinterTypes.EPSON, // Bematech funciona como Epson
+      interface: `tcp://${ip}:${porta || 9100}`,
+      characterSet: CharacterSet.PC850_MULTILINGUAL,
+      breakLine: BreakLine.WORD,
+      options: {
+        timeout: 5000,
+      },
+    });
+
+    const isConnected = await printer.isPrinterConnected();
+
+    if (!isConnected) {
+      throw new Error("Impressora não conectada");
+    }
+
+    // 🔥 RESET
+    printer.clear();
+
+    // ========================
+    // CABEÇALHO
+    // ========================
+    printer.alignCenter();
+    printer.setTextNormal();
+    printer.bold(true);
+    printer.println("DOCTOR'S SAÚDE E SEGURANÇA");
+
+    printer.newLine();
+
+    // ========================
+    // TIPO SENHA
+    // // ========================
+    // printer.setTextDoubleHeight();
+    // printer.bold(true);
+    // printer.println(`SENHA ${tipo}`);
+
+    printer.newLine();
+
+    // ========================
+    // 🔥 SENHA GIGANTE (AQUI É O SEGREDO)
+    // ========================
+    printer.setTextQuadArea(); 
+    // 👆 MUITO melhor que double
+
+    // alternativa ainda maior:
+    // printer.setTextSize(7, 7);
+
+    printer.bold(true);
+    printer.println(senha);
+
+    printer.newLine();
+
+    // ========================
+    // INFO
+    // ========================
+    printer.setTextNormal();
+    printer.bold(false);
+
+    // printer.println(`Guichê: ${guiche}`);
+
+    const agora = new Date();
+    const dataHora =
+      agora.toLocaleDateString("pt-BR") +
+      " " +
+      agora.toLocaleTimeString("pt-BR", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+
+    printer.println(dataHora);
+
+    printer.newLine();
+
+    // ========================
+    // LINHA + CORTE
+    // ========================
+    printer.drawLine();
+
+    printer.newLine();
+
+    printer.cut();
+
+    // 🔥 EXECUTA
+    await printer.execute();
+
+    return NextResponse.json({ ok: true });
+  } catch (err: any) {
+    console.error(err);
+
+    return NextResponse.json(
+      { error: err.message },
+      { status: 500 }
+    );
+  }
 }
