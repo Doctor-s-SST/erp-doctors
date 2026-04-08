@@ -99,10 +99,11 @@ export async function POST(req: Request) {
       interface: `tcp://${ip}:9100`,
       characterSet: CharacterSet.PC850_MULTILINGUAL,
       breakLine: BreakLine.WORD,
-      options: {
-        timeout: 5000,
-      },
+    //   options: {
+    //     timeout: 5000,
+    //   },
     });
+    console.log(printer)
 
     // const isConnected = await printer.isPrinterConnected();
 
