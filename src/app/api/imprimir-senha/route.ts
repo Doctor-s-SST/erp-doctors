@@ -85,7 +85,7 @@ import {
 
 export async function POST(req: Request) {
   try {
-    const { senha, ip, porta } = await req.json();
+    const { senha, ip } = await req.json();
 
     if (!senha || !ip) {
       return NextResponse.json(
@@ -96,7 +96,7 @@ export async function POST(req: Request) {
 
     const printer = new ThermalPrinter({
       type: PrinterTypes.EPSON, // Bematech funciona como Epson
-      interface: `tcp://${ip}:${porta || 9100}`,
+      interface: `tcp://${ip}:9100`,
       characterSet: CharacterSet.PC850_MULTILINGUAL,
       breakLine: BreakLine.WORD,
       options: {
@@ -104,11 +104,11 @@ export async function POST(req: Request) {
       },
     });
 
-    const isConnected = await printer.isPrinterConnected();
+    // const isConnected = await printer.isPrinterConnected();
 
-    if (!isConnected) {
-      throw new Error("Impressora não conectada");
-    }
+    // if (!isConnected) {
+    //   throw new Error("Impressora não conectada");
+    // }
 
     // 🔥 RESET
     printer.clear();

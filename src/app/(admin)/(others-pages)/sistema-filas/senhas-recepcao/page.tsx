@@ -498,7 +498,6 @@ export default function RecepcaoPage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     senha: senhaGerada,
-                    tipo: tipo,
                     ip: selectedPrinter?.ip
                 })
             });
