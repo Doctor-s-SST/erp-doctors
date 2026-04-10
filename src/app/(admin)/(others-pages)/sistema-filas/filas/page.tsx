@@ -18,7 +18,7 @@ import { Stethoscope, UserCog, ArrowRight, Activity, X } from "lucide-react" // 
 type Especialidade = { id: string; nome: string }
 type Sala = { id: string; numero: string; especialidade_id: string }
 type Profissional = {
-  profissional_especialidades: any; id: string; nome: string; especialidade_id: string 
+  profissional_especialidades: any; id: string; nome: string; especialidade_id: string
 }
 
 export default function SelecionarFila() {
@@ -50,22 +50,32 @@ export default function SelecionarFila() {
     )
   }, [profissionais, selected])
 
-  async function fetchData() {
+  // Altere a assinatura da função para receber o ID
+  async function fetchData(currentUnidadeId: string) {
     try {
       setLoading(true);
 
-      const { data: esp } = await supabase.from("especialidades").select("*").order("nome");
-      const { data: sls } = await supabase.from("salas").select("*");
+      // Filtrar especialidades e salas pela unidade ativa
+      const { data: esp } = await supabase
+        .from("especialidades")
+        .select("*")
+        .eq("unidade_id", currentUnidadeId) // Filtro crucial
+        .order("nome");
+
+      const { data: sls } = await supabase
+        .from("salas")
+        .select("*")
+        .eq("unidade_id", currentUnidadeId); // Filtro crucial
 
       const { data: profs } = await supabase
         .from("profissionais")
         .select(`
-          id,
-          nome,
-          profissional_especialidades (
-            especialidade_id
-          )
-        `)
+        id,
+        nome,
+        profissional_especialidades (
+          especialidade_id
+        )
+      `)
         .order("nome");
 
       setEspecialidades(esp || []);
@@ -86,8 +96,37 @@ export default function SelecionarFila() {
   }
 
   useEffect(() => {
-    fetchData()
-  }, [])
+    const fetchUserContext = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('unidade_id, role')
+          .eq('id', user.id)
+          .single();
+
+        if (profile) {
+          const salvaLocal = localStorage.getItem('unidade_ativa_id');
+
+          // Regra: Se for admin e tiver algo no local, usa o local. 
+          // Caso contrário, usa o do perfil.
+          const idParaUsar = (profile.role === 'admin' && salvaLocal)
+            ? salvaLocal
+            : profile.unidade_id;
+
+          if (idParaUsar) {
+            fetchData(idParaUsar);
+          } else {
+            setLoading(false);
+            toast.error("Unidade não configurada");
+          }
+        }
+      }
+    };
+
+    fetchUserContext();
+  }, []);
 
   function abrir(especialidade: Especialidade) {
     setSelected(especialidade)
@@ -128,40 +167,33 @@ export default function SelecionarFila() {
   }
 
   return (
-    <div className="min-h-full bg-slate-50 dark:bg-slate-950 p-8">
-      <div className="max-w-7xl mx-auto space-y-8">
+    <div className="min-h-fit mt-2 space-y-8 bg-gray-500/20 rounded-xl p-2">
+      <div className="w-full mx-auto space-y-5">
         {/* HEADER */}
-        <div className="bg-slate-900 rounded-2xl shadow-2xl p-6 md:p-8 flex flex-col md:flex-row justify-between items-center gap-6 border border-slate-800">
-          <div className="text-center md:text-left space-y-2">
-            <div className="flex items-center justify-center md:justify-start gap-3">
-              <div className="bg-emerald-500/20 p-2 rounded-lg">
-                <Activity className="w-6 h-6 text-emerald-400" />
-              </div>
-              <h1 className="text-2xl md:text-3xl font-black text-white tracking-tight uppercase">
-                Painel do Especialista
-              </h1>
+        <div className="bg-gray-900 rounded-2xl shadow-2xl p-2 flex flex-col md:flex-row justify-between items-center gap-6 border border-gray-600">
+          <div className="flex items-center gap-4">
+            <div className="bg-emerald-500/20 p-3 rounded-xl">
+              <Activity className="w-5 h-5 text-emerald-400" />
             </div>
-            <p className="text-slate-400 font-medium max-w-md">
-              Selecione a especialidade abaixo para iniciar a gestão da fila.
-            </p>
+            <div className="space-y-1">
+              <h1 className="text-xl md:text-2xl font-black text-white tracking-tight uppercase">Painel do Especialista</h1>
+              <p className="text-gray-400 text-[11px] font-bold tracking-[0.2em]">Selecione a especialidade abaixo para iniciar a gestão da fila.</p>
+            </div>
           </div>
-          <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 px-4 py-1.5 text-xs font-bold tracking-widest uppercase">
-            SST Digital
-          </Badge>
         </div>
 
         {/* GRID */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mx-10 md:mx-15">
           {especialidades.map((esp) => (
             <Card
               key={esp.id}
               onClick={() => abrir(esp)}
-              className="group cursor-pointer hover:shadow-2xl hover:scale-[1.02] transition-all duration-300 border-none bg-white dark:bg-slate-900 overflow-hidden"
+              className="h-fit w-full group cursor-pointer shadow-2xl hover:scale-[1.02] transition-all duration-300 border border-gray-300 dark:border-gray-600 bg-gray-200 dark:bg-gray-900 overflow-hidden"
             >
-              <CardContent className="p-0">
-                <div className="h-2 bg-slate-200 dark:bg-slate-800 group-hover:bg-emerald-500 transition-colors" />
-                <div className="p-6 space-y-4">
-                  <div className="bg-slate-100 dark:bg-slate-800 w-12 h-12 rounded-xl flex items-center justify-center group-hover:rotate-12 transition-transform">
+              <CardContent className="p-0 pb">
+                <div className="h-2 bg-slate-400 dark:bg-slate-800 group-hover:bg-emerald-500 transition-colors" />
+                <div className="p-4 space-y-3">
+                  <div className="border border-gray-300 dark:border-gray-600 bg-slate-100 dark:bg-slate-800 w-12 h-12 rounded-xl flex items-center justify-center group-hover:rotate-12 transition-transform">
                     <Stethoscope className="w-6 h-6 text-slate-600 dark:text-slate-400 group-hover:text-emerald-500" />
                   </div>
                   <h2 className="font-black text-slate-800 dark:text-slate-100 text-lg uppercase line-clamp-1">{esp.nome}</h2>
@@ -177,9 +209,9 @@ export default function SelecionarFila() {
 
       {/* MODAL ADAPTÁVEL */}
       <Dialog open={openModal} onOpenChange={(open) => !loading && setOpenModal(open)}>
-        <DialogContent className="sm:max-w-[450px] bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 p-0 overflow-hidden shadow-2xl">
+        <DialogContent className="sm:max-w-[450px] bg-white dark:bg-gray-900 border-slate-200 dark:border-slate-800 p-0 overflow-hidden shadow-2xl">
 
-          <DialogHeader className="p-6 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+          <DialogHeader className="p-6 bg-slate-50 dark:bg-gray-900 border-b border-slate-200 dark:border-slate-800">
             <div className="flex items-center gap-4">
               <div className="bg-emerald-500/20 p-3 rounded-xl">
                 <UserCog className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
@@ -204,10 +236,10 @@ export default function SelecionarFila() {
                   value={form.sala}
                   onValueChange={(val) => val === "OUTRO" ? (setIsOutraSala(true), setForm({ ...form, sala: "" })) : setForm({ ...form, sala: val })}
                 >
-                  <SelectTrigger className="h-12 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white font-bold">
+                  <SelectTrigger className="h-12 bg-slate-50 dark:bg-gray-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white font-bold">
                     <SelectValue placeholder="QUAL SALA?" />
                   </SelectTrigger>
-                  <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
+                  <SelectContent className="bg-white dark:bg-gray-900 border-slate-200 dark:border-slate-800">
                     {salasFiltradas.map(s => (
                       <SelectItem key={s.id} value={s.numero} className="font-bold text-slate-900 dark:text-slate-100">Sala {s.numero}</SelectItem>
                     ))}
@@ -218,7 +250,7 @@ export default function SelecionarFila() {
                 <div className="relative">
                   <Input
                     autoFocus
-                    className="h-12 bg-slate-50 dark:bg-slate-900 border-emerald-500/50 text-slate-900 dark:text-white font-bold"
+                    className="h-12 bg-slate-50 dark:bg-gray-900 border-emerald-500/50 text-slate-900 dark:text-white font-bold"
                     value={form.sala}
                     onChange={(e) => setForm({ ...form, sala: e.target.value })}
                   />
@@ -235,10 +267,10 @@ export default function SelecionarFila() {
                   value={form.profissional}
                   onValueChange={(val) => val === "OUTRO" ? (setIsOutroProfissional(true), setForm({ ...form, profissional: "" })) : setForm({ ...form, profissional: val })}
                 >
-                  <SelectTrigger className="h-12 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white font-bold">
+                  <SelectTrigger className="h-12 bg-slate-50 dark:bg-gray-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white font-bold">
                     <SelectValue placeholder="QUEM ATENDE?" />
                   </SelectTrigger>
-                  <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
+                  <SelectContent className="bg-white dark:bg-gray-900 border-slate-200 dark:border-slate-800">
                     {profissionaisFiltrados.map(p => (
                       <SelectItem key={p.id} value={p.nome} className="font-bold text-slate-900 dark:text-slate-100">{p.nome}</SelectItem>
                     ))}
@@ -249,9 +281,9 @@ export default function SelecionarFila() {
                 <div className="relative">
                   <Input
                     autoFocus
-                    className="h-12 bg-slate-50 dark:bg-slate-900 border-emerald-500/50 text-slate-900 dark:text-white font-bold"
+                    className="h-12 bg-slate-50 dark:bg-gray-900 border-emerald-500/50 text-slate-900 dark:text-white font-bold"
                     value={form.profissional}
-                    onChange={(e) => setForm({ ...form, profissional: e.target.value})}
+                    onChange={(e) => setForm({ ...form, profissional: e.target.value })}
                   />
                   <X className="absolute right-3 top-4 w-4 h-4 text-slate-400 cursor-pointer" onClick={() => setIsOutroProfissional(false)} />
                 </div>
@@ -259,13 +291,13 @@ export default function SelecionarFila() {
             </div>
           </div>
 
-          <DialogFooter className="p-6 bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800">
+          <DialogFooter className="p-6 bg-slate-50 dark:bg-gray-900 border-t border-slate-200 dark:border-slate-800">
             <Button onClick={entrar} className="w-full h-12 bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase tracking-widest">
               Entrar na Fila
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </div >
   )
 }

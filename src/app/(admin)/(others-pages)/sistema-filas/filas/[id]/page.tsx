@@ -98,6 +98,24 @@ export default function FilaPage() {
     const [inicioAtendimento, setInicioAtendimento] = useState<number | null>(null);
     const ultimoAlertaRef = useRef<number | null>(null);
 
+    const [unidadeId, setUnidadeId] = useState<string | null>(null);
+
+    const [naoAtendidosRecentes, setNaoAtendidosRecentes] = useState<string[]>([]);;
+
+    useEffect(() => {
+        const saved = localStorage.getItem('nao_atendidos_recentes');
+        if (saved) {
+            setNaoAtendidosRecentes(JSON.parse(saved));
+        }
+    }, []);
+
+    useEffect(() => {
+        // Evita sobrescrever o localStorage com um array vazio antes do carregamento inicial
+        if (naoAtendidosRecentes.length > 0) {
+            localStorage.setItem('nao_atendidos_recentes', JSON.stringify(naoAtendidosRecentes));
+        }
+    }, [naoAtendidosRecentes]);
+
     const profissionaisFiltrados = useMemo(() => {
         if (!id) return []
         return profissionais.filter(p =>
@@ -135,7 +153,7 @@ export default function FilaPage() {
     }
 
     const getColorTempoEspera = (created_at: string, isCancelado: boolean) => {
-       const minutos = Math.floor((Date.now() - new Date(created_at).getTime()) / 1000 / 60); 
+        const minutos = Math.floor((Date.now() - new Date(created_at).getTime()) / 1000 / 60);
 
 
         if (isCancelado) return "text-red-500";
@@ -186,30 +204,31 @@ export default function FilaPage() {
     }
 
     async function fetchFila() {
-        setIsRefreshing(true)
+        // Se ainda não carregou o unidadeId, não busca para não vir dados misturados
+        if (!unidadeId) return;
+
+        setIsRefreshing(true);
         try {
-            // 1. Busca o nome da especialidade primeiro
             const { data: esp } = await supabase
                 .from('especialidades')
                 .select('nome')
                 .eq('id', id)
-                .single()
+                .single();
 
             if (!esp) return;
+            setEspecialidadeNome(esp.nome);
 
-            // Atualiza o estado para o Header (UI)
-            setEspecialidadeNome(esp.nome)
-
-            // 2. USA O VALOR DIRETO DA VARIÁVEL 'esp.nome' e não do estado
+            // Adicionando o p_unidade_id na chamada RPC
             const { data: result } = await supabase.rpc("get_fila_especialidade", {
-                p_sala: esp.nome
-            })
+                p_sala: esp.nome,
+                p_unidade_id: unidadeId // <--- Filtro por unidade
+            });
 
-            if (result) setData(result)
+            if (result) setData(result);
         } catch (err) {
         } finally {
-            setLoading(false)
-            setIsRefreshing(false)
+            setLoading(false);
+            setIsRefreshing(false);
         }
     }
 
@@ -245,7 +264,7 @@ export default function FilaPage() {
             const agora = Date.now();
             const decorridoMinutos = (agora - inicioAtendimento) / 1000 / 60;
 
-            if (decorridoMinutos >= 1) {
+            if (decorridoMinutos >= 30) {
                 // Se nunca alertou OU se o último alerta foi há mais de 5 minutos
                 if (!ultimoAlertaRef.current || (agora - ultimoAlertaRef.current) / 1000 / 60 >= 5) {
                     setShowTempoAlerta(true);
@@ -257,9 +276,10 @@ export default function FilaPage() {
     }, [inicioAtendimento, atendimentoAtualId]);
 
     useEffect(() => {
+        if (!unidadeId) return;
         fetchFila()
         const interval = setInterval(fetchFila, 3000)
-        const channel = supabase.channel(`fila-${id}`).on("postgres_changes", { event: "*", schema: "public", table: "atendimento_exames" }, () => fetchFila()).subscribe()
+        // const channel = supabase.channel(`fila-${id}`).on("postgres_changes", { event: "*", schema: "public", table: "atendimento_exames" }, () => fetchFila()).subscribe()
         const fetchExames = async () => {
             const { data } = await supabase.from('exames').select('*');
             if (data) setListaGlobalExames(data);
@@ -267,33 +287,48 @@ export default function FilaPage() {
         fetchExames();
 
 
-        return () => { clearInterval(interval); supabase.removeChannel(channel) }
-    }, [id])
+        return () => { clearInterval(interval); /*supabase.removeChannel(channel)*/ }
+    }, [id, unidadeId])
 
     useEffect(() => {
-        const checkUser = async () => {
+        const initialize = async () => {
             const { data: { user } } = await supabase.auth.getUser();
 
             if (user) {
-                const userKey = `fila_session_${user.id}`;
-                const saved = localStorage.getItem(userKey);
+                // 1. Busca Profile para pegar a unidade e o role
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('role, unidade_id')
+                    .eq('id', user.id)
+                    .single();
 
-                if (saved) {
-                    const parsed = JSON.parse(saved);
-                    // Verifica se os campos obrigatórios existem no JSON salvo
-                    if (parsed.sala && parsed.profissional) {
-                        setSession(parsed);
-                        setOpenModal(false); // Garante que fecha
-                        return; // Sai da função, não abre o modal
+                if (profile) {
+                    let idFinal = profile.unidade_id;
+
+                    // Lógica para Admin (respeitando a unidade trocada no localStorage)
+                    if (profile.role === 'admin') {
+                        const unidadeSessao = localStorage.getItem('unidade_ativa_id');
+                        if (unidadeSessao) idFinal = unidadeSessao;
+                    }
+
+                    setUnidadeId(idFinal);
+
+                    // 2. Gerenciamento da Sessão de Sala/Profissional (sua lógica atual)
+                    const userKey = `fila_session_${user.id}`;
+                    const saved = localStorage.getItem(userKey);
+                    if (saved) {
+                        const parsed = JSON.parse(saved);
+                        if (parsed.sala && parsed.profissional) {
+                            setSession(parsed);
+                            setOpenModal(false);
+                        }
+                    } else {
+                        setOpenModal(true);
                     }
                 }
-
-                // Se chegou aqui, não tem dado válido
-                setSession({ sala: "", profissional: "" });
-                setOpenModal(true);
             }
         };
-        checkUser();
+        initialize();
     }, [id]);
 
     useEffect(() => {
@@ -349,7 +384,7 @@ export default function FilaPage() {
             );
         });
 
-        return temEEG ? 300 : 20;
+        return (temEEG && especialidadesLongas.some(esp => nomeEsp.includes(esp))) ? 300 : 20;
     };
 
     async function executarAcao(rpcName: string, params: any) {
@@ -361,6 +396,12 @@ export default function FilaPage() {
             toast.error("Erro na operação: " + error.message);
         } else {
             toast.success("Sucesso!");
+            if (rpcName === "nao_atendido_especialidade") {
+                setNaoAtendidosRecentes(prev => [...prev, params.p_atendimento_exame_id]);
+            }
+            if (rpcName === "chamar_paciente") {
+                setNaoAtendidosRecentes(prev => prev.filter(id => id !== params.p_atendimento_exame_id));
+            }
             fetchFila();
         }
         setLoadingAction(null);
@@ -385,27 +426,71 @@ export default function FilaPage() {
         }
 
         return lista.sort((a, b) => {
+            // Definimos os pesos de status
             const pesoStatus = (item: ItemFila) => {
-                if (item.status === "EM_ATENDIMENTO") return 1;
+                const isMinhaSessao = item.num_sala === session?.sala && item.profissional === session?.profissional;
+                if (item.status === "EM_ATENDIMENTO" && isMinhaSessao) return 1;
                 if (item.status === "AGUARDANDO") return 2;
-                return 3;
+                if (item.status === "EM_ATENDIMENTO") return 3;
+                if (item.status === "FINALIZADO") return 4;
+                return 5;
             };
-            const pA = pesoStatus(a);
-            const pB = pesoStatus(b);
-            if (pA !== pB) return pA - pB;
 
-            return ordenacao.direcao === 'asc'
-                ? getTempoEsperaTotal(a) - getTempoEsperaTotal(b)
-                : getTempoEsperaTotal(b) - getTempoEsperaTotal(a);
-        })
-    }, [data, ordenacao, filtroPesquisa, filtroTipo])
+            // SE a ordenação for 'tempo_espera' (padrão), mantemos o agrupamento por status.
+            // SE o usuário clicou em qualquer outra coluna (Nome, Senha, etc), a ordenação da coluna vira PRIORIDADE.
+            const isOrdenacaoManual = ordenacao.coluna !== 'tempo_espera';
 
-    const ThOrdenavel = ({ label, coluna }: { label: string, coluna: keyof ItemFila | 'tempo_espera' }) => (
-        <th className="text-left p-4 font-bold text-slate-500 uppercase tracking-widest text-[10px] cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-            onClick={() => setOrdenacao(prev => ({ coluna, direcao: prev.coluna === coluna && prev.direcao === 'asc' ? 'desc' : 'asc' }))}>
-            <div className="flex items-center gap-1">{label} <ArrowUpDown className="w-3 h-3 opacity-50" /></div>
-        </th>
-    )
+            if (!isOrdenacaoManual) {
+                const pA = pesoStatus(a);
+                const pB = pesoStatus(b);
+                if (pA !== pB) return pA - pB;
+            }
+
+            // Lógica de comparação de valores
+            let valA: any, valB: any;
+
+            if (ordenacao.coluna === 'tempo_espera') {
+                valA = getTempoEsperaTotal(a);
+                valB = getTempoEsperaTotal(b);
+            } else {
+                // Garantimos que nulos/undefined fiquem no fim
+                valA = a[ordenacao.coluna as keyof ItemFila] ?? '';
+                valB = b[ordenacao.coluna as keyof ItemFila] ?? '';
+
+                // Tratamento para strings (nomes) ficarem case-insensitive
+                if (typeof valA === 'string') valA = valA.toLowerCase();
+                if (typeof valB === 'string') valB = valB.toLowerCase();
+            }
+
+            if (valA < valB) return ordenacao.direcao === 'asc' ? -1 : 1;
+            if (valA > valB) return ordenacao.direcao === 'asc' ? 1 : -1;
+
+            // Se os valores da coluna forem iguais, usamos o peso do status como desempate
+            return pesoStatus(a) - pesoStatus(b);
+        });
+    }, [data, ordenacao, filtroPesquisa, filtroTipo, session]);
+
+    const ThOrdenavel = ({ label, coluna }: { label: string, coluna: keyof ItemFila | 'tempo_espera' }) => {
+        const isAtivo = ordenacao.coluna === coluna;
+
+        return (
+            <th
+                className={`text-left p-4 font-bold uppercase tracking-widest text-[10px] cursor-pointer transition-colors
+                ${isAtivo ? 'bg-slate-200/50 dark:bg-slate-800 text-emerald-600' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                onClick={() => setOrdenacao(prev => ({
+                    coluna,
+                    direcao: prev.coluna === coluna && prev.direcao === 'asc' ? 'desc' : 'asc'
+                }))}
+            >
+                <div className="flex items-center gap-1">
+                    {label}
+                    <div className="flex flex-col">
+                        <ArrowUpDown className={`w-3 h-3 ${isAtivo ? 'opacity-100' : 'opacity-30'}`} />
+                    </div>
+                </div>
+            </th>
+        );
+    };
 
     const onFichaClick = (item: any) => {
         window.navigator.clipboard.writeText(item.ficha_sequencial || "--");
@@ -477,19 +562,19 @@ export default function FilaPage() {
     if (loading) return <div className="flex h-screen items-center justify-center font-mono text-sm animate-pulse text-emerald-600 bg-slate-50 dark:bg-slate-950 uppercase tracking-widest">Sincronizando Fila...</div>
 
     return (
-        <div className="min-h-full bg-slate-50 dark:bg-slate-950 p-4 md:p-8 space-y-8">
-            <div className="max-w-7xl mx-auto space-y-6">
+        <div className="min-h-fit mt-2 space-y-8 bg-gray-500/20 rounded-xl p-2">
+            <div className="w-full mx-auto space-y-5">
 
                 {/* HEADER */}
-                <div className="bg-slate-900 rounded-2xl shadow-2xl p-6 flex flex-col md:flex-row justify-between items-center gap-6 border border-slate-800">
+                <div className="bg-gray-900 rounded-2xl shadow-2xl p-2 flex flex-col md:flex-row justify-between items-center gap-6 border border-gray-600">
                     <div className="flex items-center gap-4">
-                        <div className="bg-emerald-500/20 p-3 rounded-xl"><Stethoscope className="w-6 h-6 text-emerald-400" /></div>
+                        <div className="bg-emerald-500/20 p-3 rounded-xl"><Stethoscope className="w-5 h-5 text-emerald-400" /></div>
                         <div className="space-y-1">
                             <h1 className="text-xl md:text-2xl font-black text-white tracking-tight uppercase">{especialidadeNome}</h1>
                             <p className="text-slate-400 text-[11px] font-bold tracking-[0.2em] uppercase">{new Date().toLocaleDateString("pt-BR")}</p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-4 bg-slate-800/40 p-3 rounded-xl border border-slate-700/50">
+                    <div className="flex items-center gap-2 bg-slate-800/40 p-2 rounded-xl border border-slate-700/50">
                         <div className="flex items-center gap-3 pr-6 border-r border-slate-700">
                             <User className="w-4 h-4 text-emerald-400" />
                             <div>
@@ -506,19 +591,19 @@ export default function FilaPage() {
                 </div>
 
                 {/* CONTROLES E FILTRO */}
-                <div className="flex items-center justify-center gap-3">
-                    <div className="w-full flex gap-3">
-                        <div className="flex items-center gap-3 bg-white dark:bg-slate-900 p-2 px-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800">
-                            <Filter className="w-4 h-4 text-slate-400" />
+                <div className="flex flex-col md:flex-row justify-between items-center gap-6 w-full">
+                    <div className="flex flex-col md:flex-row gap-2">
+                        <div className="w-fit flex items-center gap-2 bg-white dark:bg-black p-2 rounded-xl shadow-sm border dark:border-gray-600">
+                            <Filter className="w-4 h-4 font-black" />
                             <div className="flex gap-2">
                                 {["TODOS", "NORMAL", "PREFERENCIAL"].map((tipo) => (
                                     <Button
                                         key={tipo}
                                         variant={filtroTipo === tipo ? "default" : "outline"}
                                         size="sm"
-                                        className={`h-8 text-[10px] font-black uppercase tracking-widest ${filtroTipo === tipo
-                                            ? 'bg-slate-900 text-white'
-                                            : 'bg-transparent text-slate-500 border-slate-200'
+                                        className={`h-8 text-[9px] font-black uppercase tracking-widest ${filtroTipo === tipo
+                                            ? 'bg-gray-700 text-white'
+                                            : 'bg-transparent font-black border-gray-200'
                                             }`}
                                         onClick={() => setFiltroTipo(tipo)}
                                     >
@@ -527,8 +612,8 @@ export default function FilaPage() {
                                 ))}
                             </div>
                         </div>
-                        <div className="flex items-center gap-3 bg-white dark:bg-slate-900 p-2 px-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800">
-                            <Search className="w-4 h-4 text-slate-400" />
+                        <div className="flex items-center gap-2 bg-white dark:bg-gray-900 p-2 rounded-xl shadow-sm border dark:border-gray-600">
+                            <Search className="w-4 h-4 text-gray-400" />
                             <Input
                                 placeholder="Buscar por nome..."
                                 className="w-80"
@@ -539,7 +624,7 @@ export default function FilaPage() {
                     </div>
 
                     <div className="flex gap-2">
-                        <Button onClick={fetchFila} disabled={isRefreshing} variant="outline" className="h-12 bg-white dark:bg-slate-900 p-2 px-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800">
+                        <Button onClick={fetchFila} disabled={isRefreshing} variant="outline" className="h-12 bg-white dark:bg-gray-900 p-2 px-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800">
                             <RefreshCw className={`w-3 h-3 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} /> Atualizar
                         </Button>
                     </div>
@@ -547,11 +632,11 @@ export default function FilaPage() {
                 </div>
 
                 {/* TABELA */}
-                <Card className="border-none shadow-2xl overflow-hidden bg-white dark:bg-slate-900">
+                <Card className="border-none shadow-2xl overflow-hidden bg-gray-100 dark:bg-gray-900 p-0">
                     <CardContent className="p-0">
                         <div className="overflow-x-auto">
                             <table className="w-full text-[13px]">
-                                <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
+                                <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
                                     <tr>
                                         <ThOrdenavel label="Senha" coluna="senha" />
                                         <ThOrdenavel label="Nome" coluna="nome" />
@@ -560,7 +645,7 @@ export default function FilaPage() {
                                         <ThOrdenavel label="Tempo Espera" coluna="tempo_espera" />
                                         <ThOrdenavel label="Status" coluna="status" />
                                         <ThOrdenavel label="Observação" coluna="observacao" />
-                                        <th className="text-right p-4 font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest text-[10px]">
+                                        <th className="text-right p-4 font-bold dark:text-slate-400 uppercase tracking-widest text-[10px]">
                                             Ações
                                         </th>
                                     </tr>
@@ -573,7 +658,7 @@ export default function FilaPage() {
 
                                         const isFinalizado = item.status === "FINALIZADO"
                                         const isCancelado = item.status === "CANCELADO"
-                                        const isNaoAtendido = item.status === "NAO_ATENDIDO"
+                                        const isNaoAtendido = naoAtendidosRecentes.includes(item.id);
                                         const isBloqueado = item.bloqueado || styles.label === "BLOQUEADO"
                                         const isEncerrado = isFinalizado || isCancelado
 
@@ -680,7 +765,7 @@ export default function FilaPage() {
                                                     <div className="flex justify-end gap-1.5 items-center">
                                                         {!isEncerrado ? (
                                                             <>
-                                                                {item.status === "AGUARDANDO" && !isBloqueado && (
+                                                                {item.status === "AGUARDANDO" && !isBloqueado && <>
                                                                     <Button
                                                                         size="sm"
                                                                         variant="outline"
@@ -701,7 +786,11 @@ export default function FilaPage() {
                                                                         <BellRing className="w-3 h-3 mr-1" />
                                                                         Chamar
                                                                     </Button>
-                                                                )}
+                                                                    {isNaoAtendido &&
+                                                                        <Badge className="uppercase text-[11px] font-bold">não atendido</Badge>
+                                                                    }
+                                                                </>
+                                                                }
 
                                                                 {item.status === "EM_ATENDIMENTO" && !isBloqueado && (
                                                                     <>
@@ -806,7 +895,7 @@ export default function FilaPage() {
             <Dialog open={openModal} onOpenChange={(open) => !loading && setOpenModal(open)}>
                 <DialogContent className="sm:max-w-[450px] bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 p-0 overflow-hidden shadow-2xl">
 
-                    <DialogHeader className="p-6 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+                    <DialogHeader className="p-6 bg-slate-50 dark:bg-gray-900 border-b border-slate-200 dark:border-slate-800">
                         <div className="flex items-center gap-4">
                             <div className="bg-emerald-500/20 p-3 rounded-xl">
                                 <UserCog className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
@@ -831,10 +920,10 @@ export default function FilaPage() {
                                     value={form.sala}
                                     onValueChange={(val) => val === "OUTRO" ? (setIsOutraSala(true), setForm({ ...form, sala: "" })) : setForm({ ...form, sala: val })}
                                 >
-                                    <SelectTrigger className="h-12 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white font-bold uppercase">
+                                    <SelectTrigger className="h-12 bg-slate-50 dark:bg-gray-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white font-bold uppercase">
                                         <SelectValue placeholder="QUAL SALA?" />
                                     </SelectTrigger>
-                                    <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
+                                    <SelectContent className="bg-white dark:bg-gray-900 border-slate-200 dark:border-slate-800">
                                         {salasFiltradas.map(s => (
                                             <SelectItem key={s.id} value={s.numero} className="font-bold uppercase text-slate-900 dark:text-slate-100">SALA {s.numero}</SelectItem>
                                         ))}
@@ -845,7 +934,7 @@ export default function FilaPage() {
                                 <div className="relative">
                                     <Input
                                         autoFocus
-                                        className="h-12 bg-slate-50 dark:bg-slate-900 border-emerald-500/50 text-slate-900 dark:text-white font-bold uppercase"
+                                        className="h-12 bg-slate-50 dark:bg-gray-900 border-emerald-500/50 text-slate-900 dark:text-white font-bold uppercase"
                                         value={form.sala}
                                         onChange={(e) => setForm({ ...form, sala: e.target.value.toUpperCase() })}
                                     />
@@ -862,10 +951,10 @@ export default function FilaPage() {
                                     value={form.profissional}
                                     onValueChange={(val) => val === "OUTRO" ? (setIsOutroProfissional(true), setForm({ ...form, profissional: "" })) : setForm({ ...form, profissional: val })}
                                 >
-                                    <SelectTrigger className="h-12 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white font-bold uppercase">
+                                    <SelectTrigger className="h-12 bg-slate-50 dark:bg-gray-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white font-bold uppercase">
                                         <SelectValue placeholder="QUEM ATENDE?" />
                                     </SelectTrigger>
-                                    <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
+                                    <SelectContent className="bg-white dark:bg-gray-900 border-slate-200 dark:border-slate-800">
                                         {profissionaisFiltrados.map(p => (
                                             <SelectItem key={p.id} value={p.nome} className="font-bold uppercase text-slate-900 dark:text-slate-100">{p.nome}</SelectItem>
                                         ))}
@@ -876,7 +965,7 @@ export default function FilaPage() {
                                 <div className="relative">
                                     <Input
                                         autoFocus
-                                        className="h-12 bg-slate-50 dark:bg-slate-900 border-emerald-500/50 text-slate-900 dark:text-white font-bold uppercase"
+                                        className="h-12 bg-slate-50 dark:bg-gray-900 border-emerald-500/50 text-slate-900 dark:text-white font-bold uppercase"
                                         value={form.profissional}
                                         onChange={(e) => setForm({ ...form, profissional: e.target.value.toUpperCase() })}
                                     />
@@ -886,7 +975,7 @@ export default function FilaPage() {
                         </div>
                     </div>
 
-                    <DialogFooter className="p-6 bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800">
+                    <DialogFooter className="p-6 bg-slate-50 dark:bg-gray-900 border-t border-slate-200 dark:border-slate-800">
                         <Button onClick={entrar} className="w-full h-12 bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase tracking-widest">
                             Entrar na Fila
                         </Button>

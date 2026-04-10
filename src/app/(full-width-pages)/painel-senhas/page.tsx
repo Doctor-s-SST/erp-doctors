@@ -33,6 +33,7 @@ export default function PainelTV() {
   const [historico, setHistorico] = useState<Chamada[]>([]);
   const [fila, setFila] = useState<Chamada[]>([]);
   const [processando, setProcessando] = useState(false);
+  const [unidadeId, setUnidadeId] = useState<string | null>(null);
 
   const lastTimeRef = useRef<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -69,9 +70,23 @@ export default function PainelTV() {
         ? `${chamada.nome_paciente}`
         : `Senha, ${senhaSoletreada}`;
 
-      const local = chamada.origem === 'RECEPCAO'
-        ? `comparecer ao guichê ${chamada.guiche}`
-        : `comparecer à sala ${chamada.guiche}, ${salasAndar[chamada.guiche as keyof typeof salasAndar]}`;
+      let local = "";
+      const guicheAtual = chamada.guiche || "";
+
+      if (chamada.origem === 'RECEPCAO') {
+        local = `comparecer ao guichê ${guicheAtual}`;
+      } else {
+        // Busca o andar com fallback para evitar undefined no texto falado
+        const andar = salasAndar[guicheAtual as keyof typeof salasAndar];
+
+        // Se for a unidade específica E tiver mapeamento de andar
+        if (unidadeId === "ba83f0b4-1b16-4b07-9473-fe929f16f881" && andar) {
+          local = `comparecer à sala ${guicheAtual}, ${andar}`;
+        } else {
+          local = `comparecer à sala ${guicheAtual}`;
+        }
+      }
+      console.log(local)
 
       const textoFinal = `${identificador}, ${local}`;
 
@@ -94,13 +109,12 @@ export default function PainelTV() {
   // 2. PROCESSADOR DE FILA
   useEffect(() => {
     async function processarFila() {
-      if (fila.length > 0 && !processando) {
+      if (fila.length > 0 && !processando && unidadeId) {
         setProcessando(true);
         const proxima = fila[0];
 
         setUltimaChamada(proxima);
         setHistorico(prev => [proxima, ...prev.filter(h => h.id !== proxima.id)].slice(0, 7));
-
 
         try {
           const tabela = proxima.origem === 'RECEPCAO' ? 'atendimentos' : 'atendimento_exames';
@@ -116,33 +130,57 @@ export default function PainelTV() {
       }
     }
     processarFila();
-  }, [fila, processando]);
+  }, [fila, processando, unidadeId]);
+
+  useEffect(() => {
+    const obterUnidade = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('unidade_id')
+          .eq('id', user.id)
+          .single();
+
+        if (profile?.unidade_id) {
+          setUnidadeId(profile.unidade_id);
+        }
+      }
+    };
+    obterUnidade();
+  }, []);
 
   // 3. BUSCA DE DADOS (COM INTERCALAÇÃO)
   async function fetchDados() {
+    if (!unidadeId) return;
+
     try {
-      // 1. Busca Recepção
+      // 1. Busca Recepção filtrando por unidade
       const { data: rec } = await supabase
         .from('atendimentos')
         .select('id, senha_codigo, guiche, updated_at, pacientes(nome)')
         .eq('status', 'EM_FILA')
+        .eq('unidade_id', unidadeId) // FILTRO ADICIONADO
         .order('updated_at', { ascending: true })
         .limit(3);
 
-      // 2. Busca Exames - FOCO AQUI
+      // 2. Busca Exames filtrando por unidade
+      // Note que usamos o !inner no join para filtrar a unidade do atendimento pai
       const { data: exm } = await supabase
         .from('atendimento_exames')
         .select(`
-          id, 
-          num_sala, 
-          status,
-          atendimentos!inner(
-            senha_codigo, 
-            updated_at, 
-            pacientes(nome)
-          )
-        `)
+        id, 
+        num_sala, 
+        status,
+        atendimentos!inner(
+          senha_codigo, 
+          updated_at,
+          unidade_id,
+          pacientes(nome)
+        )
+      `)
         .eq('status', 'EM_FILA')
+        .eq('atendimentos.unidade_id', unidadeId) // FILTRO NO JOIN ADICIONADO
         .limit(3);
 
       const novosParaFila: Chamada[] = [];
@@ -202,10 +240,12 @@ export default function PainelTV() {
   }
 
   useEffect(() => {
+    if (!unidadeId) return;
+
     fetchDados();
     const interval = setInterval(fetchDados, 4000);
     return () => clearInterval(interval);
-  }, []);
+  }, [unidadeId]);
 
   const data = new Date();
   const dataAtual = {
@@ -218,6 +258,8 @@ export default function PainelTV() {
   return (
     <div className="h-screen w-screen bg-white overflow-hidden flex flex-col font-sans">
       <audio ref={audioRef} src="/sounds/call-bell.wav" preload="auto" />
+      {/* <audio ref={audioRef} src="/sounds/alexis_gaming_cam-timer-terminer-342934.mp3" preload="auto" /> */}
+      {/* <audio ref={audioRef} src="/sounds/voicemail-notification-new-message-soundroll-2-2-00-03.mp3" preload="auto" /> */}
 
       {/* HEADER */}
       <header className="h-20 flex justify-between items-center px-5 py-2 bg-white shadow-[0px_2px_5px_0px_rgba(0,0,0,0.2)] z-10">
@@ -259,7 +301,6 @@ export default function PainelTV() {
                 {ultimaChamada?.nome_paciente ? (
                   <h2 className="text-[6vw] leading-[1.1] font-black text-center wrap-break-word px-10 uppercase drop-shadow-md">
                     {ultimaChamada.nome_paciente}
-                    {/* Abel Joaquim Dantas Pereira Marcondes */}
                   </h2>
                 ) : (
                   <h2 className="text-[22rem] leading-none font-black drop-shadow-lg tracking-tighter">
@@ -276,12 +317,20 @@ export default function PainelTV() {
                       {ultimaChamada?.origem !== 'RECEPCAO' ? 'Sala' : 'Guichê'}
                     </span>
                     <span >
-                      {ultimaChamada?.guiche || '-'} {/* {ultimaChamada?.guiche || '-'} - {salasAndar[ultimaChamada?.guiche as keyof typeof salasAndar]} */}
+                      {ultimaChamada?.guiche || '-'}
                     </span>
                   </div>
-                  <span className="text-5xl tracking-tight">
-                    {salasAndar[ultimaChamada?.guiche as keyof typeof salasAndar]}
-                  </span>
+                  {ultimaChamada?.origem !== 'RECEPCAO' && (
+                    <div className="flex flex-col items-center">
+                      {/* Mostra o andar apenas se a unidadeId estiver carregada e for a correta */}
+                      {unidadeId === "ba83f0b4-1b16-4b07-9473-fe929f16f881" &&
+                        salasAndar[ultimaChamada?.guiche as keyof typeof salasAndar] && (
+                          <span className="text-5xl tracking-tight">
+                            {salasAndar[ultimaChamada?.guiche as keyof typeof salasAndar]}
+                          </span>
+                        )}
+                    </div>
+                  )}
                 </div>
               </div>
             </motion.main>

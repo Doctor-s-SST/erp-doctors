@@ -17,7 +17,14 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 
-export default function UserDropdown() {
+type ProfileType = {
+  email: string;
+  first_name: string;
+  last_name: string;
+  role: string;
+};
+
+export default function UserDropdown({profile}: { profile: ProfileType }) {
   const router = useRouter();
 
   async function handleLogout() {
@@ -34,13 +41,13 @@ export default function UserDropdown() {
             <AvatarFallback>GC</AvatarFallback>
           </Avatar> */}
           <div className="flex flex-col items-start text-left">
-            <p className="text-sm font-medium leading-none">Gabriel Carvalho</p>
-            <p className="text-xs leading-none text-muted-foreground mt-1">gabriel@doctors.com</p>
+            <p className="text-sm font-medium leading-none">{profile.first_name}</p>
+            <p className="text-xs leading-none text-muted-foreground mt-1">{profile.email}</p>
           </div>
           <ChevronDown className="ml-auto h-5 w-5 text-muted-foreground" />
         </Button>
       </DropdownMenuTrigger>
-      
+
       <DropdownMenuContent className="w-50 mt-5" align="end" forceMount>
         {/* <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">

@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useReactToPrint } from "react-to-print";
 import { TemplateFicha } from "@/components/ficha-impressao/TemplateFicha";
+import { StatusSenhaRecep } from "@/components/status-senha-recep/StatusSenhaRecep"
 import { on } from "events"
 
 type Atendimento = {
@@ -33,6 +34,7 @@ type Atendimento = {
     sala_atual?: string | null
     num_sala?: string | null
     profissional?: string | null
+    // unidadeId: string
 }
 
 type ConfigOrdenacao = {
@@ -61,7 +63,10 @@ export default function RecepcaoPage() {
     const [selectedPrinter, setSelectedPrinter] = useState<any>(null);
     const [printerModal, setPrinterModal] = useState(false);
     const [userRole, setUserRole] = useState<string | null>(null);
-
+    const [selectedAtendimento, setSelectedAtendimento] = useState<Atendimento | null>(null)
+    const [isDetailsOpen, setIsDetailsOpen] = useState(false)
+    const [unidadeId, setUnidadeId] = useState<string | null>(null);
+    const [unidadeNome, setUnidadeNome] = useState<string>("");
 
     // ESTADOS DO MODAL DE IMPORTAÇÃO
     const [importModal, setImportModal] = useState<{ open: boolean, item: Atendimento | null }>({ open: false, item: null })
@@ -80,8 +85,18 @@ export default function RecepcaoPage() {
     const [formFicha, setFormFicha] = useState(initialFormFicha)
 
     useEffect(() => {
+        // Se não tivermos unidadeId ainda, não buscamos profissionais
+        // (Pois recepcionistas são específicos de cada unidade)
+        if (!unidadeId) return;
+
         const fetchEspecialidades = async () => {
-            const { data } = await supabase.from("especialidades").select("id, nome, exames(id, nome)");
+            // Se suas especialidades forem globais, mantenha sem o .eq('unidade_id')
+            // Se elas mudarem por unidade, adicione o .eq("unidade_id", unidadeId)
+            const { data } = await supabase
+                .from("especialidades")
+                .select("id, nome, exames(id, nome)")
+                .eq("unidade_id", unidadeId);
+
             if (data) {
                 const ordenadas = [...data].sort((a, b) => {
                     const nomeA = a.nome.toUpperCase();
@@ -91,36 +106,35 @@ export default function RecepcaoPage() {
                     if (nomeA.includes("TOXICOLOGICO") || nomeA.includes("TOXICOLÓGICO")) return 1;
                     if (nomeB.includes("TOXICOLOGICO") || nomeB.includes("TOXICOLÓGICO")) return -1;
 
-                    // Restante em ordem alfabética
                     return nomeA.localeCompare(nomeB);
                 });
 
                 setEspecialidades(ordenadas);
-
-                // const triagem = ordenadas.find(e => e.nome.toLowerCase().includes("triagem"));
             }
-        }
-        fetchEspecialidades();
+        };
 
         const fetchRecepcionistas = async () => {
-            setLoadingRecepcionistas(true)
+            setLoadingRecepcionistas(true);
             try {
                 const { data, error } = await supabase
                     .from("profissionais")
                     .select("id, nome")
-                    .eq("recepcao", true) // Filtra pelo campo booleano
-                    .order("nome")
+                    .eq("recepcao", true)
+                    .eq("unidade_id", unidadeId)
+                    .order("nome");
 
-                if (error) throw error
-                setRecepcionistas(data || [])
+                if (error) throw error;
+                setRecepcionistas(data || []);
             } catch (err) {
-                console.error("Erro ao carregar recepcionistas:", err)
             } finally {
-                setLoadingRecepcionistas(false)
+                setLoadingRecepcionistas(false);
             }
-        }
-        fetchRecepcionistas()
-    }, []);
+        };
+
+        fetchEspecialidades();
+        fetchRecepcionistas();
+
+    }, [unidadeId]); // <--- O efeito reage à mudança da unidade
 
     const formatarNome = (str: string) => {
         if (!str) return ""
@@ -172,29 +186,77 @@ export default function RecepcaoPage() {
     };
 
     //user localStorage
+    // 1. Efeito para carregar o usuário e a Unidade
     useEffect(() => {
-        const checkUser = async () => {
+        const initialize = async () => {
+            setData([]); // Limpeza inicial
             const { data: { user } } = await supabase.auth.getUser();
 
             if (user) {
-                const userKey = `recepcao_session_${user.id}`;
-                const saved = localStorage.getItem(userKey);
+                // 1. Busca Profile com Unidade (JOIN) e Role
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select(`
+                    role, 
+                    unidade_id,
+                    unidades (flag)
+                `)
+                    .eq('id', user.id)
+                    .single();
 
-                if (saved) {
-                    setSession(JSON.parse(saved));
-                    setOpenModal(false);
-                } else {
-                    // Força o reset do estado para não herdar dados do login anterior
-                    setSession({ guiche: "", nome: "" });
-                    setOpenModal(true);
+                if (profile) {
+                    let idFinal = profile.unidade_id;
+
+                    // 2. Lógica de Admin (igual à ConfiguracoesPage)
+                    if (profile.role === 'admin') {
+                        const unidadeSessao = localStorage.getItem('unidade_ativa_id');
+                        if (unidadeSessao) {
+                            idFinal = unidadeSessao;
+                            // Se mudou a unidade, precisamos buscar o nome dela novamente 
+                            // ou você pode salvar o nome no storage também.
+                        }
+                    }
+
+                    setUnidadeId(idFinal);
+                    setUnidadeNome((profile.unidades as any)?.flag || "");
+
+                    // 3. Gerenciamento da Sessão de Guichê
+                    const userKey = `recepcao_session_${user.id}`;
+                    const saved = localStorage.getItem(userKey);
+
+                    if (saved) {
+                        const parsedSession = JSON.parse(saved);
+                        // Se a unidade da sessão for diferente da unidade ativa, reseta guichê
+                        if (parsedSession.unidadeId !== idFinal) {
+                            localStorage.removeItem(userKey);
+                            setSession({ guiche: "", nome: "" });
+                            setOpenModal(true);
+                        } else {
+                            setSession(parsedSession);
+                            setOpenModal(false);
+                        }
+                    } else {
+                        setOpenModal(true);
+                    }
+
+                    // 4. Primeiro fetch de dados
+                    fetchData(idFinal);
                 }
-            } else {
-                // Se deslogado ou erro, limpa tudo
-                setSession({ guiche: "", nome: "" });
             }
         };
-        checkUser();
-    }, []);
+
+        initialize();
+    }, []); // Roda apenas no mount da página
+
+    // 2. Efeito para buscar dados do painel (Depende do unidadeId)
+    useEffect(() => {
+        if (!unidadeId) return;
+
+        fetchData(); // Busca imediata
+        const interval = setInterval(fetchData, 5000); // Polling
+
+        return () => clearInterval(interval);
+    }, [unidadeId]); // <--- Roda sempre que o unidadeId for definido ou mudar
 
 
     const getTempoEsperaEvolutivo = (item: any) => {
@@ -254,77 +316,117 @@ export default function RecepcaoPage() {
     }
 
     const dadosProcessados = useMemo(() => {
+        // 1. Filtros iniciais
         let filtrados = data.filter(item =>
             filtroTipo === "TODOS" ? true : item.tipo_senha === filtroTipo
         );
 
         if (filtroPesquisa) {
             const f = filtroPesquisa.toLowerCase();
-
             filtrados = filtrados.filter(i =>
                 i.nome && i.nome.toLowerCase().includes(f)
             );
         }
 
-
+        // 2. Lógica de Ordenação
         return filtrados.sort((a, b) => {
-            // 1. PRIORIDADE POR STATUS (Mantém EM_RECEPCAO no topo, etc)
-            const pesoStatus = (status: string) => {
-                switch (status) {
-                    case "EM_RECEPCAO": return 1
-                    case "EM_FILA": return 2
-                    case "AGUARDANDO_RECEPCAO": return 3
-                    case "NAO_ATENDIDO": return 4
-                    case "AGUARDANDO_EXAMES": return 5
-                    case "FINALIZADO": return 6
-                    case "CANCELADO": return 7
-                    default: return 8
+            // Função para definir pesos de status
+            const pesoStatus = (item: Atendimento) => {
+                switch (item.status) {
+                    case "EM_RECEPCAO": return 1;
+                    case "EM_FILA": return 2;
+                    case "AGUARDANDO_RECEPCAO": return 3;
+                    case "NAO_ATENDIDO": return 4;
+                    case "AGUARDANDO_EXAMES": return 5;
+                    case "FINALIZADO": return 6;
+                    case "CANCELADO": return 10;
+                    default: return 7;
                 }
+            };
+
+            // SE a ordenação for 'tempo_espera' (padrão), mantemos o agrupamento por status.
+            // SE o usuário clicou em qualquer outra coluna (Nome, Senha, etc), a coluna vira PRIORIDADE.
+            const isOrdenacaoManual = ordenacao.coluna !== 'tempo_espera';
+
+            if (!isOrdenacaoManual) {
+                const pA = pesoStatus(a);
+                const pB = pesoStatus(b);
+                if (pA !== pB) return pA - pB;
             }
-            const pA = pesoStatus(a.status);
-            const pB = pesoStatus(b.status)
 
-            if (pA !== pB) return pA - pB
+            // Lógica de comparação de valores da coluna selecionada
+            let valA: any, valB: any;
 
-            // 2. ORDENAÇÃO DINÂMICA DA COLUNA
-            const { coluna, direcao } = ordenacao
-            let comparacao = 0
-
-            if (coluna === 'tempo_espera' || coluna === 'created_at') {
-                const valA = new Date(a.created_at).getTime()
-                const valB = new Date(b.created_at).getTime()
-                comparacao = valA - valB
+            if (ordenacao.coluna === 'tempo_espera' || ordenacao.coluna === 'created_at') {
+                valA = new Date(a.created_at).getTime();
+                valB = new Date(b.created_at).getTime();
             } else {
-                // Tratamento para strings (nome, senha_codigo, guiche, etc)
-                const valA = String(a[coluna as keyof Atendimento] || "").toLowerCase()
-                const valB = String(b[coluna as keyof Atendimento] || "").toLowerCase()
+                // Garantimos tratamento de strings e nulos
+                valA = a[ordenacao.coluna as keyof Atendimento] ?? '';
+                valB = b[ordenacao.coluna as keyof Atendimento] ?? '';
 
-                comparacao = valA.localeCompare(valB, 'pt-BR', { numeric: true })
+                if (typeof valA === 'string') valA = valA.toLowerCase();
+                if (typeof valB === 'string') valB = valB.toLowerCase();
             }
 
-            return direcao === 'asc' ? comparacao : -comparacao
-        })
-    }, [data, filtroTipo, filtroPesquisa, ordenacao])
+            // Executa a comparação
+            let resultado = 0;
+            if (typeof valA === 'string' && typeof valB === 'string') {
+                resultado = valA.localeCompare(valB, 'pt-BR', { numeric: true });
+            } else {
+                if (valA < valB) resultado = -1;
+                else if (valA > valB) resultado = 1;
+            }
 
-    async function fetchData() {
-        const { data: result, error } = await supabase.rpc("get_painel_recepcao")
-        if (!error && result) setData(result)
+            // Aplica a direção (asc/desc)
+            const finalComp = ordenacao.direcao === 'asc' ? resultado : -resultado;
+
+            // Se os valores da coluna forem iguais (empate), usamos o peso do status como desempate final
+            if (finalComp === 0) {
+                return pesoStatus(a) - pesoStatus(b);
+            }
+
+            return finalComp;
+        });
+    }, [data, filtroTipo, filtroPesquisa, ordenacao, unidadeId]);
+
+    async function fetchData(idForcado?: string) {
+        const idParaBuscar = idForcado || unidadeId;
+
+        // Se não tiver ID e não for forçado, não faz nada
+        if (!idParaBuscar) return;
+
+        const { data: result, error } = await supabase.rpc("get_painel_recepcao", {
+            p_unidade_id: idParaBuscar
+        });
+
+        if (!error && result) {
+            setData(result);
+        }
     }
 
     useEffect(() => {
-        fetchData()
-        const interval = setInterval(fetchData, 5000)
-        return () => clearInterval(interval)
-    }, [])
+        if (!unidadeId) return;
+
+        const interval = setInterval(() => {
+            fetchData(unidadeId);
+        }, 3000);
+
+        return () => clearInterval(interval);
+    }, [unidadeId]);
 
     async function salvarSessao() {
         if (!session?.guiche || !session?.nome) return toast.warning("Preencha todos os campos")
 
         const { data: { user } } = await supabase.auth.getUser()
         if (user) {
+            // Incluímos o unidadeId explicitamente na sessão salva
+            const sessionData = { ...session, unidadeId: unidadeId };
             const userKey = `recepcao_session_${user.id}`
-            localStorage.setItem(userKey, JSON.stringify(session))
+            localStorage.setItem(userKey, JSON.stringify(sessionData))
             setOpenModal(false)
+            setData([]); // Limpa a lista da unidade anterior
+            // setUnidadeId(novaUnidade);
             fetchData()
         } else {
             toast.error("Usuário não autenticado")
@@ -362,7 +464,8 @@ export default function RecepcaoPage() {
             p_empresa_cnpj: formFicha.empresa.cnpj,
             p_especialidades_ids: especialidadesSelecionadas,
             p_exames_nomes: formFicha.exames,
-            p_observacao: formFicha.observacao
+            p_observacao: formFicha.observacao,
+            p_unidade_id: unidadeId
         });
 
         if (error) {
@@ -484,29 +587,30 @@ export default function RecepcaoPage() {
         setLoadingAction(tipo);
 
         try {
+            console.log("Session", session)
             const { data: senhaGerada, error } = await supabase.rpc("gerar_senha", {
                 tipo_param: tipo,
                 guiche_param: session?.guiche || "0",
-                atendente_param: session?.nome || ""
+                atendente_param: session?.nome || "",
+                unidade_param: unidadeId
             });
 
             if (error) throw error;
 
             // Chamada para a API com os campos separados
-            await fetch("/api/imprimir-senha", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    senha: senhaGerada,
-                    ip: selectedPrinter?.ip
-                })
-            });
+            // await fetch("/api/imprimir-senha", {
+            //     method: "POST",
+            //     headers: { "Content-Type": "application/json" },
+            //     body: JSON.stringify({
+            //         senha: senhaGerada,
+            //         ip: selectedPrinter?.ip
+            //     })
+            // });
 
             toast.success(`Senha ${senhaGerada} gerada!`);
             fetchData();
 
         } catch (err) {
-            console.error(err);
             toast.error("Erro ao gerar senha");
         } finally {
             generatingRef.current = false;
@@ -613,7 +717,6 @@ export default function RecepcaoPage() {
             const response = await fetch("/api/importar-ficha", { method: "POST", body: formData });
             const dataArray = await response.json();
             const data = dataArray[0];
-            console.log("tipo exames do PDF:", data.exame?.tipo, data.exames);
 
             const hoje = new Date().toLocaleDateString("pt-BR");
 
@@ -759,8 +862,8 @@ export default function RecepcaoPage() {
                     <div className="flex flex-col md:flex-row justify-between items-center gap-6 w-full">
 
                         {/* LADO ESQUERDO: FILTROS */}
-                        <div className="w-full flex gap-2">
-                            <div className="flex items-center gap-2 bg-white dark:bg-black px-2 rounded-xl shadow-sm border dark:border-gray-600">
+                        <div className="flex flex-col md:flex-row gap-2">
+                            <div className="w-fit flex items-center gap-2 bg-white dark:bg-black p-2 rounded-xl shadow-sm border dark:border-gray-600">
                                 <Filter className="w-4 h-4 font-black" />
                                 <div className="flex gap-2">
                                     {["TODOS", "NORMAL", "PREFERENCIAL"].map((tipo) => (
@@ -794,12 +897,12 @@ export default function RecepcaoPage() {
                         <div className="flex flex-row justify-end items-center gap-2 w-full">
                             {userRole == "admin" && (
                                 <Button
-                                variant="outline"
-                                className="bg-blue-300  border-gray-600"
-                                onClick={() => setPrinterModal(true)}
-                            >
-                                <Printer className="w-5 h-5" />
-                            </Button>
+                                    variant="outline"
+                                    className="bg-blue-300  border-gray-600"
+                                    onClick={() => setPrinterModal(true)}
+                                >
+                                    <Printer className="w-5 h-5" />
+                                </Button>
                             )}
                             <div
                                 className="flex h-8 items-center gap-1 bg-blue-600 text-muted p-1 rounded-full hover:bg-blue-500 hover:text-white cursor-pointer transition-all shrink-0 "
@@ -836,7 +939,7 @@ export default function RecepcaoPage() {
                                 <Button
                                     size="sm"
                                     className="uppercase bg-transparent font-bold text-[12px] tracking-widest pl-0"
-                                    onClick={fetchData}
+                                    onClick={() => fetchData()}
                                 >
                                     Atualizar
                                 </Button>
@@ -844,7 +947,7 @@ export default function RecepcaoPage() {
                         </div>
                     </div>
 
-                    <Card className="border-none shadow-2xl overflow-hidden bg-gray-1200 dark:bg-gray-900 p-0">
+                    <Card className="border-none shadow-2xl overflow-hidden bg-gray-100 dark:bg-gray-900 p-0">
                         <CardContent className="p-0">
                             <div className="overflow-x-auto">
                                 <table className="w-full text-[13px]">
@@ -907,7 +1010,12 @@ export default function RecepcaoPage() {
 
                                                     <td className="p-4">
                                                         <div className="flex items-center gap-2">
-                                                            <span className={`${!item.nome ? "text-gray-400 italic" : "font-bold text-gray-700 dark:text-gray-200"}`}>
+                                                            <span className={`${!item.nome ? "text-gray-400 italic" : "cursor-pointer font-bold text-gray-700 dark:text-gray-200"}`} onClick={() => {
+                                                                if (item.nome) {
+                                                                    setSelectedAtendimento(item);
+                                                                    setIsDetailsOpen(true);
+                                                                }
+                                                            }}>
                                                                 {item.nome || "Aguardando ficha..."}
                                                             </span>
 
@@ -1516,8 +1624,10 @@ export default function RecepcaoPage() {
                                     <SelectValue placeholder="Selecione o Guichê" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {["1", "2", "3"].map(n => (
-                                        <SelectItem key={n} value={n}>Guichê {n}</SelectItem>
+                                    {(unidadeId !== "8c66cebc-07fa-4699-941d-807af73c443e" ? ["1", "2", "3"] : ["1", "2"]).map((n) => (
+                                        <SelectItem key={n} value={n}>
+                                            Guichê {n}
+                                        </SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
@@ -1531,8 +1641,8 @@ export default function RecepcaoPage() {
                                 value={session?.nome}
                                 onValueChange={(val) => setSession(prev => ({ ...prev, nome: val }))}
                             >
-                                <SelectTrigger className="h-12 bg-gray-50 border-gray-200 dark:bg-gray-800 dark:border-gray-700">
-                                    <SelectValue placeholder={loadingRecepcionistas ? "CARREGANDO..." : "QUEM ESTÁ ATENDENDO?"} />
+                                <SelectTrigger className="h-12 bg-gray-50 border-gray-200">
+                                    <SelectValue placeholder={loadingRecepcionistas ? "Carregando..." : "Quem está atendendo?"} />
                                 </SelectTrigger>
                                 <SelectContent className="bg-white dark:bg-gray-900">
                                     {recepcionistas.length > 0 ? (
@@ -1550,7 +1660,7 @@ export default function RecepcaoPage() {
                             </Select>
                         </div>
                     </div>
-                    <DialogFooter className="bg-gray-800">
+                    <DialogFooter className="bg-gray-900">
                         <Button className="w-full h-12 text-muted bg-gray-900 dark:bg-blue-600 dark:hover:bg-blue-400 hover:bg-blue-600" onClick={salvarSessao}>
                             Ativar Guichê
                         </Button>
@@ -1753,6 +1863,12 @@ export default function RecepcaoPage() {
                     dados={formFicha}
                 />
             </div>
+
+            <StatusSenhaRecep
+                isOpen={isDetailsOpen}
+                onClose={() => setIsDetailsOpen(false)}
+                atendimento={selectedAtendimento}
+            />
         </>
     );
 }

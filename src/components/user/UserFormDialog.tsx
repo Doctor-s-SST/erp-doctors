@@ -19,10 +19,11 @@ interface UserFormProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     user: any;
+    unidadeAtiva: any;
     onSuccess: () => void;
 }
 
-export default function UserFormDialog({ open, onOpenChange, user, onSuccess }: UserFormProps) {
+export default function UserFormDialog({ open, onOpenChange, user, unidadeAtiva, onSuccess }: UserFormProps) {
     const [especialidades, setEspecialidades] = useState<{ id: string, nome: string }[]>([]);
     const [isDeleting, setIsDeleting] = useState(false);
 
@@ -44,7 +45,7 @@ export default function UserFormDialog({ open, onOpenChange, user, onSuccess }: 
 
     useEffect(() => {
         async function loadEspecialidades() {
-            const { data } = await supabase.from("especialidades").select("id, nome").order("nome");
+            const { data } = await supabase.from("especialidades").select("id, nome").eq("unidade_id", unidadeAtiva).order("nome");
             if (data) setEspecialidades(data);
         }
         if (open) loadEspecialidades();
@@ -190,9 +191,9 @@ export default function UserFormDialog({ open, onOpenChange, user, onSuccess }: 
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value="none" className="text-slate-400 italic">Nenhuma / Geral</SelectItem>
+                                                <SelectItem value="none" className="uppercase text-slate-400 italic">Nenhuma / Geral</SelectItem>
                                                 {especialidades.map((esp) => (
-                                                    <SelectItem key={esp.id} value={esp.id}>{esp.nome}</SelectItem>
+                                                    <SelectItem className="uppercase" key={esp.id} value={esp.id}>{esp.nome}</SelectItem>
                                                 ))}
                                             </SelectContent>
                                         </Select>

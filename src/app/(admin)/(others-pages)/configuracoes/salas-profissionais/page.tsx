@@ -33,29 +33,40 @@ export default function ConfiguracoesPage() {
   const [editandoSala, setEditandoSala] = useState<any | null>(null);
   const [editandoProfissional, setEditandoProfissional] = useState<any | null>(null);
 
+  const [unidadeId, setUnidadeId] = useState<string | null>(null);
+
   const ID_RECEPCAO = "recepcao-fixo";
 
-  async function fetchAll() {
+  async function fetchAll(idDaUnidade?: string) {
+    const idAtivo = idDaUnidade || unidadeId;
+    if (!idAtivo) return;
+
     try {
       setLoading(true);
-      // Fetch Salas
-      const { data: s } = await supabase.from("salas").select("*").order("numero");
 
-      // Fetch Profissionais com suas especialidades vinculadas
+      // Fetch Salas filtradas
+      const { data: s } = await supabase
+        .from("salas")
+        .select("*")
+        .eq("unidade_id", idAtivo) // Filtro essencial
+        .order("numero");
+
+      // Fetch Profissionais filtrados
       const { data: p } = await supabase
         .from("profissionais")
         .select(`
-          id, 
-          nome, 
-          recepcao,
-          profissional_especialidades (
-            id,
-            especialidade_id
-          )
-        `)
+        id, 
+        nome, 
+        recepcao,
+        profissional_especialidades (
+          id,
+          especialidade_id
+        )
+      `)
+        .eq("unidade_id", idAtivo) // Filtro essencial
         .order("nome");
 
-      const { data: esp } = await supabase.from("especialidades").select("*").order("nome");
+      const { data: esp } = await supabase.from("especialidades").select("*").eq("unidade_id", idAtivo).order("nome");
 
       if (s) setSalas(s);
       if (p) setProfissionais(p);
@@ -65,15 +76,47 @@ export default function ConfiguracoesPage() {
     }
   }
 
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => {
+    const fetchUserContext = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role, unidade_id')
+          .eq('id', user.id)
+          .single();
+
+        if (profile) {
+          let idFinal = profile.unidade_id;
+
+          // Se for admin, tenta pegar a unidade que ele selecionou no Header
+          if (profile.role === 'admin') {
+            const unidadeSessao = localStorage.getItem('unidade_ativa_id');
+            if (unidadeSessao) {
+              idFinal = unidadeSessao;
+            }
+          }
+
+          setUnidadeId(idFinal);
+          // Só chama o fetchAll depois que temos o unidadeId correto
+          fetchAll(idFinal);
+        }
+      }
+    };
+
+    fetchUserContext();
+  }, []);
 
   // --- AÇÕES DE SALAS ---
   async function criarSala() {
     if (!novaSala.numero || !novaSala.especialidade_id) return toast.error("Preencha todos os campos");
     const { error } = await supabase.from("salas").insert({
       numero: novaSala.numero,
-      especialidade_id: novaSala.especialidade_id === ID_RECEPCAO ? null : novaSala.especialidade_id
+      especialidade_id: novaSala.especialidade_id === ID_RECEPCAO ? null : novaSala.especialidade_id,
+      unidade_id: unidadeId
     });
+    console.log("teste: ", unidadeId)
     if (!error) { toast.success("Sala criada!"); fetchAll(); setNovaSala({ numero: "", especialidade_id: "" }); }
   }
 
@@ -101,7 +144,8 @@ export default function ConfiguracoesPage() {
       .from("profissionais")
       .insert({
         nome: novoProfissional.nome,
-        recepcao: isRecepcao
+        recepcao: isRecepcao,
+        unidade_id: unidadeId
       })
       .select()
       .single();
@@ -111,7 +155,8 @@ export default function ConfiguracoesPage() {
     if (!isRecepcao && novoProfissional.especialidade_id) {
       await supabase.from("profissional_especialidades").insert({
         profissional_id: prof.id,
-        especialidade_id: novoProfissional.especialidade_id
+        especialidade_id: novoProfissional.especialidade_id,
+        unidade_id: unidadeId
       });
     }
 
@@ -121,10 +166,10 @@ export default function ConfiguracoesPage() {
   }
 
   async function adicionarEspecialidadeAoProfissional(profId: string, espId: string) {
-    if (espId === ID_RECEPCAO) return;
+    if (espId === ID_RECEPCAO || !unidadeId) return;
     const { error } = await supabase
       .from("profissional_especialidades")
-      .insert({ profissional_id: profId, especialidade_id: espId });
+      .insert({ profissional_id: profId, especialidade_id: espId, unidade_id: unidadeId });
 
     if (error) toast.error("Especialidade já vinculada");
     else { toast.success("Especialidade adicionada!"); fetchAll(); }
@@ -173,7 +218,7 @@ export default function ConfiguracoesPage() {
             <div className="bg-blue-500/20 p-3 rounded-xl"><Settings2 className="w-8 h-8 text-blue-400" /></div>
             <div>
               <h1 className="text-xl md:text-2xl font-black text-white tracking-tight uppercase leading-none">Configuração do Sistema</h1>
-              <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-2">Rede Doctor's</p>
+              <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-2">salas e profissionais</p>
             </div>
           </div>
         </div>
@@ -186,7 +231,7 @@ export default function ConfiguracoesPage() {
           </div>
 
           <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row gap-3 shadow-sm">
-            <Input placeholder="Nº DA SALA" className="h-10 text-[10px] font-black uppercase tracking-widest" value={novaSala.numero} onChange={e => setNovaSala({ ...novaSala, numero: e.target.value })} />
+            <Input placeholder="Nº DA SALA" type="number" className="h-10 text-[10px] font-black uppercase tracking-widest" value={novaSala.numero} onChange={e => setNovaSala({ ...novaSala, numero: e.target.value })} />
             <Select onValueChange={(val) => setNovaSala({ ...novaSala, especialidade_id: val })}>
               <SelectTrigger className="h-10 w-full sm:w-[300px] text-[10px] font-black uppercase"><SelectValue placeholder="SETOR / ESPECIALIDADE" /></SelectTrigger>
               <SelectContent>
@@ -284,7 +329,7 @@ export default function ConfiguracoesPage() {
 
                     <div className="space-y-2">
                       <p className="text-[9px] font-black text-slate-400 uppercase">Especialidades</p>
-                      <div className="flex flex-wrap gap-1">
+                      <div className="flex flex-col gap-1">
                         {p.recepcao ? (
                           <Badge className="bg-blue-600 text-white text-[9px] font-black uppercase border-none">
                             RECEPÇÃO
@@ -292,9 +337,17 @@ export default function ConfiguracoesPage() {
                         ) : null}
 
                         {p.profissional_especialidades?.map((v: any) => (
-                          <Badge key={v.id} className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[9px] font-black uppercase border-none py-1 group/badge">
+                          <Badge key={v.id} className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[9px] font-black uppercase border-none py-1 group/badge flex items-center gap-1">
                             {getEspecialidadeNome(v.especialidade_id)}
-                            <X className="w-2.5 h-2.5 ml-1 cursor-pointer text-red-400 hidden group-hover/badge:block" onClick={() => removerVínculoEspecialidade(v.id)} />
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                removerVínculoEspecialidade(v.id);
+                              }}
+                              className="hover:bg-red-100 p-0.5 rounded-full transition-colors ml-1"
+                            >
+                              <X className="w-2.5 h-2.5 text-red-400" />
+                            </button>
                           </Badge>
                         ))}
 

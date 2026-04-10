@@ -43,16 +43,26 @@ export default function UsersManagementPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
 
-  const fetchUsers = async () => {
+  const [unidadeId, setUnidadeId] = useState<string | null>(null);
+
+  // Recebe o ID opcionalmente para garantir sincronia no primeiro carregamento
+  const fetchUsers = async (idParaFiltrar?: string) => {
+    const idAtivo = idParaFiltrar || unidadeId;
+    if (!idAtivo) return;
+
     try {
       setLoading(true);
+
+      // Filtrando perfis APENAS da unidade ativa
       const { data: profilesData, error: pError } = await supabase
         .from("profiles")
-        .select("*"); // Removemos o order daqui para fazer manualmente
+        .select("*")
+        .eq("unidade_id", idAtivo); // Filtro crucial
 
       const { data: espData, error: eError } = await supabase
         .from("especialidades")
-        .select("id, nome");
+        .select("id, nome")
+        .eq("unidade_id", idAtivo);
 
       if (pError || eError) throw new Error("Falha ao carregar dados");
 
@@ -62,17 +72,10 @@ export default function UsersManagementPage() {
         especialidade_nome: espData?.find(e => e.id === user.especialidade_id)?.nome || "GERAL"
       })) || [];
 
-      // APLICAÇÃO DA ORDENAÇÃO PERSONALIZADA
       const sortedUsers = enrichedUsers.sort((a, b) => {
         const pesoA = ROLE_ORDER[a.role] || 4;
         const pesoB = ROLE_ORDER[b.role] || 4;
-
-        // Se os roles forem diferentes, ordena pelo peso definido
-        if (pesoA !== pesoB) {
-          return pesoA - pesoB;
-        }
-
-        // Se forem do mesmo role, ordena alfabeticamente pelo nome
+        if (pesoA !== pesoB) return pesoA - pesoB;
         return a.full_name.localeCompare(b.full_name);
       });
 
@@ -84,7 +87,34 @@ export default function UsersManagementPage() {
     }
   };
 
-  useEffect(() => { fetchUsers(); }, []);
+  useEffect(() => {
+    const fetchUserContext = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role, unidade_id')
+          .eq('id', user.id)
+          .single();
+
+        if (profile) {
+          let idFinal = profile.unidade_id;
+
+          // Se for admin, verifica se há uma troca de unidade no Header
+          if (profile.role === 'admin') {
+            const salvaLocal = localStorage.getItem('unidade_ativa_id');
+            if (salvaLocal) idFinal = salvaLocal;
+          }
+
+          setUnidadeId(idFinal);
+          fetchUsers(idFinal);
+        }
+      }
+    };
+
+    fetchUserContext();
+  }, []);
 
   const handleEdit = (user: any) => {
     setSelectedUser(user);
@@ -148,8 +178,8 @@ export default function UsersManagementPage() {
                   variant={activeRole === role.id ? "default" : "outline"}
                   onClick={() => setActiveRole(role.id)}
                   className={`h-9 px-4 text-[9px] font-black tracking-tighter uppercase transition-all ${activeRole === role.id
-                      ? (ROLE_COLORS[role.id]?.bg || 'bg-slate-900') + " text-white border-none shadow-md"
-                      : "border-slate-200 dark:border-slate-800 text-slate-500 hover:bg-slate-50"
+                    ? (ROLE_COLORS[role.id]?.bg || 'bg-slate-900') + " text-white border-none shadow-md"
+                    : "border-slate-200 dark:border-slate-800 text-slate-500 hover:bg-slate-50"
                     }`}
                 >
                   <role.icon className="w-3.5 h-3.5 mr-2" />
@@ -240,6 +270,7 @@ export default function UsersManagementPage() {
           if (!open) setSelectedUser(null);
         }}
         user={selectedUser}
+        unidadeAtiva={unidadeId}
         onSuccess={fetchUsers}
       />
     </div>

@@ -144,7 +144,7 @@ const AppSidebar: React.FC = () => {
       onMouseEnter={() => !isExpanded && setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <div className={`py-2 my-1 flex ${!isExpanded && !isHovered ? "lg:justify-center" : "justify-center"}`}>
+      <div className={`py-2 my-1 flex justify-center`}>
         <Link href="/">
           {isExpanded || isHovered || isMobileOpen ? (
             <Image src="/images/logo/doctors-svg.svg" alt="Logo" width={100} height={50} className="" />

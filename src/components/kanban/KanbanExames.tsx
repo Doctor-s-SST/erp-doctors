@@ -81,15 +81,24 @@ export default function KanbanExames() {
     const [form, setForm] = useState<any>({})
     const [activeExame, setActiveExame] = useState<Exame | null>(null)
 
+    const [unidadeId, setUnidadeId] = useState<string | null>(null);
+
     const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
     const allExames = data.flatMap(esp => esp.exames)
 
-    async function fetchData() {
+    async function fetchData(currentUnidadeId: string) { // Recebe o ID como argumento
         setLoading(true)
+        setData([]);
         const { data: rawData, error: errorExames } = await supabase
             .from("especialidades")
+            .select(`
+                id, 
+                nome, 
+            `) 
             .select(`id, nome, exames (*)`)
+            .eq("unidade_id", currentUnidadeId)
+            .order('nome', { ascending: true });
 
         const { data: depsData, error: errorDeps } = await supabase
             .from("exame_dependencias")
@@ -97,6 +106,7 @@ export default function KanbanExames() {
 
         if (errorExames || errorDeps) {
             toast.error("Erro ao carregar dados")
+            setLoading(false)
             return
         }
 
@@ -118,7 +128,34 @@ export default function KanbanExames() {
         setLoading(false)
     }
 
-    useEffect(() => { fetchData() }, [])
+    useEffect(() => {
+        const fetchUserContext = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('unidade_id, role') // Busque o role também
+                    .eq('id', user.id)
+                    .single();
+
+                if (profile) {
+                    // Lógica idêntica à do Header para consistência
+                    const salvaLocal = localStorage.getItem('unidade_ativa_id');
+
+                    // Se for admin, prioriza o localStorage. Se não, usa o do perfil.
+                    const idParaUsar = (profile.role === 'admin' && salvaLocal)
+                        ? salvaLocal
+                        : profile.unidade_id;
+
+                    if (idParaUsar) {
+                        setUnidadeId(idParaUsar);
+                        fetchData(idParaUsar);
+                    }
+                }
+            }
+        };
+        fetchUserContext();
+    }, []);
 
     const findColumnByItem = (itemId: string) => data.find((col) => col.exames.some((e) => e.id === itemId))
 
@@ -167,50 +204,87 @@ export default function KanbanExames() {
 
     async function salvar() {
         try {
+            if (!unidadeId) {
+                toast.error("Unidade não identificada.");
+                return;
+            }
+
             if (tipoModal === "especialidade") {
-                const payload = { nome: form.nome.toUpperCase() }
+                const payload = {
+                    nome: form.nome.toUpperCase(),
+                    unidade_id: unidadeId
+                };
+
                 if (editandoEspecialidade) {
-                    await supabase.from("especialidades").update(payload).eq("id", editandoEspecialidade)
+                    await supabase.from("especialidades")
+                        .update(payload)
+                        .eq("id", editandoEspecialidade)
+                        .eq("unidade_id", unidadeId); // Segurança extra: só edita se for da mesma unidade
                 } else {
-                    await supabase.from("especialidades").insert(payload)
+                    await supabase.from("especialidades").insert(payload);
                 }
             } else {
+                // No caso do EXAME
                 const payloadExame = {
                     nome: form.nome.toUpperCase(),
                     especialidade_id: form.especialidade_id,
                     tempo_execucao_segundos: Number(form.tempo),
-                }
+                    // unidade_id: unidadeId 
+                };
 
-                let exameId = editandoExame?.id
+                let exameId = editandoExame?.id;
+
                 if (editandoExame) {
-                    await supabase.from("exames").update(payloadExame).eq("id", exameId)
+                    await supabase.from("exames")
+                        .update(payloadExame)
+                        .eq("id", exameId)
+                        // .eq("unidade_id", unidadeId); 
                 } else {
-                    const { data: n } = await supabase.from("exames").insert(payloadExame).select().single()
-                    exameId = n.id
+                    const { data: n, error } = await supabase
+                        .from("exames")
+                        .insert(payloadExame)
+                        .select()
+                        .single();
+
+                    if (error) throw error;
+                    exameId = n.id;
                 }
 
-                await supabase.from("exame_dependencias").delete().eq("exame_id", exameId)
+                // Dependências (Tabela pivo geralmente não precisa de unidade_id se os exames já tiverem)
+                await supabase.from("exame_dependencias").delete().eq("exame_id", exameId);
 
                 if (form.depende_de_exame_id) {
                     await supabase.from("exame_dependencias").insert({
                         exame_id: exameId,
                         depende_de_exame_id: form.depende_de_exame_id
-                    })
+                    });
                 }
             }
-            toast.success("Salvo com sucesso")
-            fecharModal()
-            fetchData()
+
+            toast.success("Salvo com sucesso");
+            fecharModal();
+            fetchData(unidadeId); // Recarrega passando a unidade
         } catch (err) {
-            toast.error("Erro ao salvar")
+            toast.error("Erro ao salvar");
         }
     }
 
     async function deletarExame() {
-        if (!editandoExame || !confirm("Excluir exame?")) return
-        await supabase.from("exames").delete().eq("id", editandoExame.id)
-        toast.success("Removido")
-        fecharModal(); fetchData()
+        // 1. Verificações de segurança
+        if (!editandoExame || !confirm("Excluir exame?")) return;
+
+        if (!unidadeId) {
+            toast.error("Unidade não identificada");
+            return;
+        }
+
+        await supabase.from("exames")
+            .delete()
+            .eq("id", editandoExame.id)
+
+        toast.success("Removido");
+        fecharModal();
+        fetchData(unidadeId);
     }
 
     const fecharModal = () => {
@@ -306,7 +380,7 @@ export default function KanbanExames() {
                                                     {col.exames.map((exame) => (
                                                         <SortableItem key={exame.id} id={exame.id}>
                                                             <div
-                                                                className="p-[1px]" // Pequeno respiro para a borda do card não ser cortada
+                                                                className="" // Pequeno respiro para a borda do card não ser cortada
                                                                 onClick={() => {
                                                                     setTipoModal("exame");
                                                                     setEditandoExame(exame);
