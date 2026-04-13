@@ -209,31 +209,31 @@ export default function ConfiguracoesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-4 md:p-8 font-sans">
-      <div className="max-w-7xl mx-auto space-y-12">
+    <div className="min-h-fit mt-2 space-y-8 bg-gray-500/20 rounded-xl p-2">
+      <div className="w-full mx-auto space-y-5">
 
         {/* HEADER */}
-        <div className="bg-slate-900 rounded-2xl shadow-2xl p-6 border border-slate-800">
+        <div className="bg-gray-900 rounded-2xl shadow-2xl p-2 flex flex-col md:flex-row justify-between items-center gap-6 border border-gray-600">
           <div className="flex items-center gap-4">
-            <div className="bg-blue-500/20 p-3 rounded-xl"><Settings2 className="w-8 h-8 text-blue-400" /></div>
-            <div>
-              <h1 className="text-xl md:text-2xl font-black text-white tracking-tight uppercase leading-none">Configuração do Sistema</h1>
-              <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-2">salas e profissionais</p>
+            <div className="bg-blue-500/20 p-3 rounded-xl"><Settings2 className="w-5 h-5 text-blue-400" /></div>
+            <div className="space-y-1">
+              <h1 className="text-xl md:text-2xl font-black text-white tracking-tight uppercase">Configuração do Sistema</h1>
+              <p className="text-gray-400 text-[11px] font-bold tracking-[0.2em] uppercase">salas e profissionais</p>
             </div>
           </div>
         </div>
 
         {/* SEÇÃO SALAS */}
-        <section className="space-y-6">
+        <section className="space-y-5 mt-8">
           <div className="flex items-center gap-2 border-l-4 border-blue-500 pl-4">
             <DoorOpen className="w-5 h-5 text-blue-500" />
             <h2 className="text-lg font-black uppercase text-slate-800 dark:text-slate-100">Gerenciamento de Salas</h2>
           </div>
 
-          <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row gap-3 shadow-sm">
-            <Input placeholder="Nº DA SALA" type="number" className="h-10 text-[10px] font-black uppercase tracking-widest" value={novaSala.numero} onChange={e => setNovaSala({ ...novaSala, numero: e.target.value })} />
+          <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-400 dark:border-gray-600 flex flex-col sm:flex-row gap-3 shadow-sm">
+            <Input placeholder="Nº DA SALA" type="number" className="h-10 text-[10px] border border-gray-400 dark:border-gray-600 font-black uppercase tracking-widest" value={novaSala.numero} onChange={e => setNovaSala({ ...novaSala, numero: e.target.value })} />
             <Select onValueChange={(val) => setNovaSala({ ...novaSala, especialidade_id: val })}>
-              <SelectTrigger className="h-10 w-full sm:w-[300px] text-[10px] font-black uppercase"><SelectValue placeholder="SETOR / ESPECIALIDADE" /></SelectTrigger>
+              <SelectTrigger className="h-10 w-full sm:w-[300px] text-[10px] font-black uppercase border border-gray-400 dark:border-gray-600"><SelectValue placeholder="SETOR / ESPECIALIDADE" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value={ID_RECEPCAO} className="text-[10px] font-black uppercase text-blue-500">RECEPÇÃO</SelectItem>
                 {especialidades.map(e => (<SelectItem key={e.id} value={e.id} className="text-[10px] font-black uppercase">{e.nome}</SelectItem>))}
@@ -244,8 +244,8 @@ export default function ConfiguracoesPage() {
 
           <div className="flex flex-col sm:flex-row flex-wrap gap-4">
             {salas.map((s) => (
-              <Card key={s.id} className="w-full sm:w-64 border-none bg-white dark:bg-slate-900 shadow-sm hover:border-blue-500/30 transition-all border">
-                <CardContent className="p-5 py-3 space-y-3">
+              <Card key={s.id} className="w-full sm:w-64 border border-gray-400 dark:border-gray-600 bg-white dark:bg-gray-900 shadow-sm hover:border-blue-500/30 transition-all border">
+                <CardContent className="p-5 py-3 space-y-3 ">
                   {editandoSala?.id === s.id ? (
                     <div className="space-y-3">
                       <Input className="h-8 text-[10px] font-black uppercase" value={editandoSala.numero} onChange={e => setEditandoSala({ ...editandoSala, numero: e.target.value })} />
@@ -270,9 +270,9 @@ export default function ConfiguracoesPage() {
                           <Button variant="ghost" size="icon" onClick={() => removerSala(s.id)} className="h-7 w-7"><Trash2 className="h-3 w-3 text-red-400" /></Button>
                         </div>
                       </div>
-                      <div className="border-t pt-2">
+                      <div className="border-t border-gray-400 dark:border-gray-600 pt-2">
                         <h3 className="font-black text-slate-800 dark:text-slate-100 text-sm uppercase">SALA {s.numero}</h3>
-                        <Badge variant="outline" className="mt-2 text-[9px] font-black uppercase border-slate-200 text-slate-500">{getEspecialidadeNome(s.especialidade_id)}</Badge>
+                        <Badge variant="outline" className="mt-2 text-[9px] font-black uppercase border-gray-600 text-slate-500">{getEspecialidadeNome(s.especialidade_id)}</Badge>
                       </div>
                     </>
                   )}
@@ -283,16 +283,16 @@ export default function ConfiguracoesPage() {
         </section>
 
         {/* SEÇÃO PROFISSIONAIS */}
-        <section className="space-y-6 pt-6 border-t border-slate-200 dark:border-slate-800">
+        <section className="space-y-5 pt-6 mt-8 border-t border-gray-600">
           <div className="flex items-center gap-2 border-l-4 border-emerald-500 pl-4">
             <UserCog className="w-5 h-5 text-emerald-500" />
             <h2 className="text-lg font-black uppercase text-slate-800 dark:text-slate-100">Profissionais</h2>
           </div>
 
-          <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row gap-3 shadow-sm">
-            <Input placeholder="NOME DO PROFISSIONAL" className="h-10 text-[10px] font-black tracking-widest" value={novoProfissional.nome} onChange={e => setNovoProfissional({ ...novoProfissional, nome: e.target.value })} />
+          <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-400 dark:border-gray-600 flex flex-col sm:flex-row gap-3 shadow-sm">
+            <Input placeholder="NOME DO PROFISSIONAL" className="h-10 text-[10px] font-black tracking-widest border border-gray-400 dark:border-gray-600" value={novoProfissional.nome} onChange={e => setNovoProfissional({ ...novoProfissional, nome: e.target.value })} />
             <Select onValueChange={(val) => setNovoProfissional({ ...novoProfissional, especialidade_id: val })}>
-              <SelectTrigger className="h-10 w-full sm:w-[300px] text-[10px] font-black uppercase"><SelectValue placeholder="ESPECIALIDADE INICIAL" /></SelectTrigger>
+              <SelectTrigger className="h-10 w-full sm:w-[300px] text-[10px] font-black uppercase border border-gray-400 dark:border-gray-600"><SelectValue placeholder="ESPECIALIDADE INICIAL" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value={ID_RECEPCAO} className="text-[10px] font-black uppercase text-emerald-500">RECEPÇÃO</SelectItem>
                 {especialidades.map(e => (<SelectItem key={e.id} value={e.id} className="text-[10px] font-black uppercase">{e.nome}</SelectItem>))}
@@ -303,7 +303,7 @@ export default function ConfiguracoesPage() {
 
           <div className="flex flex-col sm:flex-row flex-wrap gap-4">
             {profissionais.map((p) => (
-              <Card key={p.id} className="group border-none bg-white dark:bg-slate-900 shadow-sm hover:border-emerald-500/30 transition-all border">
+              <Card key={p.id} className="group border border-gray-400 dark:border-gray-600 bg-white dark:bg-gray-900 shadow-sm hover:border-emerald-500/30 transition-all border">
                 <CardContent className="p-0">
                   <div className="h-1 bg-emerald-500" />
                   <div className="p-5 space-y-4">
@@ -357,9 +357,9 @@ export default function ConfiguracoesPage() {
                           </Badge>
                         )}
                       </div>
-                      <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+                      <div className="mt-4 pt-4 border-t border-gray-400 dark:border-gray-600">
                         <Select onValueChange={(val) => adicionarEspecialidadeAoProfissional(p.id, val)}>
-                          <SelectTrigger className="h-8 text-[9px] font-black uppercase"><SelectValue placeholder="+ Adicionar Especialidade" /></SelectTrigger>
+                          <SelectTrigger className="border border-gray-400 dark:border-gray-600 h-8 text-[9px] font-black uppercase"><SelectValue placeholder="+ Adicionar Especialidade" /></SelectTrigger>
                           <SelectContent>
                             {especialidades.map(e => (<SelectItem key={e.id} value={e.id} className="text-[10px] font-black uppercase">{e.nome}</SelectItem>))}
                           </SelectContent>

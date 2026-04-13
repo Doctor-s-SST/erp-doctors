@@ -66,14 +66,11 @@ export default function SignUpForm() {
   }
 
   return (
-    <div className=" w-full flex min-h-screen items-center justify-center px-4">
+    <div className="w-full flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-md space-y-6">
 
         <div className="text-center">
           <h1 className="text-3xl font-bold">Criar conta</h1>
-          <p className="text-muted-foreground text-sm">
-            Comece agora
-          </p>
         </div>
 
         <Card className="shadow-xl border-0">
@@ -132,7 +129,7 @@ export default function SignUpForm() {
                 )}
               </div>
 
-              <Button className="w-full h-11" disabled={isSubmitting}>
+              <Button className="w-full h-11 hover:opacity-90" disabled={isSubmitting}>
                 {isSubmitting ? (
                   <Loader2 className="animate-spin h-4 w-4" />
                 ) : (
@@ -143,7 +140,7 @@ export default function SignUpForm() {
 
             <p className="text-center text-sm text-muted-foreground">
               Já tem conta?{" "}
-              <Link href="/signin" className="text-primary">
+              <Link href="/signin" className="text-primary underline">
                 Entrar
               </Link>
             </p>

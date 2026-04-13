@@ -26,7 +26,7 @@ const ROLE_COLORS: any = {
   admin: { bg: "bg-blue-500", light: "bg-blue-500/10", text: "text-blue-500", border: "hover:border-blue-500/30" },
   recepcao: { bg: "bg-orange-500", light: "bg-orange-500/10", text: "text-orange-500", border: "hover:border-orange-500/30" },
   especialista: { bg: "bg-emerald-500", light: "bg-emerald-500/10", text: "text-emerald-500", border: "hover:border-emerald-500/30" },
-  all: { bg: "bg-slate-900", light: "bg-slate-100", text: "text-slate-600" }
+  all: { bg: "bg-gray-900", light: "bg-slate-100", text: "text-slate-600" }
 };
 
 const ROLE_ORDER: any = {
@@ -130,43 +130,39 @@ export default function UsersManagementPage() {
   });
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-4 md:p-8 font-sans">
-      <div className="max-w-7xl mx-auto space-y-6">
+    <div className="min-h-fit mt-2 space-y-8 bg-gray-500/20 rounded-xl p-2">
+      <div className="w-full mx-auto space-y-3">
 
         {/* HEADER */}
-        <div className="bg-slate-900 rounded-2xl shadow-2xl p-6 flex flex-col md:flex-row justify-between items-center gap-6 border border-slate-800">
+        <div className="bg-gray-900 rounded-2xl shadow-2xl p-2 flex flex-col md:flex-row justify-between items-center gap-6 border border-gray-600">
           <div className="flex items-center gap-4">
             <div className="bg-emerald-500/20 p-3 rounded-xl">
-              <ShieldCheck className="w-8 h-8 text-emerald-400" />
+              <ShieldCheck className="w-5 h-5 text-emerald-400" />
             </div>
-            <div>
-              <h1 className="text-xl md:text-2xl font-black text-white tracking-tight uppercase leading-none">
-                Controle de Acessos
-              </h1>
-              <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-2">
-                Rede Doctor's • Gestão de Profissionais
-              </p>
+            <div className="space-y-1">
+              <h1 className="text-xl md:text-2xl font-black text-white tracking-tight uppercase">Controle de Acesso</h1>
+              <p className="text-gray-400 text-[11px] font-bold tracking-[0.2em] uppercase">Gestão de Profissionais</p>
             </div>
           </div>
         </div>
 
         {/* BARRA DE BUSCA E BOTÕES DE FILTRO */}
-        <div className="flex flex-col gap-4 bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className="flex flex-col gap-3 bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-400 dark:border-gray-600 shadow-sm">
           <div className="flex flex-col md:flex-row gap-4 justify-between items-center">
 
             {/* Campo de Busca */}
             <div className="relative w-full md:max-w-xs">
               <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
               <Input
-                placeholder="BUSCAR NOME OU EMAIL..."
-                className="pl-10 h-10 border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 uppercase text-[9px] font-black tracking-widest"
+                placeholder="Buscar nome ou e-mail..."
+                className="pl-9 h-10 border-gray-400 dark:border-gray-600 text-[9px] font-black tracking-widest"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
 
             {/* Filtros por Role */}
-            <div className="flex flex-wrap gap-2 justify-center">
+            <div className="flex flex-wrap gap-1 justify-center">
               {[
                 { id: "all", label: "TODOS", icon: Users },
                 { id: "admin", label: "ADMIN", icon: ShieldAlert },
@@ -178,8 +174,8 @@ export default function UsersManagementPage() {
                   variant={activeRole === role.id ? "default" : "outline"}
                   onClick={() => setActiveRole(role.id)}
                   className={`h-9 px-4 text-[9px] font-black tracking-tighter uppercase transition-all ${activeRole === role.id
-                    ? (ROLE_COLORS[role.id]?.bg || 'bg-slate-900') + " text-white border-none shadow-md"
-                    : "border-slate-200 dark:border-slate-800 text-slate-500 hover:bg-slate-50"
+                    ? (ROLE_COLORS[role.id]?.bg || 'bg-gray-900') + " text-white border-none shadow-md"
+                    : "border-gray-600 text-slate-500 hover:bg-slate-50"
                     }`}
                 >
                   <role.icon className="w-3.5 h-3.5 mr-2" />
@@ -190,7 +186,7 @@ export default function UsersManagementPage() {
           </div>
 
           <div className="flex items-center justify-end">
-            <Badge variant="outline" className="text-[9px] font-black border-slate-200 text-slate-400 uppercase py-1">
+            <Badge variant="outline" className="text-[9px] font-black border-gray-600 text-slate-400 uppercase py-1">
               {filteredUsers.length} RESULTADOS ENCONTRADOS
             </Badge>
           </div>
@@ -208,7 +204,7 @@ export default function UsersManagementPage() {
               const colorScheme = ROLE_COLORS[user.role] || ROLE_COLORS.especialista;
 
               return (
-                <Card key={user.id} className={`group border-none bg-white dark:bg-slate-900 overflow-hidden shadow-sm hover:shadow-md transition-all border border-transparent ${colorScheme.border}`}>
+                <Card key={user.id} className={`group border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 overflow-hidden shadow-sm hover:shadow-md transition-all ${colorScheme.border}`}>
                   <CardContent className="p-0">
                     {/* Barra de cor topo */}
                     <div className={`h-1.5 ${colorScheme.bg}`} />
@@ -242,7 +238,7 @@ export default function UsersManagementPage() {
                         </div>
                       </div>
 
-                      <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-wrap gap-2">
+                      <div className="pt-2 border-t border-gray-600 flex flex-wrap gap-2">
                         {user.especialidade_id && (
                           <Badge className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[9px] font-black border-none uppercase tracking-widest py-1">
                             <Stethoscope className="w-2.5 h-2.5 mr-1" />

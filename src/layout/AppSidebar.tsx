@@ -41,6 +41,7 @@ const navItems: NavItem[] = [
       { name: "Chamada de Senhas", path: "/sistema-filas/senhas-recepcao", roles: ["admin", "recepcao"] },
       { name: "Filas", path: "/sistema-filas/filas", roles: ["admin", "recepcao", "especialista"] },
       { name: "Painel TV", path: "/painel-senhas", roles: ["admin"] },
+      { name: "Relatórios", path: "/relatorios", roles: ["admin"] },
     ],
   },
   {

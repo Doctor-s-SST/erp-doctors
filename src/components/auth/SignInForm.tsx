@@ -83,7 +83,7 @@ export default function SignInForm() {
   }
 
   return (
-    <div className=" w-full flex min-h-screen items-center justify-center px-4">
+    <div className="w-full flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-md space-y-6">
 
         <div className="text-center">
@@ -126,7 +126,7 @@ export default function SignInForm() {
                 )}
               </div>
 
-              <Button className="w-full h-11" disabled={isSubmitting}>
+              <Button className="w-full h-11 hover:opacity-90" disabled={isSubmitting}>
                 {isSubmitting ? (
                   <Loader2 className="animate-spin h-4 w-4" />
                 ) : (
@@ -137,7 +137,7 @@ export default function SignInForm() {
 
             <p className="text-center text-sm text-muted-foreground">
               Não tem conta?{" "}
-              <Link href="/signup" className="text-primary">
+              <Link href="/signup" className="text-primary underline">
                 Criar conta
               </Link>
             </p>

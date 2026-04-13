@@ -1,6 +1,14 @@
 import { createClient } from "@/lib/server-supabase"
 import { redirect } from "next/navigation"
 import AdminLayoutClient from "./AdminLayoutClient"
+import { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title:
+    "Doctor's | Sistema de Gestão Integrada",
+  description: "Sistema de Gestão Integrada para Doctor's Saúde e Segurança do Trabalho",
+};
+
 
 export default async function AdminLayout({
   children,
