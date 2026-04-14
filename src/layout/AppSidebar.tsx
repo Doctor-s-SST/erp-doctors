@@ -10,7 +10,7 @@ import {
   HorizontaLDots,
   UserCircleIcon,
 } from "../icons/index";
-import { House, MonitorCog, Settings } from 'lucide-react';
+import { ChartGantt, House, LayoutDashboard, MonitorCog, Settings } from 'lucide-react';
 import { supabase } from "@/lib/supabase";
 
 type NavItem = {
@@ -33,17 +33,25 @@ const navItems: NavItem[] = [
     roles: ["admin", "recepcao", "especialista"],
   },
   {
-    name: "Painel de Senhas",
+    name: "Gestão de Filas",
     icon: <MonitorCog className="w-5 h-5" />,
     roles: ["admin", "recepcao", "especialista"],
     subItems: [
-      { name: "Kanban", path: "/sistema-filas/kanban", roles: ["admin"] },
       { name: "Chamada de Senhas", path: "/sistema-filas/senhas-recepcao", roles: ["admin", "recepcao"] },
       { name: "Filas", path: "/sistema-filas/filas", roles: ["admin", "recepcao", "especialista"] },
       { name: "Painel TV", path: "/painel-senhas", roles: ["admin"] },
-      { name: "Relatórios", path: "/relatorios", roles: ["admin"] },
+      { name: "Relatórios", path: "/sistema-filas/relatorios", roles: ["admin"] },
+      { name: "Kanban", path: "/sistema-filas/kanban", roles: ["admin"] },
     ],
-  },
+  },  
+  {
+    name: "Dashboards",
+    icon: <ChartGantt  className="w-5 h-5" />,
+    roles: ["admin"],
+    subItems: [
+      { name: "Depto. Atendimento", path: "/dashboards/atendimento/", roles: ["admin"] },
+    ],
+  },  
   {
     name: "Configurações",
     icon: <Settings className="w-5 h-5" />,

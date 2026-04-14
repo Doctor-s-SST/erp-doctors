@@ -75,6 +75,12 @@ export function StatusSenhaRecep({ isOpen, onClose, atendimento }: StatusSenhaRe
               <Clock className="w-3 h-3" /> Observação: {atendimento.observacao}
             </div>
             }
+            
+            {atendimento.encaixe && 
+            <div className="flex items-center gap-1 text-[11px] font-bold text-green-700 uppercase border-2 p-1 border-green-700 rounded-lg">
+              Encaixe
+            </div>
+            }
           </div>
         </DialogHeader>
 

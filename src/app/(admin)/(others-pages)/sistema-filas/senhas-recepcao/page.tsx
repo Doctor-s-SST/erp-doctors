@@ -35,6 +35,7 @@ type Atendimento = {
     num_sala?: string | null
     profissional?: string | null
     // unidadeId: string
+    encaixe: boolean
 }
 
 type ConfigOrdenacao = {
@@ -80,7 +81,8 @@ export default function RecepcaoPage() {
         exame: { tipo: "" },
         exames: [] as Array<{ exame: string }>,
         especialidadesSelecionadas: [] as number[],
-        observacao: ""
+        observacao: "",
+        encaixe: false
     }
     const [formFicha, setFormFicha] = useState(initialFormFicha)
 
@@ -465,7 +467,8 @@ export default function RecepcaoPage() {
             p_especialidades_ids: especialidadesSelecionadas,
             p_exames_nomes: formFicha.exames,
             p_observacao: formFicha.observacao,
-            p_unidade_id: unidadeId
+            p_unidade_id: unidadeId,
+            p_encaixe: formFicha.encaixe
         });
 
         if (error) {
@@ -565,7 +568,8 @@ export default function RecepcaoPage() {
                 exame: { tipo: "" },
                 exames: detalhes.exames_list || [],
                 especialidadesSelecionadas: [],
-                observacao: detalhes.observacao || ""
+                observacao: detalhes.observacao || "",
+                encaixe: detalhes.encaixe
             });
         } else {
             const idTriagem = getIdTriagem();
@@ -598,14 +602,14 @@ export default function RecepcaoPage() {
             if (error) throw error;
 
             // Chamada para a API com os campos separados
-            await fetch("/api/imprimir-senha", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    senha: senhaGerada,
-                    ip: selectedPrinter?.ip
-                })
-            });
+            // await fetch("/api/imprimir-senha", {
+            //     method: "POST",
+            //     headers: { "Content-Type": "application/json" },
+            //     body: JSON.stringify({
+            //         senha: senhaGerada,
+            //         ip: selectedPrinter?.ip
+            //     })
+            // });
 
             toast.success(`Senha ${senhaGerada} gerada!`);
             fetchData();
@@ -640,8 +644,9 @@ export default function RecepcaoPage() {
         });
     };
 
-    const iniciarFinalizacaoComDelay = (id: string) => {
-        const TEMPO_ESPERA = 10;
+    const iniciarFinalizacaoComDelay = (id: string, encaixe: boolean) => {
+        const TEMPO_ESPERA = encaixe ? 1800 : 30; // 🔥 30min ou 30s
+
         const idsParaFinalizar = obterIdsConsolidados();
 
         setFinalizandoIds(prev => ({ ...prev, [id]: TEMPO_ESPERA }));
@@ -650,7 +655,6 @@ export default function RecepcaoPage() {
             setFinalizandoIds(prev => {
                 const tempoAtual = prev[id];
 
-                // Se o ID não está mais no estado (cancelado), limpa o intervalo
                 if (tempoAtual === undefined) {
                     clearInterval(interval);
                     return prev;
@@ -668,6 +672,7 @@ export default function RecepcaoPage() {
                     const { [id]: _, ...rest } = prev;
                     return rest;
                 }
+
                 return { ...prev, [id]: tempoAtual - 1 };
             });
         }, 1000);
@@ -1004,7 +1009,7 @@ export default function RecepcaoPage() {
                                                             <span className={`text-lg font-black leading-none ${item.tipo_senha === "PREFERENCIAL" ? "text-orange-600" : "text-blue-600"}`}>
                                                                 {item.senha_codigo}
                                                             </span>
-                                                            <span className="text-[9px] font-bold text-gray-400 uppercase">{item.tipo_senha}</span>
+                                                            <span className={`text-[9px] font-bold ${item.encaixe ? "text-green-700 text-[10px]" : "text-gray-400"} uppercase`}>{item.encaixe ? "encaixe" : item.tipo_senha}</span>
                                                         </div>
                                                     </td>
 
@@ -1104,41 +1109,57 @@ export default function RecepcaoPage() {
                                                                         <>
                                                                             {finalizandoIds[item.id] ? (
                                                                                 <div className="flex items-center gap-1">
-                                                                                    {/* BOTÃO COM CONTAGEM */}
+
+                                                                                    {/* CONTADOR */}
                                                                                     <Button
                                                                                         size="sm"
                                                                                         disabled
                                                                                         className="h-8 text-[11px] font-bold bg-gray-600 min-w-[90px] text-white"
                                                                                     >
                                                                                         <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                                                                                        {finalizandoIds[item.id]}s
+                                                                                        {finalizandoIds[item.id] > 60
+                                                                                            ? `${Math.floor(finalizandoIds[item.id] / 60)}m`
+                                                                                            : `${finalizandoIds[item.id]}s`}
                                                                                     </Button>
 
-                                                                                    {/* BOTÃO PARA CANCELAR A CONTAGEM */}
-                                                                                    <TooltipProvider>
-                                                                                        <Tooltip>
-                                                                                            <TooltipTrigger asChild>
-                                                                                                <Button
-                                                                                                    size="sm"
-                                                                                                    variant="destructive"
-                                                                                                    className="h-8 w-8 p-0"
-                                                                                                    onClick={() => cancelarFinalizacao(item.id)}
-                                                                                                >
-                                                                                                    <X className="w-4 h-4" />
-                                                                                                </Button>
-                                                                                            </TooltipTrigger>
-                                                                                            <TooltipContent>Interromper finalização</TooltipContent>
-                                                                                        </Tooltip>
-                                                                                    </TooltipProvider>
+                                                                                    {/* CANCELAR */}
+                                                                                    <Button
+                                                                                        size="sm"
+                                                                                        variant="destructive"
+                                                                                        className="h-8 w-8 p-0"
+                                                                                        onClick={() => cancelarFinalizacao(item.id)}
+                                                                                    >
+                                                                                        <X className="w-4 h-4" />
+                                                                                    </Button>
+
+                                                                                    {item.encaixe && (
+                                                                                        // FORÇAR FINALIZAÇÃO
+                                                                                        <Button
+                                                                                            size="sm"
+                                                                                            className="h-8 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700"
+                                                                                            onClick={() => {
+                                                                                                cancelarFinalizacao(item.id);
+                                                                                    
+                                                                                                executarAcao("finalizar_recepcao", {
+                                                                                                    p_atendimento_id: item.id,
+                                                                                                    p_especialidades_ids: obterIdsConsolidados()
+                                                                                                });
+                                                                                            }}
+                                                                                        >
+                                                                                            Forçar finalização
+                                                                                        </Button>
+                                                                                    )}
+
                                                                                 </div>
                                                                             ) : (
-                                                                                // BOTÃO NORMAL
                                                                                 <Button
                                                                                     size="sm"
                                                                                     disabled={!fichaPronta}
-                                                                                    className={`h-8 text-[11px] font-bold ${fichaPronta ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-gray-300'
+                                                                                    className={`h-8 text-[11px] font-bold ${fichaPronta
+                                                                                        ? 'bg-emerald-600 hover:bg-emerald-700'
+                                                                                        : 'bg-gray-300'
                                                                                         }`}
-                                                                                    onClick={() => iniciarFinalizacaoComDelay(item.id)}
+                                                                                    onClick={() => iniciarFinalizacaoComDelay(item.id, item.encaixe)}
                                                                                 >
                                                                                     <CheckCircle2 className="w-3 h-3 mr-1" />
                                                                                     Finalizar
@@ -1439,6 +1460,50 @@ export default function RecepcaoPage() {
                                     value={formFicha.observacao}
                                     onChange={(e) => setFormFicha({ ...formFicha, observacao: e.target.value })}
                                 />
+                            </div>
+                        </section>
+
+                        <section className="space-y-3 pt-4 border-t border-gray-100">
+                            <div className="flex items-center justify-between p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/40">
+
+                                <div>
+                                    <p className="text-xs font-black uppercase text-gray-600 dark:text-gray-300">
+                                        Atendimento de Encaixe
+                                    </p>
+                                    <p className="text-[10px] text-gray-400">
+                                        Define o tempo automático de finalização
+                                    </p>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        setFormFicha(prev => ({
+                                            ...prev,
+                                            encaixe: !prev.encaixe
+                                        }))
+                                    }
+                                    className={`w-14 h-7 flex items-center rounded-full transition-all ${formFicha.encaixe ? "bg-amber-500" : "bg-gray-300"
+                                        }`}
+                                >
+                                    <div
+                                        className={`h-6 w-6 bg-white rounded-full shadow transform transition-all ${formFicha.encaixe ? "translate-x-7" : "translate-x-1"
+                                            }`}
+                                    />
+                                </button>
+                            </div>
+
+                            {/* ENCAIXE */}
+                            <div className="text-[10px] font-bold uppercase tracking-widest text-center">
+                                {formFicha.encaixe ? (
+                                    <span className="text-amber-600">
+                                        Tempo de finalização: 30 MINUTOS
+                                    </span>
+                                ) : (
+                                    <span className="text-blue-600">
+                                        Tempo de finalização: 30 SEGUNDOS
+                                    </span>
+                                )}
                             </div>
                         </section>
 

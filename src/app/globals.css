@@ -211,6 +211,11 @@
   ::file-selector-button {
     border-color: var(--color-gray-200, currentColor);
   }
+  :root {
+    /* Força o navegador a trabalhar com srgb para evitar que o 
+       html2canvas tente parsear funções de cor modernas */
+    color-interpolation-filters: sRGB;
+  }
   button:not(:disabled),
   [role="button"]:not(:disabled) {
     cursor: pointer;
