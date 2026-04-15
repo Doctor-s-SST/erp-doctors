@@ -1,9 +1,8 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
-import { ArrowRight, Stethoscope, Monitor } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface Chamada {
@@ -16,16 +15,9 @@ interface Chamada {
 }
 
 const salasAndar = {
-  '1': 'térreo',
-  '2': 'térreo',
-  '3': 'térreo',
-  '4': 'térreo',
-  '5': 'térreo',
-  '6': 'térreo',
-  '7': 'primeiro andar',
-  '8': 'primeiro andar',
-  '9': 'primeiro andar',
-  '10': 'primeiro andar',
+  '1': 'térreo', '2': 'térreo', '3': 'térreo', '4': 'térreo', '5': 'térreo',
+  '6': 'térreo', '7': 'primeiro andar', '8': 'primeiro andar',
+  '9': 'primeiro andar', '10': 'primeiro andar',
 };
 
 export default function PainelTV() {
@@ -34,22 +26,31 @@ export default function PainelTV() {
   const [fila, setFila] = useState<Chamada[]>([]);
   const [processando, setProcessando] = useState(false);
   const [unidadeId, setUnidadeId] = useState<string | null>(null);
+  const [ativado, setAtivado] = useState(false);
 
-  const lastTimeRef = useRef<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // 1. FUNÇÃO DE VOZ MELHORADA
+  // Formatação de data seguindo seu design
+  const data = new Date();
+  const dataAtual = {
+    weekday: data.toLocaleDateString('pt-BR', { weekday: 'long' }),
+    day: data.toLocaleDateString('pt-BR', { day: '2-digit' }),
+    month: data.toLocaleDateString('pt-BR', { month: 'long' }),
+    year: data.getFullYear()
+  };
+
+  // 1. VOZ COM GRAMÁTICA CORRIGIDA
   const executarChamadaSonora = (chamada: Chamada) => {
-    return new Promise<void>((resolve) => {
+    return new Promise<void>(async (resolve) => {
       const falar = (texto: string) => {
         return new Promise<void>((res) => {
           window.speechSynthesis.cancel();
           const msg = new SpeechSynthesisUtterance(texto);
           msg.lang = 'pt-BR';
-          msg.rate = 0.85;
+          msg.rate = 0.9;
           msg.onend = () => res();
           msg.onerror = () => res();
-          window.speechSynthesis.speak(msg);
+          setTimeout(() => window.speechSynthesis.speak(msg), 150);
         });
       };
 
@@ -58,213 +59,123 @@ export default function PainelTV() {
           if (!audioRef.current) return res();
           audioRef.current.pause();
           audioRef.current.currentTime = 0;
-          audioRef.current.play()
-            .then(() => setTimeout(res, 1800))
-            .catch(() => res());
+          audioRef.current.play().catch(() => res());
+          audioRef.current.onended = () => res();
+          setTimeout(res, 3000); // safety timeout
         });
       };
 
-      // Proteção para senha não definida
       const senhaSoletreada = (chamada.senha_codigo || "").split('').join(' ');
-      const identificador = chamada.nome_paciente
-        ? `${chamada.nome_paciente}`
-        : `Senha, ${senhaSoletreada}`;
+      const identificador = chamada.nome_paciente ? `${chamada.nome_paciente}` : `Senha, ${senhaSoletreada}`;
+      const destino = chamada.origem === 'RECEPCAO' ? `comparecer ao guichê ${chamada.guiche}` : `comparecer à sala ${chamada.guiche}`;
+      const textoFinal = `${identificador}, ${destino}`;
 
-      let local = "";
-      const guicheAtual = chamada.guiche || "";
-
-      if (chamada.origem === 'RECEPCAO') {
-        local = `comparecer ao guichê ${guicheAtual}`;
-      } else {
-        // Busca o andar com fallback para evitar undefined no texto falado
-        const andar = salasAndar[guicheAtual as keyof typeof salasAndar];
-
-        // Se for a unidade específica E tiver mapeamento de andar
-        if (unidadeId === "ba83f0b4-1b16-4b07-9473-fe929f16f881" && andar) {
-          local = `comparecer à sala ${guicheAtual}, ${andar}`;
-        } else {
-          local = `comparecer à sala ${guicheAtual}`;
-        }
+      try {
+        await tocarSino();
+        await falar(textoFinal);
+        await new Promise(r => setTimeout(r, 1500));
+        await tocarSino();
+        await falar(textoFinal);
+      } finally {
+        resolve();
       }
-      console.log(local)
-
-      const textoFinal = `${identificador}, ${local}`;
-
-      (async () => {
-        try {
-          await tocarSino();
-          await falar(textoFinal);
-          await new Promise(r => setTimeout(r, 1000));
-          await tocarSino();
-          await falar(textoFinal);
-        } catch (e) {
-          console.error("Erro na sequência de áudio", e);
-        } finally {
-          resolve();
-        }
-      })();
     });
   };
 
   // 2. PROCESSADOR DE FILA
   useEffect(() => {
-    async function processarFila() {
-      if (fila.length > 0 && !processando && unidadeId) {
+    async function processar() {
+      if (fila.length > 0 && !processando && unidadeId && ativado) {
         setProcessando(true);
-        const proxima = fila[0];
+        const atual = fila[0];
 
-        setUltimaChamada(proxima);
-        setHistorico(prev => [proxima, ...prev.filter(h => h.id !== proxima.id)].slice(0, 7));
+        setUltimaChamada(atual);
+        setHistorico(prev => [atual, ...prev.filter(h => h.id !== atual.id)].slice(0, 6));
 
-        try {
-          const tabela = proxima.origem === 'RECEPCAO' ? 'atendimentos' : 'atendimento_exames';
-          const novoStatus = proxima.origem === 'RECEPCAO' ? 'EM_RECEPCAO' : 'EM_ATENDIMENTO';
-          await supabase.from(tabela).update({ status: novoStatus }).eq('id', proxima.id);
-        } catch (err) { console.error("Erro ao atualizar status:", err); }
+        const tab = atual.origem === 'RECEPCAO' ? 'atendimentos' : 'atendimento_exames';
+        const st = atual.origem === 'RECEPCAO' ? 'EM_RECEPCAO' : 'EM_ATENDIMENTO';
+        supabase.from(tab).update({ status: st }).eq('id', atual.id).then();
 
-        await executarChamadaSonora(proxima);
+        await executarChamadaSonora(atual);
+        await new Promise(r => setTimeout(r, 5000));
 
-        await new Promise(res => setTimeout(res, 3000));
         setFila(prev => prev.slice(1));
         setProcessando(false);
       }
     }
-    processarFila();
-  }, [fila, processando, unidadeId]);
+    processar();
+  }, [fila, processando, unidadeId, ativado]);
 
+  // 3. BUSCA COM INTERCALAÇÃO (Zip-Merge)
   useEffect(() => {
-    const obterUnidade = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('unidade_id')
-          .eq('id', user.id)
-          .single();
+    if (!unidadeId) return;
 
-        if (profile?.unidade_id) {
-          setUnidadeId(profile.unidade_id);
+    const fetchDados = async () => {
+      try {
+        const { data: rec } = await supabase.from('atendimentos').select('id, senha_codigo, guiche, updated_at, pacientes(nome)').eq('status', 'EM_FILA').eq('unidade_id', unidadeId).order('updated_at', { ascending: true });
+        const { data: exm } = await supabase.from('atendimento_exames').select(`id, num_sala, atendimentos!inner(senha_codigo, updated_at, unidade_id, pacientes(nome))`).eq('status', 'EM_FILA').eq('atendimentos.unidade_id', unidadeId).order('atendimentos(updated_at)', { ascending: true });
+
+        const lRec: Chamada[] = rec?.map(r => ({ id: r.id, senha_codigo: r.senha_codigo, nome_paciente: (r.pacientes as any)?.nome, guiche: r.guiche, origem: 'RECEPCAO', updated_at: r.updated_at })) || [];
+        const lExm: Chamada[] = exm?.map(e => {
+          const a = Array.isArray(e.atendimentos) ? e.atendimentos[0] : (e.atendimentos as any);
+          return { id: e.id, senha_codigo: a.senha_codigo, nome_paciente: a.pacientes?.nome, guiche: e.num_sala, origem: 'EXAME', updated_at: a.updated_at };
+        }) || [];
+
+        const intercalados: Chamada[] = [];
+        const max = Math.max(lRec.length, lExm.length);
+        for (let i = 0; i < max; i++) {
+          if (lRec[i]) intercalados.push(lRec[i]);
+          if (lExm[i]) intercalados.push(lExm[i]);
         }
-      }
+
+        if (intercalados.length > 0) {
+          setFila(prev => {
+            const ids = new Set(prev.map(p => p.id));
+            return [...prev, ...intercalados.filter(n => !ids.has(n.id))];
+          });
+        }
+      } catch (e) { console.error(e); }
     };
-    obterUnidade();
-  }, []);
-
-  // 3. BUSCA DE DADOS (COM INTERCALAÇÃO)
-  async function fetchDados() {
-    if (!unidadeId) return;
-
-    try {
-      // 1. Busca Recepção filtrando por unidade
-      const { data: rec } = await supabase
-        .from('atendimentos')
-        .select('id, senha_codigo, guiche, updated_at, pacientes(nome)')
-        .eq('status', 'EM_FILA')
-        .eq('unidade_id', unidadeId) // FILTRO ADICIONADO
-        .order('updated_at', { ascending: true })
-        .limit(3);
-
-      // 2. Busca Exames filtrando por unidade
-      // Note que usamos o !inner no join para filtrar a unidade do atendimento pai
-      const { data: exm } = await supabase
-        .from('atendimento_exames')
-        .select(`
-        id, 
-        num_sala, 
-        status,
-        atendimentos!inner(
-          senha_codigo, 
-          updated_at,
-          unidade_id,
-          pacientes(nome)
-        )
-      `)
-        .eq('status', 'EM_FILA')
-        .eq('atendimentos.unidade_id', unidadeId) // FILTRO NO JOIN ADICIONADO
-        .limit(3);
-
-      const novosParaFila: Chamada[] = [];
-
-      // Processa Recepção
-      rec?.forEach(r => {
-        if (!lastTimeRef.current || r.updated_at > lastTimeRef.current) {
-          const p = Array.isArray(r.pacientes) ? r.pacientes[0] : r.pacientes;
-          novosParaFila.push({
-            id: r.id,
-            senha_codigo: r.senha_codigo,
-            nome_paciente: p?.nome,
-            guiche: r.guiche,
-            origem: 'RECEPCAO',
-            updated_at: r.updated_at
-          });
-        }
-      });
-
-      // Processa Exames
-      exm?.forEach(e => {
-        // No Supabase, o retorno do join pode vir como objeto ou array
-        const atalhes = Array.isArray(e.atendimentos) ? e.atendimentos[0] : e.atendimentos;
-        if (!atalhes) return;
-
-        const p = Array.isArray(atalhes.pacientes) ? atalhes.pacientes[0] : atalhes.pacientes;
-        const dataReferencia = atalhes.updated_at;
-
-        // Se não houver lastTimeRef, pegamos os registros atuais para popular o histórico sem chamar áudio
-        // Se houver, comparamos para saber se é novo
-        if (dataReferencia && (!lastTimeRef.current || dataReferencia > lastTimeRef.current)) {
-          novosParaFila.push({
-            id: e.id,
-            senha_codigo: atalhes.senha_codigo || '---',
-            nome_paciente: p?.nome,
-            guiche: e.num_sala, // Usa o num_sala da tabela de exames
-            origem: 'EXAME',
-            updated_at: dataReferencia
-          });
-        }
-      });
-
-      if (novosParaFila.length > 0) {
-        novosParaFila.sort((a, b) => a.updated_at.localeCompare(b.updated_at));
-
-        setFila(prev => {
-          const idsExistentes = new Set(prev.map(i => i.id));
-          const filtrados = novosParaFila.filter(n => !idsExistentes.has(n.id));
-          return [...prev, ...filtrados];
-        });
-
-        lastTimeRef.current = novosParaFila[novosParaFila.length - 1].updated_at;
-      }
-    } catch (err) {
-      console.error("Erro no polling:", err);
-    }
-  }
-
-  useEffect(() => {
-    if (!unidadeId) return;
 
     fetchDados();
-    const interval = setInterval(fetchDados, 4000);
-    return () => clearInterval(interval);
+    const inv = setInterval(fetchDados, 4000);
+    return () => clearInterval(inv);
   }, [unidadeId]);
 
-  const data = new Date();
-  const dataAtual = {
-    weekday: data.toLocaleDateString('pt-BR', { weekday: 'long' }),
-    day: data.toLocaleDateString('pt-BR', { day: '2-digit' }),
-    month: data.toLocaleDateString('pt-BR', { month: 'long' }),
-    year: data.toLocaleDateString('pt-BR', { year: 'numeric' }),
-  };
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        supabase.from('profiles').select('unidade_id').eq('id', user.id).single()
+          .then(({ data }) => data && setUnidadeId(data.unidade_id));
+      }
+    });
+  }, []);
+
+  // TELA DE ATIVAÇÃO
+  if (!ativado) {
+    return (
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-[#3498db] text-white p-10 text-center">
+        <img src="/images/logo/doctors-svg.svg" alt="Logo" className="h-24 mb-10 brightness-0 invert" />
+        <h1 className="text-4xl font-bold mb-4">Painel de Chamada Doctor's</h1>
+        <button 
+          onClick={() => setAtivado(true)}
+          className="px-12 py-6 bg-white text-[#3498db] rounded-full font-black text-3xl shadow-2xl hover:scale-110 active:scale-95 transition-all mb-6"
+        >
+          ATIVAR ÁUDIO E INICIAR
+        </button>
+        <p className="opacity-70 text-xl max-w-md">O navegador exige um clique para permitir que o sistema fale os nomes dos pacientes automaticamente.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen w-screen bg-white overflow-hidden flex flex-col font-sans">
       <audio ref={audioRef} src="/sounds/call-bell.wav" preload="auto" />
-      {/* <audio ref={audioRef} src="/sounds/alexis_gaming_cam-timer-terminer-342934.mp3" preload="auto" /> */}
-      {/* <audio ref={audioRef} src="/sounds/voicemail-notification-new-message-soundroll-2-2-00-03.mp3" preload="auto" /> */}
 
-      {/* HEADER */}
+      {/* HEADER DESIGN EXATO */}
       <header className="h-20 flex justify-between items-center px-5 py-2 bg-white shadow-[0px_2px_5px_0px_rgba(0,0,0,0.2)] z-10">
         <div className="flex items-center gap-2">
-          <img src="/images/logo/doctors-svg.svg" alt="Doctors" className="h-15" />
+          <img src="/images/logo/doctors-svg.svg" alt="Doctors" className="h-12" />
         </div>
         <p className="text-black font-medium text-lg capitalize">
           {dataAtual.weekday}, {dataAtual.day} <span className="lowercase">de {dataAtual.month} de</span> {dataAtual.year}
@@ -272,7 +183,7 @@ export default function PainelTV() {
       </header>
 
       {/* CONTEÚDO PRINCIPAL */}
-      <div className="flex flex-1 overflow-hidden"> {/* Adicionado gap para separar os lados se desejar */}
+      <div className="flex flex-1 overflow-hidden">
 
         {/* LADO ESQUERDO: DESTAQUE AZUL */}
         <div className="flex-[3.1] flex p-5">
@@ -284,22 +195,16 @@ export default function PainelTV() {
               exit={{ opacity: 0 }}
               className="relative w-full h-full shadow-[0px_4px_15px_0px_rgba(0,0,0,0.2)] bg-[#3498db] p-5 flex flex-col items-center justify-center overflow-hidden text-white rounded-lg"
             >
-              {/* CABEÇALHO INTERNO: Posicionado no topo */}
-              <div className="text-[2.2em] absolute top-10 flex flex-col items-center text-white font-bold uppercase" >
-                <h3 className="tracking-widest">
-                  Senha Atual
-                </h3>
+              <div className="text-[2.2em] absolute top-10 flex flex-col items-center text-white font-bold uppercase text-center" >
+                <h3 className="tracking-widest opacity-90">Senha Atual</h3>
                 {ultimaChamada?.nome_paciente && (
-                  <p>
-                    {ultimaChamada.senha_codigo}
-                  </p>
+                  <p className="text-5xl mt-2">{ultimaChamada.senha_codigo}</p>
                 )}
               </div>
 
-              {/* CONTEÚDO CENTRAL: Sempre no centro do main */}
-              <div className="flex flex-col items-center w-full">
+              <div className="flex flex-col items-center w-full mt-10">
                 {ultimaChamada?.nome_paciente ? (
-                  <h2 className="text-[6vw] leading-[1.1] font-black text-center wrap-break-word px-10 uppercase drop-shadow-md">
+                  <h2 className="text-[6vw] leading-[1.1] font-black text-center px-10 uppercase drop-shadow-md break-words">
                     {ultimaChamada.nome_paciente}
                   </h2>
                 ) : (
@@ -309,37 +214,31 @@ export default function PainelTV() {
                 )}
               </div>
 
-              {/* RODAPÉ INTERNO: Posicionado na base */}
-              <div className="absolute bottom-12 text-7xl font-bold uppercase tracking-tight flex items-center gap-4">
-                <div className="flex flex-col items-center text-center gap-2">
-                  <div className="flex gap-5">
+              <div className="absolute bottom-12 text-7xl font-bold uppercase tracking-tight flex flex-col items-center">
+                  <div className="flex gap-8">
                     <span>
-                      {ultimaChamada?.origem !== 'RECEPCAO' ? 'Sala' : 'Guichê'}
+                      {ultimaChamada?.origem === 'RECEPCAO' ? 'Guichê' : 'Sala'}
                     </span>
-                    <span >
+                    <span>
                       {ultimaChamada?.guiche || '-'}
                     </span>
                   </div>
-                  {ultimaChamada?.origem !== 'RECEPCAO' && (
-                    <div className="flex flex-col items-center">
-                      {/* Mostra o andar apenas se a unidadeId estiver carregada e for a correta */}
-                      {unidadeId === "ba83f0b4-1b16-4b07-9473-fe929f16f881" &&
-                        salasAndar[ultimaChamada?.guiche as keyof typeof salasAndar] && (
-                          <span className="text-5xl tracking-tight">
-                            {salasAndar[ultimaChamada?.guiche as keyof typeof salasAndar]}
-                          </span>
-                        )}
+                  
+                  {unidadeId === "ba83f0b4-1b16-4b07-9473-fe929f16f881" && (
+                    <div className="flex flex-col items-center mt-2">
+                      <span className="text-5xl tracking-tight">
+                        {salasAndar[ultimaChamada?.guiche as keyof typeof salasAndar] || ""}
+                      </span>
                     </div>
                   )}
-                </div>
               </div>
             </motion.main>
           </AnimatePresence>
         </div>
 
-        {/* LADO DIREITO: HISTÓRICO */}
+        {/* LADO DIREITO: HISTÓRICO DESIGN EXATO */}
         <aside className="shadow-[0px_4px_15px_0px_rgba(0,0,0,0.2)] flex-1 bg-white flex flex-col overflow-hidden">
-          <div className="p-5 border-b-2 border-[#3498db] mx-5">
+          <div className="p-4 border-b-2 border-[#3498db] mx-5">
             <h3 className="text-2xl font-bold text-black text-center">Últimas Senhas Chamadas</h3>
           </div>
           <div className="flex-1 flex flex-col">
@@ -350,20 +249,21 @@ export default function PainelTV() {
                   {item.origem === 'RECEPCAO' ? 'Guichê' : 'Sala'} {item.guiche}
                 </p>
                 {item.nome_paciente && (
-                  <p className="text-[1.4em] text-gray-400 break-word font-medium w-full text-center uppercase italic px-4">{item.nome_paciente}</p>
+                  <p className="text-[1.4em] text-gray-400 font-medium w-full text-center uppercase italic px-4 truncate">{item.nome_paciente}</p>
                 )}
               </div>
             ))}
             {historico.length <= 1 && (
-              <div className="flex-1 flex items-center justify-center text-gray-600 font-medium italic">
+              <div className="flex-1 flex items-center justify-center text-gray-400 font-medium italic">
                 Nenhuma chamada recente
               </div>
             )}
           </div>
         </aside>
       </div>
-      {/* FOOTER MARQUEE */}
-      <footer className="h-15 flex justify-between items-center px-5 py-2 bg-white shadow-[0px_0px_5px_2px_rgba(0,0,0,0.2)] z-10">
+
+      {/* FOOTER MARQUEE DESIGN EXATO */}
+      <footer className="h-16 flex justify-between items-center px-5 py-2 bg-white shadow-[0px_0px_5px_2px_rgba(0,0,0,0.2)] z-10 overflow-hidden">
         <div className="animate-marquee whitespace-nowrap text-black text-[18px] font-medium px-4">
           Aviso: Realizamos diversos exames, porém, você será chamado somente para salas correspondentes ao seu tipo de atendimento.
         </div>
@@ -371,8 +271,8 @@ export default function PainelTV() {
 
       <style jsx>{`
         @keyframes marquee {
-          0% { transform: translateX(150%); }
-          100% { transform: translateX(-100%); }
+          0% { transform: translateX(100%); }
+          100% { transform: translateX(-150%); }
         }
         .animate-marquee {
           display: inline-block;

@@ -169,7 +169,7 @@ export default function FilaPage() {
             isMinhaSala = true
         }
 
-        if (item.status_atendimento.startsWith('EM_') && item.status === "EM_FILA") {
+        if ((item.status_atendimento.startsWith('EM_') && item.status === "EM_FILA")) {
             return {
                 color: isMinhaSala ? "text-emerald-600" : "text-blue-600",
                 bg: isMinhaSala ? "bg-emerald-500/10" : "bg-blue-500/10",
@@ -264,7 +264,7 @@ export default function FilaPage() {
             const agora = Date.now();
             const decorridoMinutos = (agora - inicioAtendimento) / 1000 / 60;
 
-            if (decorridoMinutos >= 30) {
+            if (decorridoMinutos >= 1) {
                 // Se nunca alertou OU se o último alerta foi há mais de 5 minutos
                 if (!ultimoAlertaRef.current || (agora - ultimoAlertaRef.current) / 1000 / 60 >= 5) {
                     setShowTempoAlerta(true);
@@ -673,6 +673,9 @@ export default function FilaPage() {
                                                             ? "bg-red-200/70 dark:bg-red-900/30" :
                                                             "hover:bg-slate-50/80 dark:hover:bg-slate-800/40"
 
+                                        // const minhaEspecialidade = especialidadeNome.toUpperCase()
+                                        // console.log(localStorage.getItem(''))
+
                                         return (
                                             <tr
                                                 key={item.id}
@@ -852,7 +855,7 @@ export default function FilaPage() {
                                                                     </>
                                                                 )}
 
-                                                                {item.status !== "AGUARDANDO" && !isBloqueado && (
+                                                                {(item.status !== "AGUARDANDO" && !isBloqueado) && (
                                                                     <Button
                                                                         size="sm"
                                                                         variant="ghost"
@@ -866,7 +869,7 @@ export default function FilaPage() {
                                                                     </Button>
                                                                 )}
 
-                                                                {isBloqueado && (
+                                                                {isBloqueado /*|| (item.status_atendimento !== `EM_${minhaEspecialidade}`)*/ &&  (
                                                                     <Badge
                                                                         className={`${styles.bg} ${styles.color} border-none text-[10px] uppercase font-bold tracking-wider ${styles.animate || ""}`}
                                                                     >
