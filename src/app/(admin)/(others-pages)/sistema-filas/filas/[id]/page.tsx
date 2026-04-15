@@ -171,8 +171,8 @@ export default function FilaPage() {
 
         if ((item.status_atendimento.startsWith('EM_') && item.status === "EM_FILA")) {
             return {
-                color: isMinhaSala ? "text-emerald-600" : "text-blue-600",
-                bg: isMinhaSala ? "bg-emerald-500/10" : "bg-blue-500/10",
+                color: isMinhaSala ? "text-emerald-600" : "text-red-600",
+                bg: isMinhaSala ? "bg-emerald-500/10" : "bg-red-500/10",
                 label: isMinhaSala ? "EM FILA" : "BLOQUEADO",
                 animate: isMinhaSala ? "animate-pulse" : "",
                 podeAcoes: isMinhaSala
@@ -264,7 +264,7 @@ export default function FilaPage() {
             const agora = Date.now();
             const decorridoMinutos = (agora - inicioAtendimento) / 1000 / 60;
 
-            if (decorridoMinutos >= 1) {
+            if (decorridoMinutos >= 15) {
                 // Se nunca alertou OU se o último alerta foi há mais de 5 minutos
                 if (!ultimoAlertaRef.current || (agora - ultimoAlertaRef.current) / 1000 / 60 >= 5) {
                     setShowTempoAlerta(true);
@@ -429,11 +429,15 @@ export default function FilaPage() {
             // Definimos os pesos de status
             const pesoStatus = (item: ItemFila) => {
                 const isMinhaSessao = item.num_sala === session?.sala && item.profissional === session?.profissional;
+                const naoAtendido = naoAtendidosRecentes.includes(item.id)
+                console.log(naoAtendido)
                 if (item.status === "EM_ATENDIMENTO" && isMinhaSessao) return 1;
-                if (item.status === "AGUARDANDO") return 2;
-                if (item.status === "EM_ATENDIMENTO") return 3;
-                if (item.status === "FINALIZADO") return 4;
-                return 5;
+                if (item.status === "EM_FILA") return 2;
+                if (item.status === "EM_ATENDIMENTO" && !isMinhaSessao && naoAtendido) return 5;
+                if (item.status === "AGUARDANDO" && naoAtendido) return 3;
+                if (item.status === "AGUARDANDO") return 4;
+                if (item.status === "FINALIZADO") return 6;
+                return 7;
             };
 
             // SE a ordenação for 'tempo_espera' (padrão), mantemos o agrupamento por status.
@@ -559,8 +563,17 @@ export default function FilaPage() {
         timersRef.current[item.id] = interval;
     };
 
-    if (loading) return <div className="flex h-screen items-center justify-center font-mono text-sm animate-pulse text-emerald-600 bg-slate-50 dark:bg-slate-950 uppercase tracking-widest">Sincronizando Fila...</div>
 
+    // Verifica se o profissional atual já está atendendo alguém
+    const profissionalOcupado = useMemo(() => {
+        return data.some(item =>
+            (item.status === "EM_ATENDIMENTO" || item.status === "EM_FILA") &&
+            item.num_sala === session?.sala &&
+            item.profissional === session?.profissional
+        );
+    }, [data, session]);
+
+    if (loading) return <div className="flex h-screen items-center justify-center font-mono text-sm animate-pulse text-emerald-600 bg-slate-50 dark:bg-slate-950 uppercase tracking-widest">Sincronizando Fila...</div>
     return (
         <div className="min-h-fit mt-2 space-y-8 bg-gray-500/20 rounded-xl p-2">
             <div className="w-full mx-auto space-y-5">
@@ -772,22 +785,27 @@ export default function FilaPage() {
                                                                     <Button
                                                                         size="sm"
                                                                         variant="outline"
-                                                                        className="h-8 text-[11px] border-amber-600 text-amber-600 hover:bg-amber-50"
-                                                                        onClick={() =>
-                                                                            executarAcao(
-                                                                                "chamar_paciente",
-                                                                                {
-                                                                                    p_atendimento_id: item.atendimento_id,
-                                                                                    p_atendimento_exame_id: item.id,
-                                                                                    p_sala: especialidadeNome,
-                                                                                    p_num_sala: session.sala,
-                                                                                    p_profissional: session.profissional,
-                                                                                }
-                                                                            )
+                                                                        // TRAVA AQUI: Desabilita se estiver ocupado, se já for o status atual ou se houver loading
+                                                                        disabled={
+                                                                            profissionalOcupado || // já existe atendimento desse profissional
+                                                                            // filaTemEmAtendimento || // 🔥 trava a fila inteira
+                                                                            loadingAction === item.atendimento_id ||
+                                                                            item.status !== "AGUARDANDO"
                                                                         }
+                                                                        onClick={() => executarAcao("chamar_paciente", {
+                                                                            p_atendimento_id: item.atendimento_id,
+                                                                            p_atendimento_exame_id: item.id,
+                                                                            p_sala: especialidadeNome,
+                                                                            p_num_sala: session.sala,
+                                                                            p_profissional: session.profissional
+                                                                        })}
+                                                                        className="h-8 text-[11px] border-amber-600 text-amber-600 hover:bg-amber-50"
                                                                     >
-                                                                        <BellRing className="w-3 h-3 mr-1" />
-                                                                        Chamar
+                                                                        {loadingAction === item.atendimento_id ? (
+                                                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                                                        ) : (
+                                                                            <><BellRing className="w-3 h-3 mr-1" /><p>Chamar</p></>
+                                                                        )}
                                                                     </Button>
                                                                     {isNaoAtendido &&
                                                                         <Badge className="uppercase text-[11px] font-bold">não atendido</Badge>
@@ -869,7 +887,7 @@ export default function FilaPage() {
                                                                     </Button>
                                                                 )}
 
-                                                                {isBloqueado /*|| (item.status_atendimento !== `EM_${minhaEspecialidade}`)*/ &&  (
+                                                                {isBloqueado /*|| (item.status_atendimento !== `EM_${minhaEspecialidade}`)*/ && (
                                                                     <Badge
                                                                         className={`${styles.bg} ${styles.color} border-none text-[10px] uppercase font-bold tracking-wider ${styles.animate || ""}`}
                                                                     >
@@ -891,11 +909,12 @@ export default function FilaPage() {
                             </table>
                         </div>
                     </CardContent>
-                </Card>
-            </div>
+                </Card >
+            </div >
 
             {/* MODAL CONFIGURAÇÃO */}
-            <Dialog open={openModal} onOpenChange={(open) => !loading && setOpenModal(open)}>
+            < Dialog open={openModal} onOpenChange={(open) => !loading && setOpenModal(open)
+            }>
                 <DialogContent className="sm:max-w-[450px] bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 p-0 overflow-hidden shadow-2xl">
 
                     <DialogHeader className="p-6 bg-slate-50 dark:bg-gray-900 border-b border-slate-200 dark:border-slate-800">
@@ -984,10 +1003,10 @@ export default function FilaPage() {
                         </Button>
                     </DialogFooter>
                 </DialogContent>
-            </Dialog>
+            </Dialog >
 
             {/* Modal de Alerta de Tempo de Atendimento */}
-            <Dialog open={showTempoAlerta} onOpenChange={setShowTempoAlerta}>
+            < Dialog open={showTempoAlerta} onOpenChange={setShowTempoAlerta} >
                 <DialogContent className="sm:max-w-[35vw] border-orange-500 border-3 overflow-hidden">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2 text-orange-600">
@@ -1026,7 +1045,7 @@ export default function FilaPage() {
                         </Button>
                     </DialogFooter>
                 </DialogContent>
-            </Dialog>
-        </div>
+            </Dialog >
+        </div >
     )
 }

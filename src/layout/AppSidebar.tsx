@@ -30,18 +30,18 @@ const navItems: NavItem[] = [
     icon: <House className="w-5 h-5"/>,
     name: "Home",
     path: "/",
-    roles: ["admin", "recepcao", "especialista"],
+    roles: ["admin", "recepcao", "especialista", "painel"],
   },
   {
     name: "Gestão de Filas",
     icon: <MonitorCog className="w-5 h-5" />,
-    roles: ["admin", "recepcao", "especialista"],
+    roles: ["admin", "recepcao", "especialista", "painel"],
     subItems: [
-      { name: "Chamada de Senhas", path: "/sistema-filas/senhas-recepcao", roles: ["admin", "recepcao"] },
-      { name: "Filas", path: "/sistema-filas/filas", roles: ["admin", "recepcao", "especialista"] },
-      { name: "Painel TV", path: "/painel-senhas", roles: ["admin"] },
-      { name: "Relatórios", path: "/sistema-filas/relatorios", roles: ["admin"] },
-      { name: "Kanban", path: "/sistema-filas/kanban", roles: ["admin"] },
+      { name: "Chamada de Senhas", path: "/sistema-filas/senhas-recepcao", roles: ["admin", "recepcao", "painel"] },
+      { name: "Filas", path: "/sistema-filas/filas", roles: ["admin", "recepcao", "especialista", "painel"] },
+      { name: "Painel TV", path: "/painel-senhas", roles: ["admin", "painel"] },
+      { name: "Relatórios", path: "/sistema-filas/relatorios", roles: ["admin", "painel"] },
+      { name: "Kanban", path: "/sistema-filas/kanban", roles: ["admin", "painel"] },
     ],
   },  
   // {
@@ -49,16 +49,16 @@ const navItems: NavItem[] = [
   //   icon: <ChartGantt  className="w-5 h-5" />,
   //   roles: ["admin"],
   //   subItems: [
-  //     { name: "Depto. Atendimento", path: "/dashboards/atendimento/", roles: ["admin"] },
+  //     { name: "Depto. Atendimento", path: "/dashboards/atendimento/", roles: ["admin", "painel"] },
   //   ],
   // },  
   {
     name: "Configurações",
     icon: <Settings className="w-5 h-5" />,
-    roles: ["admin"],
+    roles: ["admin", "painel"],
     subItems: [
-      { name: "Usuários", path: "/configuracoes/users", roles: ["admin"] },
-      { name: "Salas e Profissionais", path: "/configuracoes/salas-profissionais", roles: ["admin"] },
+      { name: "Usuários", path: "/configuracoes/users", roles: ["admin", "painel"] },
+      { name: "Salas e Profissionais", path: "/configuracoes/salas-profissionais", roles: ["admin", "painel"] },
     ],
   },
   // {

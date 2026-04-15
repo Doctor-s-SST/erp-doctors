@@ -66,6 +66,9 @@ export default function SignInForm() {
       }
       else if (profile.role === 'recepcao') {
         router.push("/sistema-filas/senhas-recepcao");
+      }      
+      else if (profile.role === 'painel') {
+        router.push("/painel-senhas");
       }
       else if (profile.role === 'especialista') {
         // Se tiver uma especialidade, manda para a fila dela, senão para a geral

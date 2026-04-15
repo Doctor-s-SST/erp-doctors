@@ -3,13 +3,13 @@ import { NextResponse, type NextRequest } from "next/server"
 
 // Defina o mapa de permissões aqui
 const ROUTE_PERMISSIONS: Record<string, string[]> = {
-  "/sistema-filas/kanban": ["admin"],
-  "/sistema-filas/painel": ["admin"],
-  "/sistema-filas/senhas-recepcao": ["admin", "recepcao", "especialista"],
-  "/sistema-filas/relatorios": ["admin"],
-  "/sistema-filas/filas": ["admin", "especialista", "recepcao"],
-  "/configuracoes/salas-profissionais": ["admin"],
-  "/configuracoes/users": ["admin"],
+  "/sistema-filas/kanban": ["admin", "painel"],
+  "/painel-senhas": ["admin", "painel"],
+  "/sistema-filas/senhas-recepcao": ["admin", "recepcao", "especialista", "painel"],
+  "/sistema-filas/relatorios": ["admin", "painel"],
+  "/sistema-filas/filas": ["admin", "especialista", "recepcao", "painel"],
+  "/configuracoes/salas-profissionais": ["admin", "painel"],
+  "/configuracoes/users": ["admin", "painel"],
 }
 
 export async function updateSession(request: NextRequest) {
