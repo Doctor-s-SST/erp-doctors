@@ -569,9 +569,10 @@ export default function FilaPage() {
         return data.some(item =>
             (item.status === "EM_ATENDIMENTO" || item.status === "EM_FILA") &&
             item.num_sala === session?.sala &&
-            item.profissional === session?.profissional
+            item.profissional === session?.profissional &&
+            !finalizandoIds[item.id]
         );
-    }, [data, session]);
+    }, [data, session, finalizandoIds]);
 
     if (loading) return <div className="flex h-screen items-center justify-center font-mono text-sm animate-pulse text-emerald-600 bg-slate-50 dark:bg-slate-950 uppercase tracking-widest">Sincronizando Fila...</div>
     return (
@@ -843,33 +844,31 @@ export default function FilaPage() {
                                                                                 </TooltipProvider>
                                                                             </div>
                                                                         ) : (
-                                                                            <Button
-                                                                                size="sm"
-                                                                                className="h-8 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700"
-                                                                                onClick={() => iniciarFinalizacao(item)}
-                                                                            >
-                                                                                <CheckCircle2 className="w-3 h-3 mr-1" />
-                                                                                Finalizar
-                                                                            </Button>
+                                                                            <><Button
+                                                                                    size="sm"
+                                                                                    className="h-8 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700"
+                                                                                    onClick={() => iniciarFinalizacao(item)}
+                                                                                >
+                                                                                    <CheckCircle2 className="w-3 h-3 mr-1" />
+                                                                                    Finalizar
+                                                                                </Button><Button
+                                                                                    size="sm"
+                                                                                    variant="outline"
+                                                                                    className="h-8 text-[11px] border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white"
+                                                                                    onClick={() => executarAcao("chamar_paciente", {
+                                                                                        p_atendimento_id: item.atendimento_id,
+                                                                                        p_atendimento_exame_id: item.id,
+                                                                                        p_sala: especialidadeNome,
+                                                                                        p_num_sala: session.sala,
+                                                                                        p_profissional: session.profissional,
+                                                                                    })}
+                                                                                >
+                                                                                        <BellRing className="w-3 h-3 mr-1" />
+                                                                                        Chamar Novamente
+                                                                                    </Button></>
                                                                         )}
 
-                                                                        <Button
-                                                                            size="sm"
-                                                                            variant="outline"
-                                                                            className="h-8 text-[11px] border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white"
-                                                                            onClick={() =>
-                                                                                executarAcao("chamar_paciente", {
-                                                                                    p_atendimento_id: item.atendimento_id,
-                                                                                    p_atendimento_exame_id: item.id,
-                                                                                    p_sala: especialidadeNome,
-                                                                                    p_num_sala: session.sala,
-                                                                                    p_profissional: session.profissional,
-                                                                                })
-                                                                            }
-                                                                        >
-                                                                            <BellRing className="w-3 h-3 mr-1" />
-                                                                            Chamar Novamente
-                                                                        </Button>
+                                                                        
                                                                     </>
                                                                 )}
 
