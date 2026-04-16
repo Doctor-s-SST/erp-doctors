@@ -42,30 +42,59 @@ export default function PainelTV() {
   // 1. VOZ COM GRAMÁTICA CORRIGIDA
   const executarChamadaSonora = (chamada: Chamada) => {
     return new Promise<void>(async (resolve) => {
+      // const falar = (texto: string) => {
+      //   return new Promise<void>((res) => {
+      //     // Cancela qualquer fala anterior para evitar fila infinita
+      //     window.speechSynthesis.cancel();
+
+      //     const msg = new SpeechSynthesisUtterance(texto);
+      //     msg.lang = 'pt-BR';
+      //     msg.rate = 0.9;
+
+      //     // Tenta encontrar uma voz em português explicitamente
+      //     const voices = window.speechSynthesis.getVoices();
+      //     const voiceBR = voices.find(v => v.lang === 'pt-BR' || v.lang === 'pt_BR');
+      //     if (voiceBR) msg.voice = voiceBR;
+
+      //     msg.onend = () => res();
+      //     msg.onerror = (e) => {
+      //       console.error("Erro na síntese de voz:", e);
+      //       res();
+      //     };
+
+      //     // Pequeno delay para garantir que o 'cancel' anterior foi processado
+      //     setTimeout(() => {
+      //       window.speechSynthesis.speak(msg);
+      //     }, 100);
+      //   });
+      // };
+
       const falar = (texto: string) => {
         return new Promise<void>((res) => {
-          // Cancela qualquer fala anterior para evitar fila infinita
+          // 1. Limpa tudo e espera um pouco antes de pedir uma nova fala
           window.speechSynthesis.cancel();
 
-          const msg = new SpeechSynthesisUtterance(texto);
-          msg.lang = 'pt-BR';
-          msg.rate = 0.9;
-
-          // Tenta encontrar uma voz em português explicitamente
-          const voices = window.speechSynthesis.getVoices();
-          const voiceBR = voices.find(v => v.lang === 'pt-BR' || v.lang === 'pt_BR');
-          if (voiceBR) msg.voice = voiceBR;
-
-          msg.onend = () => res();
-          msg.onerror = (e) => {
-            console.error("Erro na síntese de voz:", e);
-            res();
-          };
-
-          // Pequeno delay para garantir que o 'cancel' anterior foi processado
           setTimeout(() => {
+            const msg = new SpeechSynthesisUtterance(texto);
+            msg.lang = 'pt-BR';
+            msg.rate = 0.85; // Um pouco mais lento ajuda o Raspberry a processar
+            msg.pitch = 1;
+
+            const voices = window.speechSynthesis.getVoices();
+            const voiceBR = voices.find(v => v.lang.includes('pt'));
+            if (voiceBR) msg.voice = voiceBR;
+
+            // Eventos de controle
+            msg.onend = () => res();
+            msg.onerror = (e) => {
+              console.warn("Falha na síntese, tentando recuperar canal...", e);
+              window.speechSynthesis.cancel(); // Tenta destravar em caso de erro
+              res();
+            };
+
+            // 2. O pulo do gato: fala
             window.speechSynthesis.speak(msg);
-          }, 100);
+          }, 300); // 300ms de intervalo entre o cancel e o speak
         });
       };
 
