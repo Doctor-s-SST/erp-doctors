@@ -92,6 +92,10 @@ export default function PainelTV() {
               res();
             };
 
+
+            msg.rate = 0.7;   // Mais lento = mais inteligível
+            msg.pitch = 0.8;  // Tom mais grave = menos metálico
+            msg.volume = 1;
             // 2. O pulo do gato: fala
             window.speechSynthesis.speak(msg);
           }, 300); // 300ms de intervalo entre o cancel e o speak
