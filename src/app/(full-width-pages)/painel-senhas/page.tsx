@@ -44,13 +44,28 @@ export default function PainelTV() {
     return new Promise<void>(async (resolve) => {
       const falar = (texto: string) => {
         return new Promise<void>((res) => {
+          // Cancela qualquer fala anterior para evitar fila infinita
           window.speechSynthesis.cancel();
+
           const msg = new SpeechSynthesisUtterance(texto);
           msg.lang = 'pt-BR';
           msg.rate = 0.9;
+
+          // Tenta encontrar uma voz em português explicitamente
+          const voices = window.speechSynthesis.getVoices();
+          const voiceBR = voices.find(v => v.lang === 'pt-BR' || v.lang === 'pt_BR');
+          if (voiceBR) msg.voice = voiceBR;
+
           msg.onend = () => res();
-          msg.onerror = () => res();
-          setTimeout(() => window.speechSynthesis.speak(msg), 150);
+          msg.onerror = (e) => {
+            console.error("Erro na síntese de voz:", e);
+            res();
+          };
+
+          // Pequeno delay para garantir que o 'cancel' anterior foi processado
+          setTimeout(() => {
+            window.speechSynthesis.speak(msg);
+          }, 100);
         });
       };
 
@@ -67,7 +82,7 @@ export default function PainelTV() {
 
       const senhaSoletreada = (chamada.senha_codigo || "").split('').join(' ');
       const identificador = chamada.nome_paciente ? `${chamada.nome_paciente}` : `Senha, ${senhaSoletreada}`;
-      const destino = chamada.origem === 'RECEPCAO' ? `comparecer ao guichê ${chamada.guiche}` : `comparecer à sala ${chamada.guiche}`;
+      const destino = chamada.origem === 'RECEPCAO' ? `comparecer ao guichê ${chamada.guiche}, recepção` : `comparecer à sala ${chamada.guiche}`;
       const textoFinal = `${identificador}, ${destino}`;
 
       try {
@@ -157,7 +172,7 @@ export default function PainelTV() {
       <div className="h-screen w-screen flex flex-col items-center justify-center bg-[#3498db] text-white p-10 text-center">
         <img src="/images/logo/doctors-svg.svg" alt="Logo" className="h-24 mb-10 brightness-0 invert" />
         <h1 className="text-4xl font-bold mb-4">Painel de Chamada Doctor's</h1>
-        <button 
+        <button
           onClick={() => setAtivado(true)}
           className="px-12 py-6 bg-white text-[#3498db] rounded-full font-black text-3xl shadow-2xl hover:scale-110 active:scale-95 transition-all mb-6"
         >
@@ -215,22 +230,22 @@ export default function PainelTV() {
               </div>
 
               <div className="absolute bottom-12 text-7xl font-bold uppercase tracking-tight flex flex-col items-center">
-                  <div className="flex gap-8">
-                    <span>
-                      {ultimaChamada?.origem === 'RECEPCAO' ? 'Guichê' : 'Sala'}
-                    </span>
-                    <span>
-                      {ultimaChamada?.guiche || '-'}
+                <div className="flex gap-8">
+                  <span>
+                    {ultimaChamada?.origem === 'RECEPCAO' ? 'Guichê' : 'Sala'}
+                  </span>
+                  <span>
+                    {ultimaChamada?.guiche || '-'}
+                  </span>
+                </div>
+
+                {unidadeId === "ba83f0b4-1b16-4b07-9473-fe929f16f881" && (
+                  <div className="flex flex-col items-center mt-2">
+                    <span className="text-5xl tracking-tight">
+                      {salasAndar[ultimaChamada?.guiche as keyof typeof salasAndar] || ""}
                     </span>
                   </div>
-                  
-                  {unidadeId === "ba83f0b4-1b16-4b07-9473-fe929f16f881" && (
-                    <div className="flex flex-col items-center mt-2">
-                      <span className="text-5xl tracking-tight">
-                        {salasAndar[ultimaChamada?.guiche as keyof typeof salasAndar] || ""}
-                      </span>
-                    </div>
-                  )}
+                )}
               </div>
             </motion.main>
           </AnimatePresence>
