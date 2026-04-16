@@ -115,10 +115,10 @@ export default function PainelTV() {
       const textoFinal = `${identificador}, ${destino}`;
 
       try {
-        await tocarSino();
+        // await tocarSino();
         await falar(textoFinal);
         await new Promise(r => setTimeout(r, 1500));
-        await tocarSino();
+        // await tocarSino();
         await falar(textoFinal);
       } finally {
         resolve();
