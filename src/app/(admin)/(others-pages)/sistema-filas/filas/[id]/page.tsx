@@ -1015,7 +1015,7 @@ export default function FilaPage() {
                     </DialogHeader>
                     <div className="py-4 text-center space-y-3">
                         <p className="text-sm font-medium">
-                            O atendimento atual já ultrapassou <span className="text-orange-600 font-bold">30 minutos</span>.
+                            O atendimento atual já ultrapassou <span className="text-orange-600 font-bold">15 minutos</span>.
                         </p>
                         <p className="text-xs text-slate-500">
                             Você ainda está em atendimento com este paciente?
