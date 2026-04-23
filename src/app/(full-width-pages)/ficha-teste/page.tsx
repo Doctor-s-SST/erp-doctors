@@ -1,6 +1,6 @@
 'use client'
 
-import { TemplateFicha } from "@/components/ficha-impressao/TemplateFicha"
+import { TemplateFicha } from "@/components/atendimento/ficha-impressao/TemplateFicha"
 
 export default function FichaTeste() {
     const dados = {

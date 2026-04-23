@@ -44,14 +44,14 @@ const navItems: NavItem[] = [
       { name: "Kanban", path: "/sistema-filas/kanban", roles: ["admin", "painel"] },
     ],
   },  
-  // {
-  //   name: "Dashboards",
-  //   icon: <ChartGantt  className="w-5 h-5" />,
-  //   roles: ["admin"],
-  //   subItems: [
-  //     { name: "Depto. Atendimento", path: "/dashboards/atendimento/", roles: ["admin", "painel"] },
-  //   ],
-  // },  
+  {
+    name: "Dashboards",
+    icon: <ChartGantt  className="w-5 h-5" />,
+    roles: ["admin"],
+    subItems: [
+      { name: "Depto. Atendimento", path: "/dashboards/atendimento/", roles: ["admin"] },
+    ],
+  },  
   {
     name: "Configurações",
     icon: <Settings className="w-5 h-5" />,

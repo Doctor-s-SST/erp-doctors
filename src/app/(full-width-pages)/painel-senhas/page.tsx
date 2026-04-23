@@ -288,11 +288,11 @@ export default function PainelTV() {
 
         {/* LADO DIREITO: HISTÓRICO DESIGN EXATO */}
         <aside className="shadow-[0px_4px_15px_0px_rgba(0,0,0,0.2)] flex-1 bg-white flex flex-col overflow-hidden">
-          <div className="p-4 border-b-2 border-[#3498db] mx-5">
+          <div className="p-3 border-b-2 border-[#3498db] mx-4">
             <h3 className="text-2xl font-bold text-black text-center">Últimas Senhas Chamadas</h3>
           </div>
           <div className="flex-1 flex flex-col">
-            {historico.slice(1).map((item, idx) => (
+            {historico.slice(1, 6).map((item, idx) => (
               <div key={item.id + idx} className="flex-1 border-b border-gray-400 flex flex-col items-center justify-center p-2 last:border-0">
                 <p className="text-[3.5vw] font-black text-gray-800 leading-tight">{item.senha_codigo}</p>
                 <p className="text-[1.8vw] font-bold text-[#3498db] uppercase">

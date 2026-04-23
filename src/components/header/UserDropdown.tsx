@@ -56,16 +56,16 @@ export default function UserDropdown({profile}: { profile: ProfileType }) {
         </DropdownMenuLabel> */}
         {/* <DropdownMenuSeparator /> */}
         <DropdownMenuGroup>
-          {/* <DropdownMenuItem onClick={() => router.push("/profile")}>
+          <DropdownMenuItem onClick={() => router.push("/profile")}>
             <User className="mr-2 h-5 w-5" />
             <span>Perfil</span>
-          </DropdownMenuItem> */}
+          </DropdownMenuItem>
           {/* <DropdownMenuItem onClick={() => router.push("/settings")}>
             <Settings className="mr-2 h-4 w-4" />
             <span>Configurações</span>
           </DropdownMenuItem> */}
         </DropdownMenuGroup>
-        {/* <DropdownMenuSeparator /> */}
+        <DropdownMenuSeparator />
         {/* <DropdownMenuItem>
           <LifeBuoy className="mr-2 h-4 w-4" />
           <span>Suporte</span>

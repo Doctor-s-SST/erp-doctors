@@ -14,8 +14,8 @@ import { FileEdit, CheckCircle2, RefreshCw, User, Monitor, XCircle, Filter, Arro
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useReactToPrint } from "react-to-print";
-import { TemplateFicha } from "@/components/ficha-impressao/TemplateFicha";
-import { StatusSenhaRecep } from "@/components/status-senha-recep/StatusSenhaRecep"
+import { TemplateFicha } from "@/components/atendimento/ficha-impressao/TemplateFicha";
+import { StatusSenhaRecep } from "@/components/atendimento/status-senha-recep/StatusSenhaRecep"
 import { on } from "events"
 
 type Atendimento = {
@@ -319,9 +319,16 @@ export default function RecepcaoPage() {
 
     const dadosProcessados = useMemo(() => {
         // 1. Filtros iniciais
-        let filtrados = data.filter(item =>
-            filtroTipo === "TODOS" ? true : item.tipo_senha === filtroTipo
-        );
+        // 1. Filtros iniciais
+        let filtrados = data.filter(item => {
+            if (filtroTipo === "TODOS") return true;
+
+            // Se o botão clicado for ENCAIXE, filtra estritamente por ele
+            if (filtroTipo === "ENCAIXE") return item.encaixe === true;
+
+            // Se for NORMAL ou PREFERENCIAL, filtra pelo tipo_senha
+            return item.tipo_senha === filtroTipo;
+        });
 
         if (filtroPesquisa) {
             const f = filtroPesquisa.toLowerCase();
@@ -602,10 +609,10 @@ export default function RecepcaoPage() {
             if (error) throw error;
 
             // Chamada para a API com os campos separados
-            await supabase.from("fila_impressao").insert({
-                senha: senhaGerada,
-                ip: selectedPrinter?.ip
-            });
+            // await supabase.from("fila_impressao").insert({
+            //     senha: senhaGerada,
+            //     ip: selectedPrinter?.ip
+            // });
 
             // await fetch("/api/imprimir-senha", {
             //     method: "POST",
@@ -876,7 +883,7 @@ export default function RecepcaoPage() {
                             <div className="w-fit flex items-center gap-2 bg-white dark:bg-black p-2 rounded-xl shadow-sm border dark:border-gray-600">
                                 <Filter className="w-4 h-4 font-black" />
                                 <div className="flex gap-2">
-                                    {["TODOS", "NORMAL", "PREFERENCIAL"].map((tipo) => (
+                                    {["TODOS", "NORMAL", "PREFERENCIAL", "ENCAIXE"].map((tipo) => (
                                         <Button
                                             key={tipo}
                                             variant={filtroTipo === tipo ? "default" : "outline"}

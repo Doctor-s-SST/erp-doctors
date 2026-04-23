@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 
-// Defina o mapa de permissões aqui
+// Permissões por rota
 const ROUTE_PERMISSIONS: Record<string, string[]> = {
   "/sistema-filas/kanban": ["admin", "painel"],
   "/painel-senhas": ["admin", "painel"],
@@ -10,6 +10,21 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   "/sistema-filas/filas": ["admin", "especialista", "recepcao", "painel"],
   "/configuracoes/salas-profissionais": ["admin", "painel"],
   "/configuracoes/users": ["admin", "painel"],
+  "/dashboards/atendimento": ["admin",]
+}
+
+// Define pra onde cada role vai
+function getRedirectByRole(role?: string, especialidade_id?: string) {
+  if (role === "admin") return "/sistema-filas/kanban"
+  if (role === "recepcao") return "/sistema-filas/senhas-recepcao"
+  if (role === "painel") return "/painel-senhas"
+  if (role === "especialista") {
+    return especialidade_id
+      ? `/sistema-filas/filas/${especialidade_id}`
+      : "/sistema-filas/filas"
+  }
+
+  return "/" // fallback seguro
 }
 
 export async function updateSession(request: NextRequest) {
@@ -30,54 +45,65 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
-  // Obtém o usuário do Auth
-  const { data: { user } } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
   const pathname = request.nextUrl.pathname
-  const isAuthPage = pathname.startsWith("/signin") || pathname.startsWith("/signup")
+  const isAuthPage =
+    pathname.startsWith("/signin") || pathname.startsWith("/signup")
 
   // NÃO LOGADO → manda pro login
   if (!user && !isAuthPage) {
     return NextResponse.redirect(new URL("/signin", request.url))
   }
 
-  // LOGADO → verificações de Role e Redirecionamento
+  // LOGADO
   if (user) {
-    if (isAuthPage) {
-      return NextResponse.redirect(new URL("/", request.url))
+    let userRole: string | undefined
+    let userEspId: string | undefined
+
+    // Só busca profile quando realmente precisa
+    const precisaProfile =
+      isAuthPage ||
+      pathname === "/" ||
+      Object.keys(ROUTE_PERMISSIONS).some((route) =>
+        pathname.startsWith(route)
+      )
+
+    if (precisaProfile) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role, especialidade_id")
+        .eq("id", user.id)
+        .maybeSingle()
+
+      userRole = profile?.role
+      userEspId = profile?.especialidade_id
     }
 
-    // Buscar o role do banco de dados (tabela profiles)
-    // Usamos .maybeSingle() para evitar erros se o profile não existir ainda
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role, especialidade_id')
-      .eq('id', user.id)
-      .maybeSingle();
+    const redirectPath = getRedirectByRole(userRole, userEspId)
 
-    const userRole = profile?.role || "user";
-    const userEspId = profile?.especialidade_id;
+    // Se tentar acessar login → manda pro sistema
+    if (isAuthPage) {
+      return NextResponse.redirect(new URL(redirectPath, request.url))
+    }
 
-    // Verificar se a rota atual está protegida
+    // Se entrar na raiz → manda pro lugar certo
+    if (pathname === "/" && redirectPath !== "/") {
+      return NextResponse.redirect(new URL(redirectPath, request.url))
+    }
+
+    // Validação de permissões
     for (const route in ROUTE_PERMISSIONS) {
       if (pathname.startsWith(route)) {
-        const allowedRoles = ROUTE_PERMISSIONS[route];
+        const allowedRoles = ROUTE_PERMISSIONS[route]
 
-        // Bloqueia se o role não estiver na lista
-        if (!allowedRoles.includes(userRole)) {
-          return NextResponse.redirect(new URL("/signin?error=unauthorized", request.url));
+        if (!userRole || !allowedRoles.includes(userRole)) {
+          return NextResponse.redirect(
+            new URL("/signin?error=unauthorized", request.url)
+          )
         }
-
-        // LÓGICA EXTRA: Se for especialista tentando acessar outra fila que não a dele
-        // Descomente abaixo se quiser travar o especialista APENAS na fila dele:
-        /*
-        if (userRole === 'especialista' && pathname.startsWith("/sistema-filas/filas/")) {
-           const requestedQueueId = pathname.split("/").pop();
-           if (userEspId && requestedQueueId !== userEspId) {
-             return NextResponse.redirect(new URL(`/sistema-filas/filas/${userEspId}`, request.url));
-           }
-        }
-        */
       }
     }
   }
