@@ -130,7 +130,7 @@ export async function POST(req: Request) {
           
           <!-- HEADER -->
           <header>
-            <img src="http://localhost:3000/images/timbrado/cropped-cropped-cropped-teste-timbrado-cabecalho.svg" />
+            <img src="https://erp.doctorspraiagrande.com.br/images/timbrado/cropped-cropped-cropped-teste-timbrado-cabecalho.svg" />
           </header>
 
           <!-- MAIN -->
