@@ -173,7 +173,7 @@ export async function POST(req: Request) {
               Documento emitido eletronicamente<br />
               DOCTOR'S SAÚDE E SEGURANÇA NO TRABALHO<br />
               CNPJ: ${cnpj} | Unidade: ${cidade}<br />
-              ${new Date().toLocaleString("pt-BR", {timeZone: "America/Sao_Paulo"})}
+              ${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}
             </div>
             </div>
           </main>
