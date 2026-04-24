@@ -1,9 +1,12 @@
-import puppeteer from "puppeteer";
+import chromium from "@sparticuz/chromium";
+import puppeteer from "puppeteer-core";
 import { NextResponse } from "next/server";
+
+const isProd = process.env.NODE_ENV === "production" || !!process.env.NETLIFY;
 
 export async function POST(req: Request) {
   try {
-    const { item } = await req.json();
+    const { item } = await req.json()
 
     const nomePaciente =
       item.cabecalho?.nome || "________________________________________";
@@ -255,23 +258,31 @@ export async function POST(req: Request) {
     </html>
     `;
 
-    const browser = await puppeteer.launch({
-      args: ["--no-sandbox"],
-    });
+    let browser;
+
+    if (isProd) {
+      // Configuração para Produção (Netlify)
+      browser = await puppeteer.launch({
+        args: chromium.args,
+        executablePath: await chromium.executablePath(),
+        headless: true,
+      });
+    } else {
+      // Configuração para Desenvolvimento (Seu Windows)
+      // Certifique-se de ter o Chrome ou Edge instalado
+      browser = await puppeteer.launch({
+        args: [],
+        executablePath: "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe", // Caminho padrão do Chrome
+        headless: true,
+      });
+    }
 
     const page = await browser.newPage();
-
     await page.setContent(html, { waitUntil: "networkidle0" });
 
     const pdf = await page.pdf({
       format: "A4",
       printBackground: true,
-      margin: {
-        top: "0mm",
-        right: "0mm",
-        bottom: "0mm",
-        left: "0mm",
-      },
     });
 
     await browser.close();
@@ -282,8 +293,12 @@ export async function POST(req: Request) {
         "Content-Disposition": `inline; filename="declaracao.pdf"`,
       },
     });
-  } catch (err) {
-    console.error(err);
-    return NextResponse.json({ error: "Erro ao gerar PDF" }, { status: 500 });
+
+  } catch (err: any) {
+    console.error("Erro detalhado:", err);
+    return NextResponse.json(
+      { error: "Erro ao gerar PDF", details: err.message },
+      { status: 500 }
+    );
   }
 }
