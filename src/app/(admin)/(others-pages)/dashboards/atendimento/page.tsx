@@ -24,16 +24,20 @@ import {
     RefreshCcw,
     LayoutDashboard,
     Search,
-    CalendarDays,
-    FileText
+    FileText,
+    Hash
 } from "lucide-react"
 
 // Importe seus gráficos aqui (assumindo que foram criados anteriormente)
 import { GraficoAtendimentosHora } from "@/components/atendimento/dashboards/GraficoAtendimentosHora"
 import { GraficoAtendimentosPorRecep } from "@/components/atendimento/dashboards/GraficoAtendimentosPorRecep"
 import { GraficoAtendimentosPorEsp } from "@/components/atendimento/dashboards/GraficoAtendimentosPorEsp"
+import { GraficoAtendimentosPorSala } from "@/components/atendimento/dashboards/GraficoAtendimentosPorSala"
 import { GraficoTempoMedioEsp } from "@/components/atendimento/dashboards/GraficoTempoMedioEsp"
+import { GraficoTopEmpresas } from "@/components/atendimento/dashboards/GraficoTopEmpresas"
+import { GraficoTipoAtendimentoPaciente } from "@/components/atendimento/dashboards/GraficoTipoAtendimentoPaciente"
 import { GraficoPizza } from "@/components/atendimento/dashboards/diario/GraficoPizza"
+import { resolveDashboardAnalytics } from "@/lib/dashboard-analytics"
 
 type ViewType = "geral" | "diario" | "mensal"
 
@@ -183,15 +187,14 @@ export default function DashboardPage() {
                                         }}
                                         locale={ptBR}
                                         numberOfMonths={2}
-                                    // className={cn(
-                                    //     "p-3 bg-gray-950 text-white rounded-xl border border-gray-800",
-                                    //     "[&_.rdp-day]:text-white",
-                                    //     "[&_.rdp-day_selected]:bg-emerald-600",
-                                    //     "[&_.rdp-day_today]:border border-emerald-500",
-                                    //     "[&_.rdp-day:hover]:bg-gray-800",
-                                    //     "[&_.rdp-caption]:text-white",
-                                    //     "[&_.rdp-head_cell]:text-gray-400"
-                                    // )}
+                                    className={cn(
+                                        "p-3 bg-gray-950 text-white rounded-xl border border-gray-800",
+                                        "[&_.rdp-day]:font-semi-bold",
+                                        "[&_.rdp-day_selected]:bg-emerald-600",                                        
+                                        "[&_.rdp-day:hover]:bg-gray-800",
+                                        "[&_.rdp-caption]:text-white",
+                                        "[&_.rdp-head_cell]:text-gray-400"
+                                    )}
                                     />
                                 )}
 
@@ -200,19 +203,22 @@ export default function DashboardPage() {
                                         mode="single"
                                         selected={dataInicio}
                                         onSelect={(value: any) => {
-                                            if (value) setDataInicio(value)
+                                            if (value) {
+                                                setDataInicio(value)
+                                                setDataFim(value)
+                                            }
                                         }}
                                         locale={ptBR}
                                         numberOfMonths={1}
-                                    // className={cn(
-                                    //     "p-3 bg-gray-950 text-white rounded-xl border border-gray-800",
-                                    //     "[&_.rdp-day]:text-white",
-                                    //     "[&_.rdp-day_selected]:bg-emerald-600",
-                                    //     "[&_.rdp-day_today]:border border-emerald-500",
-                                    //     "[&_.rdp-day:hover]:bg-gray-800",
-                                    //     "[&_.rdp-caption]:text-white",
-                                    //     "[&_.rdp-head_cell]:text-gray-400"
-                                    // )}
+
+                                    className={cn(
+                                        "p-3 bg-gray-950 text-white rounded-xl border border-gray-800",
+                                        "[&_.rdp-day]:font-semi-bold",
+                                        "[&_.rdp-day_selected]:bg-emerald-600",                                        
+                                        "[&_.rdp-day:hover]:bg-gray-800",
+                                        "[&_.rdp-caption]:text-white",
+                                        "[&_.rdp-head_cell]:text-gray-400"
+                                    )}
                                     />
                                 )}
 
@@ -234,50 +240,138 @@ export default function DashboardPage() {
 /* ==========================================================================
    VIEW GERAL (A que já tínhamos, otimizada)
    ========================================================================== */
-function ViewGeral({ data }: any) {
-    const total = data?.especialidades?.reduce((acc: number, curr: any) => acc + curr.total, 0) || 0;
-
+function formatMinutos(min: number | null | undefined): string {
+    if (!min || min <= 0) return "—"
+    const h = Math.floor(min / 60)
+    const m = Math.round(min % 60)
+    if (h > 0) return `${h}h ${m}m`
+    return `${m}m`
+}
+ 
+/* ============================================================
+   VIEW GERAL
+============================================================ */
+export function ViewGeral({ data }: { data: any }) {
+    const analytics = resolveDashboardAnalytics(data)
+    const cards = analytics.cards
+    const permanencia = analytics.tempos.permanencia
+    const salasPorEspecialidade = (analytics.distribuicoes.salasTodas || []).map((item) => ({
+        sala: `${item.sala} - ${item.especialidade}`,
+        especialidade: item.especialidade,
+        total: item.total ?? 0,
+    }))
+ 
+    // total acumulado = todos que passaram da recepção
+    const acumulado: number      = cards.acumulado      ?? 0
+    const geradas: number        = cards.geradas        ?? 0
+    const finalizadas: number    = cards.finalizadas    ?? 0
+    const emAtendimento: number  = cards.em_atendimento ?? 0
+    const aguardando: number     = cards.aguardando     ?? 0
+    const cancelados: number     = cards.cancelados     ?? 0
+ 
+    const mediaMin: number | null = permanencia.media_minutos ?? null
+    const amostras: number        = permanencia.total_amostras ?? 0
+ 
+    // taxa de conclusão (finalizados / acumulados)
+    const taxaConclusao = acumulado > 0
+        ? `${Math.round((finalizadas / acumulado) * 100)}%`
+        : "—"
+ 
     return (
         <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <CardMetric title="Volume Período" value={total} icon={<Users />} color="emerald" label="Total Atendimentos" />
-                <CardMetric title="Conversão Médica" value="94%" icon={<Activity />} color="blue" label="Efetividade de Triagem" />
-                <CardMetric title="SLA de Espera" value="12m" icon={<Clock />} color="amber" label="Média Geral da Unidade" />
+ 
+            {/* ── CARDS ── */}
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+ 
+                {/* Senhas Geradas */}
+                <CardMetric
+                    title="Senhas Geradas"
+                    value={geradas}
+                    sub={`Total do período`}
+                    icon={<Hash className="w-5 h-5" />}
+                    color="emerald"
+                />
+ 
+                {/* Acumulado de Atendimentos */}
+                <CardMetric
+                    title="Acumulado"
+                    value={acumulado}
+                    sub={`Total do período`}
+                    icon={<Users className="w-5 h-5" />}
+                    color="blue"
+                    badge={cancelados > 0 ? { label: `${cancelados} cancelados`, color: "text-red-400" } : undefined}
+                />
+ 
+                {/* Tempo Médio de Permanência */}
+                <CardMetric
+                    title="Tempo de Permanência"
+                    value={formatMinutos(mediaMin)}
+                    sub={amostras > 0 ? `Média de ${amostras} atendimentos finalizados` : "Sem dados finalizados"}
+                    icon={<Clock className="w-5 h-5" />}
+                    color="amber"
+                />
+ 
             </div>
-
-            <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-2xl overflow-hidden">
-                <CardHeader className="bg-slate-50/50 dark:bg-white/[0.02] border-b dark:border-gray-800">
-                    <CardTitle className="text-xs font-black uppercase flex items-center gap-2">
-                        <BarChart3 className="w-4 h-4 text-emerald-500" /> Fluxo de Atendimento por Horário
-                    </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-6">
-                    <div className="h-[350px]"><GraficoAtendimentosHora data={data?.fluxoHora} /></div>
-                </CardContent>
-            </Card>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <CardViewSimple title="Recepção" chart={<GraficoAtendimentosPorRecep data={data?.recepcao} />} />
-                <CardViewSimple title="Especialidades" chart={<GraficoAtendimentosPorEsp data={data?.especialidades} />} />
-                <CardViewSimple title="Tempo Médio" chart={<GraficoTempoMedioEsp data={data?.tempoEspecialidade} />} />
+ 
+            {/* ── CONTEÚDO RECEPÇÃO + ESPECIALIDADES ── */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <CardViewSimple
+                    title="Recepção"
+                    chart={<GraficoAtendimentosPorRecep data={analytics.distribuicoes.recepcao} />}
+                />
+                <CardViewSimple
+                    title="Especialidades"
+                    chart={<GraficoAtendimentosPorEsp data={analytics.distribuicoes.especialidades} />}
+                />
+                <CardViewSimple
+                    title="Atendimentos por Sala"
+                    chart={<GraficoAtendimentosPorSala data={salasPorEspecialidade} />}
+                />
+                <CardViewSimple
+                    title="Tempo Médio por Especialidade"
+                    chart={<GraficoTempoMedioEsp data={analytics.distribuicoes.especialidades} />}
+                />
+                <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-2xl overflow-hidden">
+                    <CardHeader className="bg-slate-50/50 dark:bg-white/[0.02] border-b dark:border-gray-800">
+                        <CardTitle className="text-xs font-black uppercase flex items-center gap-2">
+                            <BarChart3 className="w-4 h-4 text-emerald-500" />
+                            Fluxo de Atendimento por Horário
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-6">
+                        <div className="h-[300px]">
+                            <GraficoAtendimentosHora data={analytics.series.fluxoHora} />
+                        </div>
+                    </CardContent>
+                </Card>
+                <CardViewSimple
+                    title="Top 10 Empresas"
+                    chart={<GraficoTopEmpresas data={analytics.pacientes.topEmpresas} />}
+                />
+                <CardViewSimple
+                    title="Clínico/Triagem x Complementar"
+                    chart={<GraficoTipoAtendimentoPaciente data={analytics.pacientes.tipoAtendimento} />}
+                />
             </div>
+ 
         </div>
     )
 }
 
 /* ==========================================================================
-   VIEW DIÁRIA / GARGALOS (Foco em Pizza e Senhas)
+   VIEW DIÁRIA (Foco em Pizza e Senhas)
    ========================================================================== */
 function ViewDiaria({ data }: any) {
-    const cards = data?.cards || {}
+    const analytics = resolveDashboardAnalytics(data)
+    const cards = analytics.cards
 
     return (
         <div className="space-y-6">
             <div className="w-full grid grid-cols-2 lg:grid-cols-4 gap-4">
 
-                <Card className="bg-emerald-600 border-none text-white shadow-lg">
+                <Card className="bg-blue-600 border-none text-white shadow-lg">
                     <CardContent className="p-4 text-center">
-                        <p className="text-[10px] font-black uppercase opacity-80">
+                        <p className="text-1xl font-black uppercase opacity-95">
                             Senhas Geradas
                         </p>
                         <p className="text-4xl font-black italic">
@@ -286,9 +380,9 @@ function ViewDiaria({ data }: any) {
                     </CardContent>
                 </Card>
 
-                <Card className="bg-blue-600 border-none text-white shadow-lg">
+                <Card className="bg-orange-600 border-none text-white shadow-lg">
                     <CardContent className="p-4 text-center">
-                        <p className="text-[10px] font-black uppercase opacity-80">
+                        <p className="text-1xl font-black uppercase opacity-95">
                             Em Atendimento
                         </p>
                         <p className="text-4xl font-black italic">
@@ -297,9 +391,9 @@ function ViewDiaria({ data }: any) {
                     </CardContent>
                 </Card>
 
-                <Card className="bg-amber-500 border-none text-white shadow-lg">
+                <Card className="bg-yellow-500 border-none text-white shadow-lg">
                     <CardContent className="p-4 text-center">
-                        <p className="text-[10px] font-black uppercase opacity-80">
+                        <p className="text-1xl font-black uppercase opacity-95">
                             Aguardando
                         </p>
                         <p className="text-4xl font-black italic">
@@ -308,9 +402,9 @@ function ViewDiaria({ data }: any) {
                     </CardContent>
                 </Card>
 
-                <Card className="bg-purple-600 border-none text-white shadow-lg">
+                <Card className="bg-emerald-600 border-none text-white shadow-lg">
                     <CardContent className="p-4 text-center">
-                        <p className="text-[10px] font-black uppercase opacity-80">
+                        <p className="text-1xl font-black uppercase opacity-95">
                             Finalizadas
                         </p>
                         <p className="text-4xl font-black italic">
@@ -323,13 +417,13 @@ function ViewDiaria({ data }: any) {
 
             <CardPizzaSmall
                 title="Recepção"
-                data={data?.recepcao || []}
+                data={analytics.distribuicoes.recepcao || []}
             />
 
             <div className="w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 
                 {/* ESPECIALIDADES POR SALA */}
-                {(data?.especialidadesDetalhado || []).map((esp: any) => (
+                {(analytics.distribuicoes.especialidades || []).map((esp: any) => (
                     <CardPizzaSmall
                         key={esp.especialidade}
                         title={esp.especialidade}
@@ -367,54 +461,111 @@ function ViewMensal({ data }: any) {
    HELPERS / SUBCOMPONENTS
    ========================================================================== */
 
-function CardMetric({ title, value, icon, color, label }: any) {
-    const colors: any = {
-        emerald: "bg-emerald-500/10 text-emerald-500",
-        blue: "bg-blue-500/10 text-blue-500",
-        amber: "bg-amber-500/10 text-amber-500"
+interface BadgeProps {
+    label: string
+    color: string
+}
+ 
+function CardMetric({
+    title,
+    value,
+    sub,
+    icon,
+    color,
+    badge,
+}: {
+    title: string
+    value: string | number
+    sub?: string
+    icon: React.ReactNode
+    color: "emerald" | "blue" | "amber" | "purple"
+    badge?: BadgeProps
+}) {
+    const colorMap = {
+        emerald: {
+            bg:   "bg-emerald-500/10 dark:bg-emerald-500/10",
+            icon: "text-emerald-500",
+            ring: "ring-emerald-500/20",
+        },
+        blue: {
+            bg:   "bg-blue-500/10",
+            icon: "text-blue-400",
+            ring: "ring-blue-500/20",
+        },
+        amber: {
+            bg:   "bg-amber-500/10",
+            icon: "text-amber-400",
+            ring: "ring-amber-500/20",
+        },
+        purple: {
+            bg:   "bg-purple-500/10",
+            icon: "text-purple-400",
+            ring: "ring-purple-500/20",
+        },
     }
+    const c = colorMap[color]
+ 
     return (
         <Card className="dark:bg-gray-900 border-gray-200 dark:border-gray-800">
-            <CardContent className="p-5 flex items-center justify-between">
-                <div>
-                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{title}</p>
-                    <p className="text-2xl font-black dark:text-white mt-1 italic">{value}</p>
-                    <p className="text-[9px] font-bold text-gray-400 mt-1 uppercase">{label}</p>
+            <CardContent className="p-5">
+                <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                        <p className="text-[10px] font-black text-gray-500 dark:text-gray-500 uppercase tracking-widest mb-1">
+                            {title}
+                        </p>
+                        <p className="text-3xl font-black dark:text-white italic tracking-tight leading-none">
+                            {value}
+                        </p>
+                        {sub && (
+                            <p className="text-[10px] text-gray-400 mt-1.5 leading-relaxed">
+                                {sub}
+                            </p>
+                        )}
+                        {badge && (
+                            <p className={`text-[10px] font-bold mt-1 ${badge.color}`}>
+                                {badge.label}
+                            </p>
+                        )}
+                    </div>
+                    <div className={`p-2.5 rounded-xl ring-1 flex-shrink-0 ${c.bg} ${c.ring}`}>
+                        <span className={c.icon}>{icon}</span>
+                    </div>
                 </div>
-                <div className={cn("p-3 rounded-xl", colors[color])}>{icon}</div>
             </CardContent>
         </Card>
     )
 }
-
-function CardViewSimple({ title, chart }: any) {
+ 
+function CardViewSimple({ title, chart }: { title: string; chart: React.ReactNode }) {
     return (
         <Card className="dark:bg-gray-900 border-gray-800">
             <CardHeader className="pb-2 border-b dark:border-gray-800 mb-4">
-                <CardTitle className="text-[10px] font-black uppercase text-gray-500">{title}</CardTitle>
+                <CardTitle className="text-[10px] font-black uppercase text-gray-500">
+                    {title}
+                </CardTitle>
             </CardHeader>
             <CardContent>{chart}</CardContent>
         </Card>
     )
 }
-
 function CardPizzaSmall({ title, data }: any) {
+    console.log("Data para CardPizzaSmall:", data) // Log para verificar os dados recebidos
     return (
         <Card className="w-full dark:bg-gray-900 border-gray-800">
-            <CardHeader className="p-3 border-b dark:border-gray-800">
-                <CardTitle className="text-[10px] font-black uppercase text-center text-gray-400">
+            <CardHeader className="p-1 border-b dark:border-gray-800">
+                <CardTitle className="text-1xl font-black uppercase text-center text-gray-500">
                     {title}
                 </CardTitle>
             </CardHeader>
 
-            <CardContent className="p-3 flex flex-col items-center">
+            <CardContent className="p-1 flex flex-col items-center">
                 <div className="h-fit w-full">
                     <GraficoPizza data={data || []} />
                 </div>
 
                 {/* detalhe */}
-                <div className="text-[10px] text-gray-400 text-center">
-                    {data?.length || 0} salas
+                <div className="text-[12px] text-gray-500 text-center mt-2">
+                    {data.length != 4 ? `${data.length} Salas` : `${data.length} Recepcionistas`}
                 </div>
             </CardContent>
         </Card>

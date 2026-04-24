@@ -4,10 +4,18 @@ import { chartConfig } from "./chartConfig"
 
 
 export function GraficoAtendimentosPorEsp({ data }: { data: any[] }) {
-  const chartData = data || []
+  const chartData = (data || []).map((item: any) => {
+    if (typeof item.total === "number") {
+      return { nome: item.especialidade ?? item.nome, total: item.total }
+    }
+
+    const salas = item.salas || []
+    const total = salas.reduce((acc: number, sala: any) => acc + (sala.total || 0), 0)
+    return { nome: item.especialidade ?? item.nome, total }
+  })
 
   return (
-    <ChartContainer config={chartConfig} className="h-[300px] w-full">
+    <ChartContainer config={chartConfig} className="h-[340px] w-full !aspect-auto">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={chartData} layout="vertical" margin={{ left: 30, right: 30 }}>
           <XAxis type="number" hide />
