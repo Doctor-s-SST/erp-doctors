@@ -261,13 +261,13 @@ export async function POST(req: Request) {
     let browser;
 
     if (isProd) {
-      // Configuração para Produção (Netlify)
-      browser = await puppeteer.launch({
-        args: chromium.args,
-        executablePath: await chromium.executablePath(),
-        headless: true,
-      });
-    } else {
+  browser = await puppeteer.launch({
+    args: chromium.args,
+    // Carrega o binário de uma URL externa em vez de localmente no node_modules
+    executablePath: await chromium.executablePath('https://github.com/sparticuz/chromium/releases/download/v123.0.1/chromium-v123.0.1-pack.tar'),
+    headless: true,
+  });
+} else {
       // Configuração para Desenvolvimento (Seu Windows)
       // Certifique-se de ter o Chrome ou Edge instalado
       browser = await puppeteer.launch({
