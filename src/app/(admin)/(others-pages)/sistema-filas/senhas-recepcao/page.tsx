@@ -1106,8 +1106,8 @@ export default function RecepcaoPage() {
                                                                             onClick={() => executarAcao("gerenciar_chamada_recepcao", {
                                                                                 p_atendimento_id: item.id,
                                                                                 p_status: 'EM_FILA',
-                                                                                p_guiche: item.guiche,
-                                                                                p_atendente: item.atendente
+                                                                                p_guiche: session?.guiche,
+                                                                                p_atendente: session?.nome
                                                                             })}
                                                                             disabled={loadingAction === item.id}
                                                                         >
@@ -1186,7 +1186,9 @@ export default function RecepcaoPage() {
                                                                                         className="h-8 text-[11px] border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-muted dark:hover:text-white dark:hover:bg-blue-600 transition-colors"
                                                                                         onClick={() => executarAcao("gerenciar_chamada_recepcao", {
                                                                                             p_atendimento_id: item.id,
-                                                                                            p_status: 'EM_FILA'
+                                                                                            p_status: 'EM_FILA',
+                                                                                            p_guiche: session?.guiche,
+                                                                                            p_atendente: session?.nome
                                                                                         })}
                                                                                     >
                                                                                         <BellRing className="w-3 h-3 mr-1" />
@@ -1217,7 +1219,9 @@ export default function RecepcaoPage() {
                                                                                 className="h-8 text-[11px] border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-muted dark:hover:text-white dark:hover:bg-blue-600 transition-colors"
                                                                                 onClick={() => executarAcao("gerenciar_chamada_recepcao", {
                                                                                     p_atendimento_id: item.id,
-                                                                                    p_status: 'EM_FILA'
+                                                                                    p_status: 'EM_FILA',
+                                                                                    p_guiche: session?.guiche,
+                                                                                    p_atendente: session?.nome
                                                                                 })}
                                                                             >
                                                                                 <BellRing className="w-3 h-3 mr-1" />
