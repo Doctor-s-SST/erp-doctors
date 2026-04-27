@@ -254,7 +254,7 @@ export default function PainelTV() {
                 )}
               </div>
 
-              <div className="flex flex-col items-center w-full mt-8">
+              <div className="flex flex-col items-center w-full mt-0">
                 {ultimaChamada?.nome_paciente ? (
                   <h2 className="text-[6vw] leading-[1.1] font-black text-center px-10 uppercase drop-shadow-md break-words">
                     {ultimaChamada.nome_paciente}
@@ -280,7 +280,7 @@ export default function PainelTV() {
                   <div className="flex flex-col items-center mt-2">
                     <span className="text-5xl tracking-tight">
                       {ultimaChamada?.origem !== 'RECEPCAO'
-                        ? salasAndar[(ultimaChamada?.guiche as keyof typeof salasAndar)] || "Recepcao"
+                        ? salasAndar[(ultimaChamada?.guiche as keyof typeof salasAndar)] || "Recepção"
                         : null}
                     </span>
                   </div>
