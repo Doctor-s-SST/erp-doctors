@@ -120,10 +120,10 @@ export default function PainelTV() {
 
       try {
         await tocarSino();
-        // await falar(textoFinal);
+        await falar(textoFinal);
         await new Promise(r => setTimeout(r, 1500));
         await tocarSino();
-        // await falar(textoFinal);
+        await falar(textoFinal);
       } finally {
         resolve();
       }
