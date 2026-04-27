@@ -247,45 +247,47 @@ export default function PainelTV() {
               exit={{ opacity: 0 }}
               className="relative w-full h-full shadow-[0px_4px_15px_0px_rgba(0,0,0,0.2)] bg-[#3498db] p-5 flex flex-col items-center justify-center overflow-hidden text-white rounded-lg"
             >
-              <div className="text-[2.2em] absolute top-10 flex flex-col items-center text-white font-bold uppercase text-center" >
-                <h3 className="tracking-widest opacity-90">Senha Atual</h3>
-                {ultimaChamada?.nome_paciente && (
-                  <p className="text-5xl mt-2">{ultimaChamada.senha_codigo}</p>
-                )}
-              </div>
-
-              <div className="flex flex-col items-center w-full mt-0">
-                {ultimaChamada?.nome_paciente ? (
-                  <h2 className="text-[6vw] leading-[1.1] font-black text-center px-10 uppercase drop-shadow-md break-words">
-                    {ultimaChamada.nome_paciente}
-                  </h2>
-                ) : (
-                  <h2 className="text-[19rem] leading-none font-black drop-shadow-lg tracking-tighter">
-                    {ultimaChamada?.senha_codigo || "---"}
-                  </h2>
-                )}
-              </div>
-
-              <div className="absolute bottom-12 text-7xl font-bold uppercase tracking-tight flex flex-col items-center">
-                <div className="flex gap-8">
-                  <span>
-                    {ultimaChamada?.origem === 'RECEPCAO' ? 'Guichê' : 'Sala'}
-                  </span>
-                  <span>
-                    {ultimaChamada?.guiche || '-'}
-                  </span>
-                </div>
-
-                {unidadeId === "ba83f0b4-1b16-4b07-9473-fe929f16f881" && (
-                  <div className="flex flex-col items-center mt-2">
-                    <span className="text-5xl tracking-tight">
-                      {ultimaChamada?.origem !== 'RECEPCAO'
-                        ? salasAndar[(ultimaChamada?.guiche as keyof typeof salasAndar)] || "Recepção"
-                        : null}
-                    </span>
+              {ultimaChamada && (
+                <>
+                  <div className="text-[2.2em] absolute top-10 flex flex-col items-center text-white font-bold uppercase text-center">
+                    <h3 className="tracking-widest opacity-90">Senha Atual</h3>
+                    <p className="text-5xl mt-2">{ultimaChamada.senha_codigo}</p>
                   </div>
-                )}
-              </div>
+
+                  <div className="flex flex-col items-center w-full mt-0">
+                    {ultimaChamada.nome_paciente ? (
+                      <h2 className="text-[6vw] leading-[1.1] font-black text-center px-10 uppercase drop-shadow-md break-words">
+                        {ultimaChamada.nome_paciente}
+                      </h2>
+                    ) : (
+                      <h2 className="text-[19rem] leading-none font-black drop-shadow-lg tracking-tighter">
+                        {ultimaChamada.senha_codigo}
+                      </h2>
+                    )}
+                  </div>
+
+                  <div className="absolute bottom-12 text-7xl font-bold uppercase tracking-tight flex flex-col items-center">
+                    <div className="flex gap-8">
+                      <span>
+                        {ultimaChamada.origem === 'RECEPCAO' ? 'Guichê' : 'Sala'}
+                      </span>
+                      <span>
+                        {ultimaChamada.guiche}
+                      </span>
+                    </div>
+
+                    {unidadeId === "ba83f0b4-1b16-4b07-9473-fe929f16f881" && (
+                      <div className="flex flex-col items-center mt-2">
+                        <span className="text-5xl tracking-tight">
+                          {ultimaChamada.origem === 'RECEPCAO'
+                            ? "Recepção"
+                            : salasAndar[ultimaChamada.guiche as keyof typeof salasAndar] || ""}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
             </motion.main>
           </AnimatePresence>
         </div>
