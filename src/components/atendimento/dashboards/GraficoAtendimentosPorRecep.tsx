@@ -26,7 +26,7 @@ export function GraficoAtendimentosPorRecep({ data }: { data: RecepcaoItem[] }) 
             outerRadius={80}
             paddingAngle={5}
             labelLine={false}
-            label={({ total }) => `${total ?? 0}`}
+            label={({ value }) => `${value ?? 0}`}
           >
             {chartData.map((_, index) => (
               <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} className="stroke-background hover:opacity-80 transition-opacity" />

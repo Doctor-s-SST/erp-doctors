@@ -28,7 +28,7 @@ export function GraficoTipoAtendimentoPaciente({ data }: { data: TipoAtendimento
             outerRadius={92}
             paddingAngle={4}
             labelLine={false}
-            label={({ total: value }) => `${value}`}
+            label={({ value }) => `${value}`}
           >
             {chartData.map((item, index) => (
               <Cell key={`${item.tipo}-${index}`} fill={COLORS[index % COLORS.length]} />
