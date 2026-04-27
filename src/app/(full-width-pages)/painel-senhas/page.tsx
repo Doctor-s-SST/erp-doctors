@@ -115,7 +115,11 @@ export default function PainelTV() {
 
       const senhaSoletreada = (chamada.senha_codigo || "").split('').join(' ');
       const identificador = chamada.nome_paciente ? `${chamada.nome_paciente}` : `Senha, ${senhaSoletreada}`;
-      const destino = chamada.origem === 'RECEPCAO' ? `comparecer ao guichê ${chamada.guiche}, recepção` : `comparecer à sala ${chamada.guiche}`;
+      const andar = salasAndar[chamada.guiche as keyof typeof salasAndar];
+
+      const destino = chamada.origem === 'RECEPCAO'
+        ? `comparecer ao guichê ${chamada.guiche}, recepção`
+        : `comparecer à sala ${chamada.guiche}${andar ? `, ${andar}` : ""}`;
       const textoFinal = `${identificador}, ${destino}`;
 
       try {
