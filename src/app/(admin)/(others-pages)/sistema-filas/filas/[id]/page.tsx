@@ -31,7 +31,8 @@ import {
     Filter,
     Loader2,
     X,
-    UserCog
+    UserCog,
+    DatabaseSearch
 } from "lucide-react"
 import { is } from "zod/v4/locales"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -42,6 +43,7 @@ type ItemFila = {
     atendimento_id: string
     senha: string
     nome: string
+    empresa_razao: string
     status: string
     status_atendimento: string
     created_at: string
@@ -501,6 +503,11 @@ export default function FilaPage() {
         toast.success("Ficha copiada: " + (item.ficha_sequencial || "--"))
     };
 
+    const onEmpresaClick = (item: any) => {
+        window.navigator.clipboard.writeText(item.empresa_razao || "--");
+        toast.success("Empresa copiada: " + (item.empresa_razao || "--"))
+    };
+
     const timersRef = useRef<{ [key: string]: ReturnType<typeof setInterval> }>({});
 
     const cancelarFinalizacao = (id: string) => {
@@ -689,7 +696,6 @@ export default function FilaPage() {
 
                                         // const minhaEspecialidade = especialidadeNome.toUpperCase()
                                         // console.log(localStorage.getItem(''))
-
                                         return (
                                             <tr
                                                 key={item.id}
@@ -711,6 +717,16 @@ export default function FilaPage() {
                                                         <span className="font-bold text-slate-700 dark:text-slate-200">
                                                             {item.nome}
                                                         </span>
+                                                        {item.empresa_razao && (
+                                                                <TooltipProvider>
+                                                                    <Tooltip>
+                                                                        <TooltipTrigger>
+                                                                            <DatabaseSearch className="w-4 h-4 text-emerald-500" onClick={() => onEmpresaClick?.(item)}/>
+                                                                        </TooltipTrigger>
+                                                                        <TooltipContent onClick={() => onEmpresaClick?.(item)}>{item.empresa_razao}</TooltipContent>
+                                                                    </Tooltip>
+                                                                </TooltipProvider>
+                                                            )}
                                                     </div>
                                                 </td>
 

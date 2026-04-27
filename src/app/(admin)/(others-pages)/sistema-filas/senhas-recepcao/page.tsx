@@ -34,6 +34,7 @@ type Atendimento = {
     sala_atual?: string | null
     num_sala?: string | null
     profissional?: string | null
+    tipo_exame: string
     // unidadeId: string
     encaixe: boolean
 }
@@ -475,7 +476,8 @@ export default function RecepcaoPage() {
             p_exames_nomes: formFicha.exames,
             p_observacao: formFicha.observacao,
             p_unidade_id: unidadeId,
-            p_encaixe: formFicha.encaixe
+            p_encaixe: formFicha.encaixe,
+            p_tipo_exame: formFicha.exame.tipo
         });
 
         if (error) {
