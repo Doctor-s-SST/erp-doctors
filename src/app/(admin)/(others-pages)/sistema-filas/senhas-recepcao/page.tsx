@@ -347,7 +347,7 @@ export default function RecepcaoPage() {
                     case "AGUARDANDO_RECEPCAO": return 3;
                     case "NAO_ATENDIDO": return 4;
                     case "AGUARDANDO_EXAMES": return 5;
-                    case "FINALIZADO": return 6;
+                    case "FINALIZADO": return 9;
                     case "CANCELADO": return 10;
                     default: return 7;
                 }
@@ -614,14 +614,14 @@ export default function RecepcaoPage() {
                 ip: selectedPrinter?.ip
             });
 
-            await fetch("/api/imprimir-senha", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    senha: senhaGerada,
-                    ip: selectedPrinter?.ip
-                })
-            });
+            // await fetch("/api/imprimir-senha", {
+            //     method: "POST",
+            //     headers: { "Content-Type": "application/json" },
+            //     body: JSON.stringify({
+            //         senha: senhaGerada,
+            //         ip: selectedPrinter?.ip
+            //     })
+            // });
 
             toast.success(`Senha ${senhaGerada} gerada!`);
             fetchData();
