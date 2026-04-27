@@ -1705,7 +1705,7 @@ export default function RecepcaoPage() {
                                     <SelectValue placeholder="Selecione o Guichê" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {(unidadeId !== "8c66cebc-07fa-4699-941d-807af73c443e" ? ["1", "2", "3"] : ["1", "2"]).map((n) => (
+                                    {(unidadeId !== "8c66cebc-07fa-4699-941d-807af73c443e" ? ["1", "2", "3", "4"] : ["1", "2"]).map((n) => (
                                         <SelectItem key={n} value={n}>
                                             Guichê {n}
                                         </SelectItem>
