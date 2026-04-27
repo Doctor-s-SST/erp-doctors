@@ -609,19 +609,19 @@ export default function RecepcaoPage() {
             if (error) throw error;
 
             // Chamada para a API com os campos separados
-            // await supabase.from("fila_impressao").insert({
-            //     senha: senhaGerada,
-            //     ip: selectedPrinter?.ip
-            // });
+            await supabase.from("fila_impressao").insert({
+                senha: senhaGerada,
+                ip: selectedPrinter?.ip
+            });
 
-            // await fetch("/api/imprimir-senha", {
-            //     method: "POST",
-            //     headers: { "Content-Type": "application/json" },
-            //     body: JSON.stringify({
-            //         senha: senhaGerada,
-            //         ip: selectedPrinter?.ip
-            //     })
-            // });
+            await fetch("/api/imprimir-senha", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    senha: senhaGerada,
+                    ip: selectedPrinter?.ip
+                })
+            });
 
             toast.success(`Senha ${senhaGerada} gerada!`);
             fetchData();
