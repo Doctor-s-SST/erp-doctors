@@ -250,7 +250,7 @@ export default function PainelTV() {
                 )}
               </div>
 
-              <div className="flex flex-col items-center w-full mt-10">
+              <div className="flex flex-col items-center w-full mt-8">
                 {ultimaChamada?.nome_paciente ? (
                   <h2 className="text-[6vw] leading-[1.1] font-black text-center px-10 uppercase drop-shadow-md break-words">
                     {ultimaChamada.nome_paciente}
