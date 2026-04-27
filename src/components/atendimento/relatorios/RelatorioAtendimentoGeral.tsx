@@ -28,11 +28,11 @@ export const RelatorioAtendimentoGeral = React.forwardRef<HTMLDivElement, { item
           <h2 className="bg-slate-900 text-white px-2 py-1 text-sm font-bold uppercase mb-2">Dados do Paciente</h2>
           <div className='flex justify-between items-center'>
             <div className="grid grid-cols-2 gap-y-2 text-sm flex-grow">
-              <p><strong>NOME:</strong> <span className="uppercase">{item.cabecalho.nome}</span></p>
-              <p><strong>IDADE:</strong> <span className="uppercase">{item.cabecalho.idade}</span></p>
-              <p><strong>SENHA:</strong> {item.cabecalho.senha}</p>
-              <p><strong>EMPRESA:</strong> <span className="uppercase">{item.cabecalho.empresa}</span></p>
-              <p><strong>DATA:</strong> {item.cabecalho.acionamento?.split(' ')[0]}</p>
+              <p><strong>NOME:</strong> <span className="uppercase">{item?.cabecalho?.nome}</span></p>
+              <p><strong>IDADE:</strong> <span className="uppercase">{item?.cabecalho?.idade}</span></p>
+              <p><strong>SENHA:</strong> {item?.cabecalho?.senha}</p>
+              <p><strong>EMPRESA:</strong> <span className="uppercase">{item?.cabecalho?.empresa}</span></p>
+              <p><strong>DATA:</strong> {item?.cabecalho?.acionamento?.split(' ')[0]}</p>
             </div>
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center">
               <p className="text-[10px] text-gray-500 font-black uppercase">Permanência</p>
@@ -63,16 +63,16 @@ export const RelatorioAtendimentoGeral = React.forwardRef<HTMLDivElement, { item
               </tr>
               <tr className="border-b border-slate-100">
                 <td className="py-3 font-bold">RECEPÇÃO</td>
-                <td className="py-3 uppercase">{item.recepcao.atendente}</td>
-                <td className="py-3 font-mono">{item.recepcao.periodo}</td>
-                <td className="py-3 text-right font-bold">{item.recepcao.duracao}</td>
+                <td className="py-3 uppercase">{item?.recepcao?.atendente}</td>
+                <td className="py-3 font-mono">{item?.recepcao?.periodo}</td>
+                <td className="py-3 text-right font-bold">{item?.recepcao?.duracao}</td>
               </tr>
               {item.procedimentos?.map((proc: any, idx: number) => (
                 <tr key={idx} className="border-b border-slate-100 break-inside-avoid">
-                  <td className="py-3 font-bold uppercase">{proc.especialidade || proc.especialiade}</td>
-                  <td className="py-3 uppercase">{proc.profissional}</td>
-                  <td className="py-3 font-mono">{proc.periodo}</td>
-                  <td className="py-3 text-right font-bold">{proc.duracao_sala}</td>
+                  <td className="py-3 font-bold uppercase">{proc?.especialidade || proc?.especialiade}</td>
+                  <td className="py-3 uppercase">{proc?.profissional}</td>
+                  <td className="py-3 font-mono">{proc?.periodo}</td>
+                  <td className="py-3 text-right font-bold">{proc?.duracao_sala}</td>
                 </tr>
               ))}
             </tbody>
