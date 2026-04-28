@@ -555,6 +555,7 @@ export default function RecepcaoPage() {
         setEspecialidadesAuto([]);
         setEspecialidadesManual(especialidadesFinal);
 
+        console.log(detalhes)
         if (detalhes) {
             setEspecialidadesAuto([]);
             setEspecialidadesManual(especialidadesFinal);
@@ -574,7 +575,7 @@ export default function RecepcaoPage() {
                     setor: detalhes.pacientes?.setor || "",
                     cpf: detalhes.pacientes?.cpf || ""
                 },
-                exame: { tipo: "" },
+                exame: { tipo: detalhes.tipo_exame || "" },
                 exames: detalhes.exames_list || [],
                 especialidadesSelecionadas: [],
                 observacao: detalhes.observacao || "",
