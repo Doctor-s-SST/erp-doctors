@@ -673,7 +673,7 @@ export default function FilaPage() {
                                 </thead>
 
                                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                                    {dadosProcessados.map((item) => {
+                                    {dadosProcessados.map((item: any) => {
                                         const styles = getStatusStyles(item);
                                         // const waitTime = getTempoEsperaTotal(item);
 
@@ -682,6 +682,9 @@ export default function FilaPage() {
                                         const isNaoAtendido = naoAtendidosRecentes.includes(item.id);
                                         const isBloqueado = item.bloqueado || styles.label === "BLOQUEADO"
                                         const isEncerrado = isFinalizado || isCancelado
+                                        const isTox = especialidadeNome?.toUpperCase() == ("TOXICOLÓGICO") ? true : false;
+                                        console.log(isTox)
+                                        console.log(especialidadeNome)
 
                                         const rowStyles =
                                             isFinalizado
@@ -718,15 +721,15 @@ export default function FilaPage() {
                                                             {item.nome}
                                                         </span>
                                                         {item.empresa_razao && (
-                                                                <TooltipProvider>
-                                                                    <Tooltip>
-                                                                        <TooltipTrigger>
-                                                                            <DatabaseSearch className="w-4 h-4 text-emerald-500" onClick={() => onEmpresaClick?.(item)}/>
-                                                                        </TooltipTrigger>
-                                                                        <TooltipContent onClick={() => onEmpresaClick?.(item)}>{item.empresa_razao}</TooltipContent>
-                                                                    </Tooltip>
-                                                                </TooltipProvider>
-                                                            )}
+                                                            <TooltipProvider>
+                                                                <Tooltip>
+                                                                    <TooltipTrigger>
+                                                                        <DatabaseSearch className="w-4 h-4 text-emerald-500" onClick={() => onEmpresaClick?.(item)} />
+                                                                    </TooltipTrigger>
+                                                                    <TooltipContent onClick={() => onEmpresaClick?.(item)}>{item.empresa_razao}</TooltipContent>
+                                                                </Tooltip>
+                                                            </TooltipProvider>
+                                                        )}
                                                     </div>
                                                 </td>
 
@@ -799,6 +802,45 @@ export default function FilaPage() {
                                                         {!isEncerrado ? (
                                                             <>
                                                                 {item.status === "AGUARDANDO" && !isBloqueado && <>
+                                                                    {isTox && (
+                                                                        finalizandoIds[item.id] ? (
+                                                                            <div className="flex items-center gap-2">
+                                                                                <Button
+                                                                                    size="sm"
+                                                                                    disabled
+                                                                                    className="h-8 text-[11px] font-bold bg-slate-600 min-w-[90px] text-white"
+                                                                                >
+                                                                                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                                                                    {finalizandoIds[item.id]}s
+                                                                                </Button>
+
+                                                                                <TooltipProvider>
+                                                                                    <Tooltip>
+                                                                                        <TooltipTrigger asChild>
+                                                                                            <Button
+                                                                                                size="sm"
+                                                                                                variant="destructive"
+                                                                                                className="h-8 w-8 p-0"
+                                                                                                onClick={() => cancelarFinalizacao(item.id)}
+                                                                                            >
+                                                                                                <X className="w-4 h-4" />
+                                                                                            </Button>
+                                                                                        </TooltipTrigger>
+                                                                                        <TooltipContent>Interromper finalização</TooltipContent>
+                                                                                    </Tooltip>
+                                                                                </TooltipProvider>
+                                                                            </div>
+                                                                        ) : (
+                                                                            <Button
+                                                                                size="sm"
+                                                                                className="h-8 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700"
+                                                                                onClick={() => iniciarFinalizacao(item)}
+                                                                            >
+                                                                                <CheckCircle2 className="w-3 h-3 mr-1" />
+                                                                                Realizado
+                                                                            </Button>
+                                                                        )
+                                                                    )}
                                                                     <Button
                                                                         size="sm"
                                                                         variant="outline"
@@ -861,30 +903,30 @@ export default function FilaPage() {
                                                                             </div>
                                                                         ) : (
                                                                             <><Button
-                                                                                    size="sm"
-                                                                                    className="h-8 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700"
-                                                                                    onClick={() => iniciarFinalizacao(item)}
-                                                                                >
-                                                                                    <CheckCircle2 className="w-3 h-3 mr-1" />
-                                                                                    Finalizar
-                                                                                </Button><Button
-                                                                                    size="sm"
-                                                                                    variant="outline"
-                                                                                    className="h-8 text-[11px] border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white"
-                                                                                    onClick={() => executarAcao("chamar_paciente", {
-                                                                                        p_atendimento_id: item.atendimento_id,
-                                                                                        p_atendimento_exame_id: item.id,
-                                                                                        p_sala: especialidadeNome,
-                                                                                        p_num_sala: session.sala,
-                                                                                        p_profissional: session.profissional,
-                                                                                    })}
-                                                                                >
-                                                                                        <BellRing className="w-3 h-3 mr-1" />
-                                                                                        Chamar Novamente
-                                                                                    </Button></>
+                                                                                size="sm"
+                                                                                className="h-8 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700"
+                                                                                onClick={() => iniciarFinalizacao(item)}
+                                                                            >
+                                                                                <CheckCircle2 className="w-3 h-3 mr-1" />
+                                                                                Finalizar
+                                                                            </Button><Button
+                                                                                size="sm"
+                                                                                variant="outline"
+                                                                                className="h-8 text-[11px] border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white"
+                                                                                onClick={() => executarAcao("chamar_paciente", {
+                                                                                    p_atendimento_id: item.atendimento_id,
+                                                                                    p_atendimento_exame_id: item.id,
+                                                                                    p_sala: especialidadeNome,
+                                                                                    p_num_sala: session.sala,
+                                                                                    p_profissional: session.profissional,
+                                                                                })}
+                                                                            >
+                                                                                    <BellRing className="w-3 h-3 mr-1" />
+                                                                                    Chamar Novamente
+                                                                                </Button></>
                                                                         )}
 
-                                                                        
+
                                                                     </>
                                                                 )}
 
@@ -902,12 +944,54 @@ export default function FilaPage() {
                                                                     </Button>
                                                                 )}
 
-                                                                {isBloqueado /*|| (item.status_atendimento !== `EM_${minhaEspecialidade}`)*/ && (
-                                                                    <Badge
-                                                                        className={`${styles.bg} ${styles.color} border-none text-[10px] uppercase font-bold tracking-wider ${styles.animate || ""}`}
-                                                                    >
-                                                                        Atendimento Bloqueado
-                                                                    </Badge>
+                                                                {isBloqueado && (
+                                                                    <>
+                                                                        {isTox && (
+                                                                            finalizandoIds[item.id] ? (
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <Button
+                                                                                        size="sm"
+                                                                                        disabled
+                                                                                        className="h-8 text-[11px] font-bold bg-slate-600 min-w-[90px] text-white"
+                                                                                    >
+                                                                                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                                                                        {finalizandoIds[item.id]}s
+                                                                                    </Button>
+
+                                                                                    <TooltipProvider>
+                                                                                        <Tooltip>
+                                                                                            <TooltipTrigger asChild>
+                                                                                                <Button
+                                                                                                    size="sm"
+                                                                                                    variant="destructive"
+                                                                                                    className="h-8 w-8 p-0"
+                                                                                                    onClick={() => cancelarFinalizacao(item.id)}
+                                                                                                >
+                                                                                                    <X className="w-4 h-4" />
+                                                                                                </Button>
+                                                                                            </TooltipTrigger>
+                                                                                            <TooltipContent>Interromper finalização</TooltipContent>
+                                                                                        </Tooltip>
+                                                                                    </TooltipProvider>
+                                                                                </div>
+                                                                            ) : (
+                                                                                <Button
+                                                                                    size="sm"
+                                                                                    className="h-8 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700"
+                                                                                    onClick={() => iniciarFinalizacao(item)}
+                                                                                >
+                                                                                    <CheckCircle2 className="w-3 h-3 mr-1" />
+                                                                                    Realizado
+                                                                                </Button>
+                                                                            )
+                                                                        )}
+
+                                                                        <Badge
+                                                                            className={`${styles.bg} ${styles.color} border-none text-[10px] uppercase font-bold tracking-wider ${styles.animate || ""}`}
+                                                                        >
+                                                                            Atendimento Bloqueado
+                                                                        </Badge>
+                                                                    </>
                                                                 )}
                                                             </>
                                                         ) : (
