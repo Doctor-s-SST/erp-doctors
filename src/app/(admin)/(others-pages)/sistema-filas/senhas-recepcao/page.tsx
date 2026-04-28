@@ -555,7 +555,6 @@ export default function RecepcaoPage() {
         setEspecialidadesAuto([]);
         setEspecialidadesManual(especialidadesFinal);
 
-        console.log(detalhes)
         if (detalhes) {
             setEspecialidadesAuto([]);
             setEspecialidadesManual(especialidadesFinal);
