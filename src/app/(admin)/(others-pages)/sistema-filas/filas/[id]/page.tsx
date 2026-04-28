@@ -527,24 +527,74 @@ export default function FilaPage() {
         toast.warning("Finalização cancelada");
     };
 
+    // const iniciarFinalizacao = async (item: ItemFila) => {
+    //     const tempo = await obterTempoExecucao(item);
+
+    //     setFinalizandoIds(prev => ({
+    //         ...prev,
+    //         [item.id]: tempo
+    //     }));
+
+    //     const interval = setInterval(() => {
+    //         setFinalizandoIds(prev => {
+    //             const atual = prev[item.id];
+
+    //             if (atual === undefined) {
+    //                 clearInterval(interval);
+    //                 return prev;
+    //             }
+
+    //             if (atual <= 1) {
+    //                 clearInterval(interval);
+    //                 delete timersRef.current[item.id];
+
+    //                 executarAcao("finalizar_especialidade", {
+    //                     p_atendimento_id: item.atendimento_id,
+    //                     p_atendimento_exame_id: item.id,
+    //                     p_sala: especialidadeNome,
+    //                     p_num_sala: session.sala,
+    //                 });
+
+    //                 const novo = { ...prev };
+    //                 delete novo[item.id];
+    //                 return novo;
+    //             }
+
+    //             return {
+    //                 ...prev,
+    //                 [item.id]: atual - 1
+    //             };
+    //         });
+    //     }, 1000);
+
+    //     timersRef.current[item.id] = interval;
+    // };
+
+
+    // Verifica se o profissional atual já está atendendo alguém
+
     const iniciarFinalizacao = async (item: ItemFila) => {
         const tempo = await obterTempoExecucao(item);
 
+        const fim = Date.now() + tempo * 1000;
+
         setFinalizandoIds(prev => ({
             ...prev,
-            [item.id]: tempo
+            [item.id]: fim
         }));
 
         const interval = setInterval(() => {
             setFinalizandoIds(prev => {
-                const atual = prev[item.id];
+                const fim = prev[item.id];
 
-                if (atual === undefined) {
+                if (!fim) {
                     clearInterval(interval);
                     return prev;
                 }
 
-                if (atual <= 1) {
+                const restante = Math.ceil((fim - Date.now()) / 1000);
+
+                if (restante <= 0) {
                     clearInterval(interval);
                     delete timersRef.current[item.id];
 
@@ -562,7 +612,7 @@ export default function FilaPage() {
 
                 return {
                     ...prev,
-                    [item.id]: atual - 1
+                    [item.id]: fim
                 };
             });
         }, 1000);
@@ -570,8 +620,6 @@ export default function FilaPage() {
         timersRef.current[item.id] = interval;
     };
 
-
-    // Verifica se o profissional atual já está atendendo alguém
     const profissionalOcupado = useMemo(() => {
         return data.some(item =>
             (item.status === "EM_ATENDIMENTO" || item.status === "EM_FILA") &&
@@ -809,7 +857,7 @@ export default function FilaPage() {
                                                                                     className="h-8 text-[11px] font-bold bg-slate-600 min-w-[90px] text-white"
                                                                                 >
                                                                                     <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                                                                                    {finalizandoIds[item.id]}s
+                                                                                    {Math.max(0, Math.ceil((finalizandoIds[item.id] - Date.now()) / 1000))}s
                                                                                 </Button>
 
                                                                                 <TooltipProvider>
@@ -880,7 +928,7 @@ export default function FilaPage() {
                                                                                     className="h-8 text-[11px] font-bold bg-slate-600 min-w-[90px] text-white"
                                                                                 >
                                                                                     <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                                                                                    {finalizandoIds[item.id]}s
+                                                                                    {Math.max(0, Math.ceil((finalizandoIds[item.id] - Date.now()) / 1000))}s
                                                                                 </Button>
 
                                                                                 <TooltipProvider>
@@ -953,7 +1001,7 @@ export default function FilaPage() {
                                                                                         className="h-8 text-[11px] font-bold bg-slate-600 min-w-[90px] text-white"
                                                                                     >
                                                                                         <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                                                                                        {finalizandoIds[item.id]}s
+                                                                                        {Math.max(0, Math.ceil((finalizandoIds[item.id] - Date.now()) / 1000))}s
                                                                                     </Button>
 
                                                                                     <TooltipProvider>
