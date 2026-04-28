@@ -435,10 +435,10 @@ export default function FilaPage() {
                 console.log(naoAtendido)
                 if (item.status === "EM_ATENDIMENTO" && isMinhaSessao) return 1;
                 if (item.status === "EM_FILA") return 2;
-                if (item.status === "EM_ATENDIMENTO" && !isMinhaSessao && naoAtendido) return 5;
                 if (item.status === "AGUARDANDO" && naoAtendido) return 3;
                 if (item.status === "AGUARDANDO") return 4;
-                if (item.status === "FINALIZADO") return 6;
+                if (item.status === "EM_ATENDIMENTO" && !isMinhaSessao && naoAtendido) return 9;
+                if (item.status === "FINALIZADO") return 10;
                 return 7;
             };
 
