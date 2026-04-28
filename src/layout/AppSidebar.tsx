@@ -37,7 +37,7 @@ const navItems: NavItem[] = [
     icon: <MonitorCog className="w-5 h-5" />,
     roles: ["admin", "recepcao", "especialista", "painel"],
     subItems: [
-      { name: "Chamada de Senhas", path: "/sistema-filas/senhas-recepcao", roles: ["admin", "recepcao", "painel"] },
+      { name: "Chamada de Senhas", path: "/sistema-filas/senhas-recepcao", roles: ["admin", "recepcao", "painel", "especialista"] },
       { name: "Filas", path: "/sistema-filas/filas", roles: ["admin", "recepcao", "especialista", "painel"] },
       { name: "Painel TV", path: "/painel-senhas", roles: ["admin", "painel"] },
       { name: "Relatórios", path: "/sistema-filas/relatorios", roles: ["admin", "painel"] },
