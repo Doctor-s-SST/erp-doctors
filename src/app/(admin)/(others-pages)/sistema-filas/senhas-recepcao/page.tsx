@@ -70,6 +70,17 @@ export default function RecepcaoPage() {
     const [unidadeId, setUnidadeId] = useState<string | null>(null);
     const [unidadeNome, setUnidadeNome] = useState<string>("");
 
+    // Este estado serve apenas para forçar o componente a atualizar a cada minuto
+    const [tick, setTick] = useState(0);
+
+    useEffect(() => {
+        const timer = setInterval(() => {
+            setTick((prev) => prev + 1);
+        }, 30000);
+
+        return () => clearInterval(timer);
+    }, []);
+
     // ESTADOS DO MODAL DE IMPORTAÇÃO
     const [importModal, setImportModal] = useState<{ open: boolean, item: Atendimento | null }>({ open: false, item: null })
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -252,30 +263,42 @@ export default function RecepcaoPage() {
     }, []); // Roda apenas no mount da página
 
     // 2. Efeito para buscar dados do painel (Depende do unidadeId)
-    useEffect(() => {
-        if (!unidadeId) return;
+    // useEffect(() => {
+    //     if (!unidadeId) return;
 
-        fetchData(); // Busca imediata
-        const interval = setInterval(fetchData, 5000); // Polling
+    //     fetchData(); // Busca imediata
+    //     const interval = setInterval(fetchData, 5000); // Polling
 
-        return () => clearInterval(interval);
-    }, [unidadeId]); // <--- Roda sempre que o unidadeId for definido ou mudar
+    //     return () => clearInterval(interval);
+    // }, [unidadeId]); // <--- Roda sempre que o unidadeId for definido ou mudar
 
 
     const getTempoEsperaEvolutivo = (item: any) => {
         if (!item.created_at) return { texto: "--", isCancelado: false };
 
-        const statusTravados = ["CANCELADO", "FINALIZADO"];
+        const isCancelado = item.status === "CANCELADO";
+        const isFinalizado = item.status === "FINALIZADO";
 
-        if (statusTravados.includes(item.status) && item.tempo_espera_min !== undefined) {
-            return { texto: `${item.tempo_espera_min} min`, isCancelado: true };
+        // 1. TRAVA: Se já encerrou, não calcula mais nada. Usa o dado do banco.
+        if (isFinalizado || isCancelado) {
+            const tempoBanco = item.tempo_espera_min ?? item.tempo_espera ?? 0;
+            return {
+                texto: `${tempoBanco} min`,
+                isCancelado: isCancelado
+            };
         }
 
-        const diffMs = Date.now() - new Date(item.created_at).getTime();
-        // Garante que o tempo nunca seja menor que 0
+        // 2. DINÂMICO: Se ainda está em aberto, calcula a diferença agora.
+        // Como o 'tick' lá em cima muda a cada minuto, esta parte será re-executada.
+        const dataCriacao = new Date(item.created_at).getTime();
+        const agora = Date.now();
+        const diffMs = agora - dataCriacao;
         const min = Math.max(0, Math.floor(diffMs / 1000 / 60));
 
-        return { texto: `${min} min`, isCancelado: false };
+        return {
+            texto: `${min} min`,
+            isCancelado: false
+        };
     };
 
     const getColorTempoEspera = (minutos: number, isCancelado: boolean) => {
@@ -418,6 +441,7 @@ export default function RecepcaoPage() {
     useEffect(() => {
         if (!unidadeId) return;
 
+        fetchData();
         const interval = setInterval(() => {
             fetchData(unidadeId);
         }, 3000);

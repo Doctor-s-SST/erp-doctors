@@ -101,6 +101,16 @@ export default function FilaPage() {
     const ultimoAlertaRef = useRef<number | null>(null);
 
     const [unidadeId, setUnidadeId] = useState<string | null>(null);
+    const [tick, setTick] = useState(0);
+
+    useEffect(() => {
+        // Se houver itens que não estão encerrados, atualiza a tela a cada 30 segundos
+        const timer = setInterval(() => {
+            setTick((prev) => prev + 1);
+        }, 30000);
+
+        return () => clearInterval(timer);
+    }, []);
 
     const [naoAtendidosRecentes, setNaoAtendidosRecentes] = useState<string[]>([]);;
 
@@ -143,11 +153,24 @@ export default function FilaPage() {
     };
 
     const getTempoEsperaTotal = (item: ItemFila) => {
-        if (!item.created_at) return 0
+        if (!item.created_at) return 0;
 
-        const decorridoDesdeCriacao = Math.floor((Date.now() - new Date(item.created_at).getTime()) / 1000 / 60)
-        return (item.tempo_espera_inicial || 0) + decorridoDesdeCriacao
-    }
+        // Se o item estiver finalizado ou cancelado, ele para de contar.
+        // Como você não tem o tempo final salvo em uma coluna específica, 
+        // aqui você pode decidir se exibe o tempo total até agora ou 0.
+        if (item.status === "FINALIZADO") {
+            return 0; // Ou mantenha a lógica de exibir o tempo total se preferir
+        }
+
+        const dataCriacao = new Date(item.created_at).getTime();
+        const agora = Date.now();
+
+        // Cálculo da diferença em minutos
+        const diffMs = agora - dataCriacao;
+        const minutos = Math.floor(diffMs / 1000 / 60);
+
+        return minutos > 0 ? minutos : 0;
+    };
 
     const getHora = (date: string) => {
         if (!date) return "--:--"
@@ -392,6 +415,20 @@ export default function FilaPage() {
     async function executarAcao(rpcName: string, params: any) {
         setLoadingAction(params.p_atendimento_id);
 
+        if (rpcName === "chamar_paciente") {
+            // 🔍 Verificação rápida antes da RPC
+            const { data: lockCheck } = await supabase
+                .from('atendimento_exames')
+                .select('status, num_sala, profissional')
+                .eq('id', params.p_atendimento_exame_id)
+                .single();
+
+            if (lockCheck?.status === 'EM_FILA') {
+                toast.error("❌ Paciente já foi chamado por esta sala!");
+                return;
+            }
+        }
+
         const { error } = await supabase.rpc(rpcName, params);
 
         if (error) {
@@ -432,7 +469,6 @@ export default function FilaPage() {
             const pesoStatus = (item: ItemFila) => {
                 const isMinhaSessao = item.num_sala === session?.sala && item.profissional === session?.profissional;
                 const naoAtendido = naoAtendidosRecentes.includes(item.id)
-                console.log(naoAtendido)
                 if (item.status === "EM_ATENDIMENTO" && isMinhaSessao) return 1;
                 if (item.status === "EM_FILA") return 2;
                 if (item.status === "AGUARDANDO" && naoAtendido) return 3;
@@ -731,8 +767,6 @@ export default function FilaPage() {
                                         const isBloqueado = item.bloqueado || styles.label === "BLOQUEADO"
                                         const isEncerrado = isFinalizado || isCancelado
                                         const isTox = especialidadeNome?.toUpperCase() == ("TOXICOLÓGICO") ? true : false;
-                                        console.log(isTox)
-                                        console.log(especialidadeNome)
 
                                         const rowStyles =
                                             isFinalizado
@@ -809,7 +843,7 @@ export default function FilaPage() {
                                                             <Badge variant="destructive" className={`uppercase bg-green-600 text-green-100 border-none text-[10px] font-bold tracking-wider`}>
                                                                 Finalizado
                                                             </Badge>
-                                                            <span className="text-[11px] font-bold">{`${item.sala_atual} (Sala ${item.num_sala})`}</span>
+                                                            <span className="text-[10px] font-bold uppercase">{`${item.sala_atual} (Sala ${item.num_sala})`}</span>
                                                         </div>
 
                                                     ) : isBloqueado ? (
@@ -817,7 +851,7 @@ export default function FilaPage() {
                                                             <Badge variant="destructive" className={`uppercase ${styles.bg} ${styles.color} border-none text-[10px] font-bold tracking-wider ${styles.animate || ""}`}>
                                                                 {styles.label}
                                                             </Badge>
-                                                            <span className="text-[11px] font-bold">{`${item.sala_atual} (Sala ${item.num_sala})`}</span>
+                                                            <span className="text-[10px] font-bold uppercase">{`${item.sala_atual} (Sala ${item.num_sala})`}</span>
                                                         </div>
                                                     ) : (
                                                         <Badge
