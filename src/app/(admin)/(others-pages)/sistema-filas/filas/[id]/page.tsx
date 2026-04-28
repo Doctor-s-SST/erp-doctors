@@ -697,8 +697,6 @@ export default function FilaPage() {
                                                             ? "bg-red-200/70 dark:bg-red-900/30" :
                                                             "hover:bg-slate-50/80 dark:hover:bg-slate-800/40"
 
-                                        // const minhaEspecialidade = especialidadeNome.toUpperCase()
-                                        // console.log(localStorage.getItem(''))
                                         return (
                                             <tr
                                                 key={item.id}
