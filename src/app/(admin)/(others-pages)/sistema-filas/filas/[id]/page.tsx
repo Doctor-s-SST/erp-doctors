@@ -112,6 +112,28 @@ export default function FilaPage() {
         return () => clearInterval(timer);
     }, []);
 
+    const [now, setNow] = useState(Date.now());
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setNow(Date.now());
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, []);
+
+    const getTempoRestante = (id: string) => {
+        const fim = finalizandoIds[id];
+        if (!fim) return null;
+
+        const segundos = Math.max(
+            0,
+            Math.floor((fim - now) / 1000)
+        );
+
+        return segundos;
+    };
+
     const [naoAtendidosRecentes, setNaoAtendidosRecentes] = useState<string[]>([]);;
 
     useEffect(() => {
@@ -249,7 +271,39 @@ export default function FilaPage() {
                 p_unidade_id: unidadeId // <--- Filtro por unidade
             });
 
-            if (result) setData(result);
+            if (result) {
+                setData(result);
+
+                const novosTimers: Record<string, number> = {};
+                const agora = Date.now();
+
+                result.forEach((item: any) => {
+                    if (item.finaliza_em) {
+                        const fim = new Date(item.finaliza_em).getTime();
+
+                        // recria timer visual
+                        if (fim > agora) {
+                            novosTimers[item.id] = fim;
+                        }
+
+                        // finaliza automaticamente (se já passou)
+                        if (
+                            item.finaliza_em && 
+                            fim <= agora &&
+                            item.status !== "FINALIZADO"
+                        ) {
+                            executarAcao("finalizar_especialidade", {
+                                p_atendimento_id: item.atendimento_id,
+                                p_atendimento_exame_id: item.id,
+                                p_sala: item.sala_atual || especialidadeNome,
+                                p_num_sala: session?.sala,
+                            });
+                        }
+                    }
+                });
+                
+                setFinalizandoIds(novosTimers);
+            }
         } catch (err) {
         } finally {
             setLoading(false);
@@ -303,6 +357,8 @@ export default function FilaPage() {
     useEffect(() => {
         if (!unidadeId) return;
         fetchFila()
+        console.log(`nome da sala: ${especialidadeNome}`)
+
         const interval = setInterval(fetchFila, 3000)
         // const channel = supabase.channel(`fila-${id}`).on("postgres_changes", { event: "*", schema: "public", table: "atendimento_exames" }, () => fetchFila()).subscribe()
         const fetchExames = async () => {
@@ -532,13 +588,12 @@ export default function FilaPage() {
 
     const timersRef = useRef<{ [key: string]: ReturnType<typeof setInterval> }>({});
 
-    const cancelarFinalizacao = (id: string) => {
-        const timer = timersRef.current[id];
-
-        if (timer) {
-            clearInterval(timer);
-            delete timersRef.current[id];
-        }
+    const cancelarFinalizacao = async (id: string) => {
+        // limpa banco
+        await supabase
+            .from("atendimento_exames")
+            .update({ finaliza_em: null })
+            .eq("id", id);
 
         setFinalizandoIds(prev => {
             const novo = { ...prev };
@@ -573,7 +628,7 @@ export default function FilaPage() {
     //                 executarAcao("finalizar_especialidade", {
     //                     p_atendimento_id: item.atendimento_id,
     //                     p_atendimento_exame_id: item.id,
-    //                     p_sala: especialidadeNome,
+    //                     p_sala: item.sala_atual || especialidadeNome,
     //                     p_num_sala: session.sala,
     //                 });
 
@@ -598,48 +653,20 @@ export default function FilaPage() {
     const iniciarFinalizacao = async (item: ItemFila) => {
         const tempo = await obterTempoExecucao(item);
 
-        const fim = Date.now() + tempo * 1000;
+        const fimDate = new Date(Date.now() + tempo * 1000);
+        const fimISO = fimDate.toISOString();
 
+        // salva no banco
+        await supabase
+            .from('atendimento_exames')
+            .update({ finaliza_em: fimISO })
+            .eq('id', item.id);
+
+        // atualiza estado local (UI instantânea)
         setFinalizandoIds(prev => ({
             ...prev,
-            [item.id]: fim
+            [item.id]: fimDate.getTime()
         }));
-
-        const interval = setInterval(() => {
-            setFinalizandoIds(prev => {
-                const fim = prev[item.id];
-
-                if (!fim) {
-                    clearInterval(interval);
-                    return prev;
-                }
-
-                const restante = Math.ceil((fim - Date.now()) / 1000);
-
-                if (restante <= 0) {
-                    clearInterval(interval);
-                    delete timersRef.current[item.id];
-
-                    executarAcao("finalizar_especialidade", {
-                        p_atendimento_id: item.atendimento_id,
-                        p_atendimento_exame_id: item.id,
-                        p_sala: especialidadeNome,
-                        p_num_sala: session.sala,
-                    });
-
-                    const novo = { ...prev };
-                    delete novo[item.id];
-                    return novo;
-                }
-
-                return {
-                    ...prev,
-                    [item.id]: fim
-                };
-            });
-        }, 1000);
-
-        timersRef.current[item.id] = interval;
     };
 
     const profissionalOcupado = useMemo(() => {
@@ -745,7 +772,7 @@ export default function FilaPage() {
                                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                                     {dadosProcessados.map((item: any) => {
                                         const styles = getStatusStyles(item);
-                                        // const waitTime = getTempoEsperaTotal(item);
+                                        const tempoRestante = getTempoRestante(item.id);
 
                                         const isFinalizado = item.status === "FINALIZADO"
                                         const isCancelado = item.status === "CANCELADO"
@@ -877,7 +904,7 @@ export default function FilaPage() {
                                                                                     className="h-8 text-[11px] font-bold bg-slate-600 min-w-[90px] text-white"
                                                                                 >
                                                                                     <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                                                                                    {Math.max(0, Math.ceil((finalizandoIds[item.id] - Date.now()) / 1000))}s
+                                                                                    {tempoRestante}s
                                                                                 </Button>
 
                                                                                 <TooltipProvider>
@@ -920,7 +947,7 @@ export default function FilaPage() {
                                                                         onClick={() => executarAcao("chamar_paciente_bloqueado", {
                                                                             p_atendimento_id: item.atendimento_id,
                                                                             p_atendimento_exame_id: item.id,
-                                                                            p_sala: especialidadeNome,
+                                                                            p_sala: item.sala_atual || especialidadeNome,
                                                                             p_num_sala: session.sala,
                                                                             p_profissional: session.profissional
                                                                         })}
@@ -948,7 +975,7 @@ export default function FilaPage() {
                                                                                     className="h-8 text-[11px] font-bold bg-slate-600 min-w-[90px] text-white"
                                                                                 >
                                                                                     <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                                                                                    {Math.max(0, Math.ceil((finalizandoIds[item.id] - Date.now()) / 1000))}s
+                                                                                    {tempoRestante}s
                                                                                 </Button>
 
                                                                                 <TooltipProvider>
@@ -982,7 +1009,7 @@ export default function FilaPage() {
                                                                                 onClick={() => executarAcao("chamar_paciente", {
                                                                                     p_atendimento_id: item.atendimento_id,
                                                                                     p_atendimento_exame_id: item.id,
-                                                                                    p_sala: especialidadeNome,
+                                                                                    p_sala: item.sala_atual || especialidadeNome,
                                                                                     p_num_sala: session.sala,
                                                                                     p_profissional: session.profissional,
                                                                                 })}
@@ -1021,7 +1048,7 @@ export default function FilaPage() {
                                                                                         className="h-8 text-[11px] font-bold bg-slate-600 min-w-[90px] text-white"
                                                                                     >
                                                                                         <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                                                                                        {Math.max(0, Math.ceil((finalizandoIds[item.id] - Date.now()) / 1000))}s
+                                                                                        {tempoRestante}s
                                                                                     </Button>
 
                                                                                     <TooltipProvider>
