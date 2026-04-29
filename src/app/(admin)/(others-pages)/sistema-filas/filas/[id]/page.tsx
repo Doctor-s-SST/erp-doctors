@@ -415,20 +415,6 @@ export default function FilaPage() {
     async function executarAcao(rpcName: string, params: any) {
         setLoadingAction(params.p_atendimento_id);
 
-        if (rpcName === "chamar_paciente") {
-            // 🔍 Verificação rápida antes da RPC
-            const { data: lockCheck } = await supabase
-                .from('atendimento_exames')
-                .select('status, num_sala, profissional')
-                .eq('id', params.p_atendimento_exame_id)
-                .single();
-
-            if (lockCheck?.status === 'EM_FILA') {
-                toast.error("❌ Paciente já foi chamado por esta sala!");
-                return;
-            }
-        }
-
         const { error } = await supabase.rpc(rpcName, params);
 
         if (error) {
@@ -438,7 +424,7 @@ export default function FilaPage() {
             if (rpcName === "nao_atendido_especialidade") {
                 setNaoAtendidosRecentes(prev => [...prev, params.p_atendimento_exame_id]);
             }
-            if (rpcName === "chamar_paciente") {
+            if (rpcName === "chamar_paciente_bloqueado") {
                 setNaoAtendidosRecentes(prev => prev.filter(id => id !== params.p_atendimento_exame_id));
             }
             fetchFila();
@@ -927,11 +913,11 @@ export default function FilaPage() {
                                                                         // TRAVA AQUI: Desabilita se estiver ocupado, se já for o status atual ou se houver loading
                                                                         disabled={
                                                                             profissionalOcupado || // já existe atendimento desse profissional
-                                                                            // filaTemEmAtendimento || // 🔥 trava a fila inteira
+                                                                            // filaTemEmAtendimento || // trava a fila inteira
                                                                             loadingAction === item.atendimento_id ||
                                                                             item.status !== "AGUARDANDO"
                                                                         }
-                                                                        onClick={() => executarAcao("chamar_paciente", {
+                                                                        onClick={() => executarAcao("chamar_paciente_bloqueado", {
                                                                             p_atendimento_id: item.atendimento_id,
                                                                             p_atendimento_exame_id: item.id,
                                                                             p_sala: especialidadeNome,
