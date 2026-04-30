@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Printer } from 'lucide-react';
 import { RelatorioAtendimentoGeral } from './RelatorioAtendimentoGeral';
 
-export const BotaoImprimirRelatorio = ({ item }: { item: any[] }) => {
+export const BotaoImprimirRelatorio = ({ item, text }: { item: any[], text: string }) => {
   const componentRef = useRef<HTMLDivElement>(null);
 
   const handlePrint = useReactToPrint({
@@ -16,9 +16,9 @@ export const BotaoImprimirRelatorio = ({ item }: { item: any[] }) => {
     <>
       <Button 
         onClick={handlePrint}
-        className="bg-blue-600 hover:bg-blue-700 text-white"
+        className="bg-blue-600 hover:bg-blue-700 text-white gap-2 py-4 disabled:opacity-70 text-[12px]"
       >
-        <Printer className="w-4 h-4 mr-2" /> Gerar Relatório
+        <Printer className="w-4 h-4" /> {text}
       </Button>
 
       {/* Container oculto para impressão */}
