@@ -324,14 +324,9 @@ export default function RecepcaoPage() {
             "CANCELADO": "bg-red-600 text-red-100",
             "NAO_ATENDIDO": "bg-orange-600 text-orange-100",
             "AGUARDANDO_EXAMES": "bg-green-600 text-green-100",
-            "EM_AUDIOMETRIA": "bg-green-600 text-green-100",
-            "EM_CLÍNICO": "bg-green-600 text-green-100",
-            "EM_TRIAGEM": "bg-green-600 text-green-100",
-            "EM_TOXICOLÓGICO": "bg-green-600 text-green-100",
-            "EM_LABORATÓRIO": "bg-green-600 text-green-100",
-            "EM_ECG_EEG_ESPIRO": "bg-green-600 text-green-100",
+
         }
-        return <Badge className={`${styles[status] || 'bg-gray-100'} border-none text-[9px] font-black tracking-widest uppercase px-2`}>{(status) === "NAO_ATENDIDO" ? "NÃO ATENDIDO" : (status === "AGUARDANDO_RECEPCAO" ? "AGUARDANDO RECEPÇÃO" : (status === "EM_RECEPCAO" ? "EM RECEPÇÃO" : status.replace('_', ' ')))}</Badge>
+        return <Badge className={`${styles[status] || 'bg-green-600'} border-none text-[9px] font-black tracking-widest uppercase px-2`}>{(status) === "NAO_ATENDIDO" ? "NÃO ATENDIDO" : (status === "AGUARDANDO_RECEPCAO" ? "AGUARDANDO RECEPÇÃO" : (status === "EM_RECEPCAO" ? "EM RECEPÇÃO" : status.replace('_', ' ')))}</Badge>
     }
 
     const handleSort = (coluna: keyof Atendimento | 'tempo_espera') => {
@@ -1014,7 +1009,7 @@ export default function RecepcaoPage() {
                                             const isFinalizado = item.status === "FINALIZADO";
                                             const isNaoAtendido = item.status === "NAO_ATENDIDO";
                                             const isCancelado = item.status === "CANCELADO";
-                                            const isAguardandoExames = item.status === "AGUARDANDO_EXAMES" || item.status === "EM_TRIAGEM" || item.status === "EM_CLÍNICO" || item.status === "EM_TOXICOLÓGICO" || item.status === "EM_LABORATÓRIO" || item.status === "EM_ECG_EEG_ESPIRO" || item.status === "EM_AUDIOMETRIA";
+                                            const isAguardandoExames = item.status === "AGUARDANDO_EXAMES" || (item.status.startsWith("EM_") && item.status !== "EM_FILA" && item.status !== "EM_RECEPCAO");
                                             const isAguardandoRecepcao = item.status === "AGUARDANDO_RECEPCAO";
                                             const isEncerrado = isFinalizado || isCancelado;
 

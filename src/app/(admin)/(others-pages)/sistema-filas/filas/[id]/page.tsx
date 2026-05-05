@@ -36,6 +36,7 @@ import {
 } from "lucide-react"
 import { is } from "zod/v4/locales"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { StatusSenhaFilas } from "@/components/atendimento/status-senha-filas/StatusSenhaFilas"
 
 type ItemFila = {
     tipo_senha: string
@@ -84,6 +85,10 @@ export default function FilaPage() {
     const [filtroTipo, setFiltroTipo] = useState<string>("TODOS")
     const [listaGlobalExames, setListaGlobalExames] = useState<any[]>([]);
     const [finalizandoIds, setFinalizandoIds] = useState<Record<string, number>>({});
+    const [selectedAtendimento, setSelectedAtendimento] = useState<ItemFila | null>(null)
+    const [isDetailsOpen, setIsDetailsOpen] = useState(false)
+
+
 
     const [salas, setSalas] = useState<Sala[]>([])
     const [profissionais, setProfissionais] = useState<Profissional[]>([])
@@ -288,7 +293,7 @@ export default function FilaPage() {
 
                         // finaliza automaticamente (se já passou)
                         if (
-                            item.finaliza_em && 
+                            item.finaliza_em &&
                             fim <= agora &&
                             item.status !== "FINALIZADO"
                         ) {
@@ -301,7 +306,7 @@ export default function FilaPage() {
                         }
                     }
                 });
-                
+
                 setFinalizandoIds(novosTimers);
             }
         } catch (err) {
@@ -442,7 +447,7 @@ export default function FilaPage() {
         // 1. Verificação por Especialidade (Sua nova regra)
         // Normalizamos para garantir que a comparação funcione independente de maiúsculas/minúsculas
         const nomeEsp = especialidadeNome?.toUpperCase();
-        const especialidadesLongas = ["ECG", "EEG", "ESPIRO"];
+        const especialidadesLongas = ["ECG", "EEG"];
 
         if (especialidadesLongas.some(esp => nomeEsp.includes(esp))) {
             return 300;
@@ -810,7 +815,13 @@ export default function FilaPage() {
                                                 {/* NOME */}
                                                 <td className="p-4">
                                                     <div className="flex items-center gap-2">
-                                                        <span className="font-bold text-slate-700 dark:text-slate-200">
+                                                        <span className="font-bold text-slate-700 dark:text-slate-200 cursor-pointer" onClick={() => {
+                                                            if (item.nome) {
+                                                                setSelectedAtendimento(item);
+                                                                setIsDetailsOpen(true);
+                                                            }
+                                                        }}>
+
                                                             {item.nome}
                                                         </span>
                                                         {item.empresa_razao && (
@@ -1238,6 +1249,12 @@ export default function FilaPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog >
+
+            <StatusSenhaFilas
+                isOpen={isDetailsOpen}
+                onClose={() => setIsDetailsOpen(false)}
+                atendimento={selectedAtendimento}
+            />
         </div >
     )
 }

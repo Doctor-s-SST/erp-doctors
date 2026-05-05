@@ -69,39 +69,6 @@ export default function PainelTV() {
         });
       };
 
-      // const falar = (texto: string) => {
-      //   return new Promise<void>((res) => {
-      //     // 1. Limpa tudo e espera um pouco antes de pedir uma nova fala
-      //     window.speechSynthesis.cancel();
-
-      //     setTimeout(() => {
-      //       const msg = new SpeechSynthesisUtterance(texto);
-      //       msg.lang = 'pt-BR';
-      //       msg.rate = 0.85; // Um pouco mais lento ajuda o Raspberry a processar
-      //       msg.pitch = 1;
-
-      //       const voices = window.speechSynthesis.getVoices();
-      //       const voiceBR = voices.find(v => v.lang.includes('pt'));
-      //       if (voiceBR) msg.voice = voiceBR;
-
-      //       // Eventos de controle
-      //       msg.onend = () => res();
-      //       msg.onerror = (e) => {
-      //         console.warn("Falha na síntese, tentando recuperar canal...", e);
-      //         window.speechSynthesis.cancel(); // Tenta destravar em caso de erro
-      //         res();
-      //       };
-
-
-      //       msg.rate = 0.7;   // Mais lento = mais inteligível
-      //       msg.pitch = 0.8;  // Tom mais grave = menos metálico
-      //       msg.volume = 1;
-      //       // 2. O pulo do gato: fala
-      //       window.speechSynthesis.speak(msg);
-      //     }, 300); // 300ms de intervalo entre o cancel e o speak
-      //   });
-      // };
-
       const tocarSino = () => {
         return new Promise<void>((res) => {
           if (!audioRef.current) return res();
