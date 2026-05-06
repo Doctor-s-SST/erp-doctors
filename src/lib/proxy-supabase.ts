@@ -6,7 +6,7 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   "/sistema-filas/kanban": ["admin", "painel"],
   "/painel-senhas": ["admin", "painel"],
   "/sistema-filas/senhas-recepcao": ["admin", "recepcao", "especialista", "painel"],
-  "/sistema-filas/relatorios": ["admin", "painel"],
+  "/sistema-filas/relatorios": ["admin", "painel", "recepcao"],
   "/sistema-filas/filas": ["admin", "especialista", "recepcao", "painel"],
   "/configuracoes/salas-profissionais": ["admin", "painel"],
   "/configuracoes/users": ["admin", "painel"],

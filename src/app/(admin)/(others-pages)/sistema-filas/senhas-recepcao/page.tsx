@@ -933,7 +933,8 @@ export default function RecepcaoPage() {
 
                         {/* LADO DIREITO: BOTÕES DE GERAR SENHA E ATUALIZAR */}
                         <div className="flex flex-row justify-end items-center gap-2 w-full">
-                            {userRole == "admin" && (
+
+                            {/* BOTAO CONFIG IMPRESSORA - {userRole == "admin" && (
                                 <Button
                                     variant="outline"
                                     className="bg-blue-300  border-gray-600"
@@ -941,7 +942,7 @@ export default function RecepcaoPage() {
                                 >
                                     <Printer className="w-5 h-5" />
                                 </Button>
-                            )}
+                            )} */}
                             <div
                                 className="flex h-8 items-center gap-1 bg-blue-600 text-muted p-1 rounded-full hover:bg-blue-500 hover:text-white cursor-pointer transition-all shrink-0 "
                                 onClick={() => gerarSenha("NORMAL")}

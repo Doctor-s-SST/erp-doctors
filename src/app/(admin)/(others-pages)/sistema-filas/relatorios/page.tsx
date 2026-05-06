@@ -13,6 +13,7 @@ import { BotaoImprimirRelatorio } from '@/components/atendimento/relatorios/Impr
 import { BotaoImprimirDeclaracao } from '@/components/atendimento/relatorios/ImprimirDelcaracao';
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { supabase } from '@/lib/supabase';
 
 export default function PaginaRelatorio() {
     const [loading, setLoading] = useState(false);
@@ -36,9 +37,31 @@ export default function PaginaRelatorio() {
     });
 
     useEffect(() => {
+    const carregarUnidade = async () => {
         const unidadeSalva = localStorage.getItem('unidade_ativa_id');
-        if (unidadeSalva) setFiltros(prev => ({ ...prev, unidadeId: unidadeSalva }));
-    }, []);
+        
+        if (unidadeSalva) {
+            // Se tem no storage, usa ele
+            setFiltros(prev => ({ ...prev, unidadeId: unidadeSalva }));
+        } else {
+            // Se não tem, busca no banco
+            try {
+                // Ajuste a URL abaixo para o seu endpoint que retorna a unidade do usuário logado 
+                const { data } = await supabase.from('unidades').select('id');
+                
+                if (data && data.length > 0 && data[0].id) {
+                    setFiltros(prev => ({ ...prev, unidadeId: data[0].id }));
+                    // Salva no storage para não precisar buscar novamente
+                    localStorage.setItem('unidade_ativa_id', data[0].id);
+                }
+            } catch (error) {
+                console.error("Erro ao buscar unidade padrão do banco:", error);
+            }
+        }
+    };
+
+    carregarUnidade();
+}, []);
 
     useEffect(() => {
         handleGerarRelatorio(new Event('change') as any);
