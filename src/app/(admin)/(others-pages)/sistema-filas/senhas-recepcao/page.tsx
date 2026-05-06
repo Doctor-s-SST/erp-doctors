@@ -635,15 +635,6 @@ export default function RecepcaoPage() {
                 ip: selectedPrinter?.ip
             });
 
-            // await fetch("/api/imprimir-senha", {
-            //     method: "POST",
-            //     headers: { "Content-Type": "application/json" },
-            //     body: JSON.stringify({
-            //         senha: senhaGerada,
-            //         ip: selectedPrinter?.ip
-            //     })
-            // });
-
             toast.success(`Senha ${senhaGerada} gerada!`);
             fetchData();
 
