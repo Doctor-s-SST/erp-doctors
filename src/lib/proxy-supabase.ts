@@ -51,7 +51,7 @@ export async function updateSession(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname
   const isAuthPage =
-    pathname.startsWith("/signin") || pathname.startsWith("/signup")
+    pathname.startsWith("/signin")
 
   // NÃO LOGADO → manda pro login
   if (!user && !isAuthPage) {

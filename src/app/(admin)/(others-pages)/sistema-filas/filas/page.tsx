@@ -107,13 +107,8 @@ export default function SelecionarFila() {
           .single();
 
         if (profile) {
-          const salvaLocal = localStorage.getItem('unidade_ativa_id');
 
-          // Regra: Se for admin e tiver algo no local, usa o local. 
-          // Caso contrário, usa o do perfil.
-          const idParaUsar = (profile.role === 'admin' && salvaLocal)
-            ? salvaLocal
-            : profile.unidade_id;
+          const idParaUsar = profile.unidade_id;
 
           if (idParaUsar) {
             fetchData(idParaUsar);

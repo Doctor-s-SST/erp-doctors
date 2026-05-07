@@ -91,12 +91,12 @@ export default function ConfiguracoesPage() {
           let idFinal = profile.unidade_id;
 
           // Se for admin, tenta pegar a unidade que ele selecionou no Header
-          if (profile.role === 'admin') {
-            const unidadeSessao = localStorage.getItem('unidade_ativa_id');
-            if (unidadeSessao) {
-              idFinal = unidadeSessao;
-            }
-          }
+          // if (profile.role === 'admin') {
+          //   const unidadeSessao = localStorage.getItem('unidade_ativa_id');
+          //   if (unidadeSessao) {
+          //     idFinal = unidadeSessao;
+          //   }
+          // }
 
           setUnidadeId(idFinal);
           // Só chama o fetchAll depois que temos o unidadeId correto

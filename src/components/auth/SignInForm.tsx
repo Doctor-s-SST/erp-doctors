@@ -139,10 +139,7 @@ export default function SignInForm() {
             </form>
 
             <p className="text-center text-sm text-muted-foreground">
-              Não tem conta?{" "}
-              <Link href="/signup" className="text-primary underline">
-                Criar conta
-              </Link>
+              Não tem conta? Entre em contato com o administrador para criar uma conta.
             </p>
 
           </CardContent>

@@ -61,9 +61,6 @@ export default function RecepcaoPage() {
     const [loadingRecepcionistas, setLoadingRecepcionistas] = useState(true)
     const componentRef = useRef<HTMLDivElement>(null);
     const [showSuggestions, setShowSuggestions] = useState(false);
-    const [printers, setPrinters] = useState<any[]>([]);
-    const [selectedPrinter, setSelectedPrinter] = useState<any>(null);
-    const [printerModal, setPrinterModal] = useState(false);
     const [userRole, setUserRole] = useState<string | null>(null);
     const [selectedAtendimento, setSelectedAtendimento] = useState<Atendimento | null>(null)
     const [isDetailsOpen, setIsDetailsOpen] = useState(false)
@@ -222,14 +219,14 @@ export default function RecepcaoPage() {
                     let idFinal = profile.unidade_id;
 
                     // 2. Lógica de Admin (igual à ConfiguracoesPage)
-                    if (profile.role === 'admin') {
-                        const unidadeSessao = localStorage.getItem('unidade_ativa_id');
-                        if (unidadeSessao) {
-                            idFinal = unidadeSessao;
-                            // Se mudou a unidade, precisamos buscar o nome dela novamente 
-                            // ou você pode salvar o nome no storage também.
-                        }
-                    }
+                    // if (profile.role === 'admin') {
+                    //     const unidadeSessao = localStorage.getItem('unidade_ativa_id');
+                    //     if (unidadeSessao) {
+                    //         idFinal = unidadeSessao;
+                    //         // Se mudou a unidade, precisamos buscar o nome dela novamente 
+                    //         // ou você pode salvar o nome no storage também.
+                    //     }
+                    // }
 
                     setUnidadeId(idFinal);
                     setUnidadeNome((profile.unidades as any)?.flag || "");
@@ -629,12 +626,6 @@ export default function RecepcaoPage() {
 
             if (error) throw error;
 
-            // Chamada para a API com os campos separados
-            await supabase.from("fila_impressao").insert({
-                senha: senhaGerada,
-                ip: selectedPrinter?.ip
-            });
-
             toast.success(`Senha ${senhaGerada} gerada!`);
             fetchData();
 
@@ -796,24 +787,7 @@ export default function RecepcaoPage() {
         documentTitle: `Ficha_${formFicha.sequencial}`,
     });
 
-    const loadPrinters = async () => {
-        const { data, error } = await supabase
-            .from("impressoras")
-            .select("*")
-            .eq("ativa", true);
-
-        if (data) {
-            setPrinters(data);
-
-            const padrao = data.find(p => p.padrao);
-            if (padrao && !selectedPrinter) {
-                setSelectedPrinter(padrao);
-            }
-        }
-    };
-
     useEffect(() => {
-        loadPrinters();
 
         async function getRole() {
             const { data: { user } } = await supabase.auth.getUser();
@@ -924,16 +898,6 @@ export default function RecepcaoPage() {
 
                         {/* LADO DIREITO: BOTÕES DE GERAR SENHA E ATUALIZAR */}
                         <div className="flex flex-row justify-end items-center gap-2 w-full">
-
-                            {/* BOTAO CONFIG IMPRESSORA - {userRole == "admin" && (
-                                <Button
-                                    variant="outline"
-                                    className="bg-blue-300  border-gray-600"
-                                    onClick={() => setPrinterModal(true)}
-                                >
-                                    <Printer className="w-5 h-5" />
-                                </Button>
-                            )} */}
                             <div
                                 className="flex h-8 items-center gap-1 bg-blue-600 text-muted p-1 rounded-full hover:bg-blue-500 hover:text-white cursor-pointer transition-all shrink-0 "
                                 onClick={() => gerarSenha("NORMAL")}
@@ -1761,194 +1725,6 @@ export default function RecepcaoPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog >
-
-            {/* MODAL DE IMPRESSORA */}
-            <Dialog open={printerModal} onOpenChange={setPrinterModal}>
-                <DialogContent className="max-w-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-2xl p-0 overflow-hidden">
-
-                    {/* Cabeçalho Acessível */}
-                    <div className="bg-gray-900 px-6 py-4 flex items-center justify-between border-b border-gray-800">
-                        <div className="flex items-center gap-3">
-                            <div className="bg-blue-500/20 p-2 rounded-lg">
-                                <Printer className="w-4 h-4 text-blue-400" />
-                            </div>
-                            <div>
-                                <DialogTitle className="text-sm font-black text-white uppercase tracking-widest">
-                                    Impressora
-                                </DialogTitle>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="p-6 space-y-5">
-                        {/* SELECIONAR EXISTENTE */}
-                        <div className="space-y-2">
-                            <Label className="text-[10px] font-black uppercase tracking-widest text-gray-500">
-                                Impressoras Salvas
-                            </Label>
-
-                            <Select
-                                // Use o ID como valor, garantindo que seja string ou string vazia
-                                value={selectedPrinter?.id || ""}
-                                onValueChange={(value) => {
-                                    const selected = printers.find((p) => p.id === value);
-                                    if (selected) setSelectedPrinter(selected);
-                                }}
-                            >
-                                <SelectTrigger className="h-9 text-[12px] w-full">
-                                    {/* O SelectValue mostrará o que estiver selecionado ou o placeholder */}
-                                    <SelectValue placeholder="Selecionar impressora..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {printers.length > 0 ? (
-                                        printers.map((p) => (
-                                            <SelectItem key={p.id} value={p.id}>
-                                                {p.nome} - {p.ip}
-                                            </SelectItem>
-                                        ))
-                                    ) : (
-                                        <SelectItem value="none" disabled>
-                                            Nenhuma impressora cadastrada
-                                        </SelectItem>
-                                    )}
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        <div className="border-t border-gray-200 dark:border-gray-800" />
-
-                        {/* FORMULÁRIO - USANDO selectedPrinter */}
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="col-span-2">
-                                <Label className="text-[10px] font-black uppercase tracking-widest text-gray-500">
-                                    Nome
-                                </Label>
-                                <Input
-                                    className="h-9 text-[12px]"
-                                    placeholder="Ex: Recepção"
-                                    value={selectedPrinter?.nome || ""}
-                                    onChange={(e) =>
-                                        setSelectedPrinter((p: any) => ({ ...p, nome: e.target.value }))
-                                    }
-                                />
-                            </div>
-
-                            <div>
-                                <Label className="text-[10px] font-black uppercase tracking-widest text-gray-500">
-                                    IP
-                                </Label>
-                                <Input
-                                    className="h-9 text-[12px]"
-                                    placeholder="192.168.0.100"
-                                    value={selectedPrinter?.ip || ""}
-                                    onChange={(e) =>
-                                        setSelectedPrinter((p: any) => ({ ...p, ip: e.target.value }))
-                                    }
-                                />
-                            </div>
-
-                            <div>
-                                <Label className="text-[10px] font-black uppercase tracking-widest text-gray-500">
-                                    Porta
-                                </Label>
-                                <Input
-                                    className="h-9 text-[12px]"
-                                    type="number"
-                                    value={selectedPrinter?.porta || 9100}
-                                    onChange={(e) =>
-                                        setSelectedPrinter((p: any) => ({
-                                            ...p,
-                                            porta: Number(e.target.value)
-                                        }))
-                                    }
-                                />
-                            </div>
-                        </div>
-
-                        {/* SWITCH PADRÃO */}
-                        <div className="flex items-center justify-between bg-gray-50 dark:bg-gray-800/50 p-3 rounded-xl border border-gray-200 dark:border-gray-800">
-                            <div>
-                                <p className="text-[11px] font-bold text-gray-700 dark:text-gray-200">
-                                    Definir como padrão
-                                </p>
-                                <p className="text-[10px] text-gray-400">
-                                    Será usada automaticamente ao gerar senha
-                                </p>
-                            </div>
-
-                            <input
-                                type="checkbox"
-                                checked={selectedPrinter?.padrao || false}
-                                onChange={(e) =>
-                                    setSelectedPrinter((p: any) => ({
-                                        ...p,
-                                        padrao: e.target.checked
-                                    }))
-                                }
-                            />
-                        </div>
-                    </div>
-
-                    {/* FOOTER */}
-                    <div className="flex justify-between items-center px-6 py-4 border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900">
-                        <Button
-                            variant="ghost"
-                            className="text-[11px] uppercase font-bold"
-                            onClick={() => setPrinterModal(false)}
-                        >
-                            Cancelar
-                        </Button>
-
-                        <div className="flex gap-2">
-                            <Button
-                                variant="outline"
-                                className="text-[11px] uppercase font-bold"
-                                onClick={async () => {
-                                    await fetch("/api/imprimir-senha", {
-                                        method: "POST",
-                                        headers: { "Content-Type": "application/json" },
-                                        body: JSON.stringify({
-                                            texto: "TESTE DE IMPRESSÃO\n\nOK\n\n",
-                                            ip: selectedPrinter?.ip
-                                        })
-                                    })
-                                }}
-                            >
-                                Testar
-                            </Button>
-
-                            <Button
-                                className="bg-blue-600 hover:bg-blue-700 text-white text-[11px] uppercase font-black tracking-widest"
-                                onClick={async () => {
-                                    if (!selectedPrinter?.nome || !selectedPrinter?.ip) {
-                                        return toast.warning("Preencha nome e IP")
-                                    }
-
-                                    if (selectedPrinter?.padrao) {
-                                        await supabase
-                                            .from("impressoras")
-                                            .update({ padrao: false })
-                                            .neq("id", selectedPrinter.id || "")
-                                    }
-
-                                    const { error } = await supabase
-                                        .from("impressoras")
-                                        .upsert(selectedPrinter)
-
-                                    if (error) return toast.error("Erro ao salvar")
-
-                                    toast.success("Impressora salva!")
-                                    fetchData()
-                                    setPrinterModal(false)
-                                }}
-                            >
-                                <Save className="w-3 h-3 mr-1" />
-                                Salvar
-                            </Button>
-                        </div>
-                    </div>
-                </DialogContent>
-            </Dialog>
 
             {/* TEMPLATE FICHA */}
             <div style={{ display: 'none' }}>

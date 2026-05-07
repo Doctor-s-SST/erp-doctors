@@ -392,10 +392,10 @@ export default function FilaPage() {
                     let idFinal = profile.unidade_id;
 
                     // Lógica para Admin (respeitando a unidade trocada no localStorage)
-                    if (profile.role === 'admin') {
-                        const unidadeSessao = localStorage.getItem('unidade_ativa_id');
-                        if (unidadeSessao) idFinal = unidadeSessao;
-                    }
+                    // if (profile.role === 'admin') {
+                    //     const unidadeSessao = localStorage.getItem('unidade_ativa_id');
+                    //     if (unidadeSessao) idFinal = unidadeSessao;
+                    // }
 
                     setUnidadeId(idFinal);
 
@@ -608,49 +608,6 @@ export default function FilaPage() {
 
         toast.warning("Finalização cancelada");
     };
-
-    // const iniciarFinalizacao = async (item: ItemFila) => {
-    //     const tempo = await obterTempoExecucao(item);
-
-    //     setFinalizandoIds(prev => ({
-    //         ...prev,
-    //         [item.id]: tempo
-    //     }));
-
-    //     const interval = setInterval(() => {
-    //         setFinalizandoIds(prev => {
-    //             const atual = prev[item.id];
-
-    //             if (atual === undefined) {
-    //                 clearInterval(interval);
-    //                 return prev;
-    //             }
-
-    //             if (atual <= 1) {
-    //                 clearInterval(interval);
-    //                 delete timersRef.current[item.id];
-
-    //                 executarAcao("finalizar_especialidade", {
-    //                     p_atendimento_id: item.atendimento_id,
-    //                     p_atendimento_exame_id: item.id,
-    //                     p_sala: item.sala_atual || especialidadeNome,
-    //                     p_num_sala: session.sala,
-    //                 });
-
-    //                 const novo = { ...prev };
-    //                 delete novo[item.id];
-    //                 return novo;
-    //             }
-
-    //             return {
-    //                 ...prev,
-    //                 [item.id]: atual - 1
-    //             };
-    //         });
-    //     }, 1000);
-
-    //     timersRef.current[item.id] = interval;
-    // };
 
 
     // Verifica se o profissional atual já está atendendo alguém

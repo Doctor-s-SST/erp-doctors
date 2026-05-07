@@ -9,7 +9,7 @@ Sistema completo para gerenciamento de atendimentos, controle de fluxo de pacien
 * **Frontend / Backend:** Next.js (App Router + API Routes)
 * **Banco de dados:** Supabase (PostgreSQL)
 * **Automações:** n8n
-* **Worker de impressão:** Java .exe + ESC/POS (TCP)
+* **App de impressão:** Java .exe + ESC/POS (TCP)
 * **Deploy:** Netlify + VPS
 
 ---
@@ -50,7 +50,7 @@ npm run dev
 
 * Frontend hospedado na Netlify
 * Supabase e n8n rodando em VPS
-* Worker de impressão rodando via .exe feito em Java, sendo instalado em cada máquina que chama senhas
+* App de impressão rodando via .exe feito em Java, sendo instalado em cada máquina que chama senhas
 
 ---
 

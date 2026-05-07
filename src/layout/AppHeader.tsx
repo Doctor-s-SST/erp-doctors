@@ -63,18 +63,7 @@ const AppHeader: React.FC = () => {
           // 1. Se for admin, busca TODAS as unidades (independente de ter salvo no local)
           if (profile.role === 'admin') {
             const { data: unidades } = await supabase.from('unidades').select('id, nome');
-            if (unidades) {
-              setListaUnidades(unidades);
-
-              // 2. Tenta recuperar a unidade do storage, se não existir, usa a do perfil
-              const salvaLocal = localStorage.getItem('unidade_ativa_id');
-              const idParaUsar = salvaLocal || profile.unidade_id;
-
-              setUnidadeId(idParaUsar);
-
-              const atual = unidades.find(u => u.id === idParaUsar);
-              setUnidadeNome(atual?.nome || (profile.unidades as any)?.nome || "");
-            }
+            setUnidadeNome((profile.unidades as any)?.nome || "");
           } else {
             // Se não for admin, segue o fluxo normal
             setUnidadeId(profile.unidade_id);
@@ -87,16 +76,6 @@ const AppHeader: React.FC = () => {
     fetchUserContext();
   }, []);
 
-  const handleTrocarUnidade = (novaUnidadeId: string) => {
-    const unidadeSelecionada = listaUnidades.find(u => u.id === novaUnidadeId);
-    setUnidadeId(novaUnidadeId);
-    setUnidadeNome(unidadeSelecionada?.nome || "");
-    localStorage.setItem('unidade_ativa_id', novaUnidadeId);
-
-    toast.success(`Unidade alterada para ${unidadeSelecionada?.nome}`);
-
-    window.location.reload();
-  };
 
   const toggleApplicationMenu = () => {
     setApplicationMenuOpen(!isApplicationMenuOpen);
@@ -146,28 +125,9 @@ const AppHeader: React.FC = () => {
 
         {/* CENTRO: Nome da Unidade (Sempre centralizado) */}
         <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
-          {profileData.role === 'admin' ? (
-            <div className="flex flex-col items-center gap-1">
-              {/* Se for admin, o Select já serve como o "Título" */}
-              <Select value={unidadeId || ""} onValueChange={handleTrocarUnidade}>
-                <SelectTrigger className="h-8 border-none bg-transparent font-bold text-lg focus:ring-0 shadow-none pointer-events-auto">
-                  <Hospital className="w-4 h-4 mr-2 text-emerald-500" />
-                  <SelectValue placeholder="Trocar Unidade" />
-                </SelectTrigger>
-                <SelectContent>
-                  {listaUnidades.map(u => (
-                    <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>
-
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-          ) : (
-            <p className="text-sm lg:text-2xl font-bold text-gray-800 dark:text-white">
-              {unidadeNome}
-            </p>
-          )}
+          <p className="text-sm lg:text-2xl font-bold text-gray-800 dark:text-white">
+            {unidadeNome}
+          </p>
         </div>
         {/* LADO DIREITO: User Dropdown e Tema */}
         <div

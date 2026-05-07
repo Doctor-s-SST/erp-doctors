@@ -2,8 +2,8 @@
 
 import React, { useEffect, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
-import { 
-    Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter 
+import {
+    Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter
 } from "@/components/ui/dialog";
 import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -38,6 +38,7 @@ export default function UserFormDialog({ open, onOpenChange, user, unidadeAtiva,
             email: "",
             first_name: "",
             last_name: "",
+            password: "",
             role: "especialista",
             especialidade_id: "none",
         },
@@ -65,30 +66,94 @@ export default function UserFormDialog({ open, onOpenChange, user, unidadeAtiva,
 
     const onSubmit = async (values: any) => {
         try {
-            const { error } = await supabase
-                .from("profiles")
-                .update({
-                    email: values.email, // Agora permitindo editar o email no profile
-                    first_name: values.first_name,
-                    last_name: values.last_name,
-                    role: values.role,
-                    especialidade_id: values.especialidade_id === "none" ? null : values.especialidade_id
-                })
-                .eq("id", user.id);
 
-            if (error) throw error;
+            // =====================================
+            // EDITAR
+            // =====================================
+            if (user) {
 
-            toast.success("Dados atualizados com sucesso!");
+                const { error } = await supabase
+                    .from("profiles")
+                    .update({
+                        email: values.email,
+                        first_name: values.first_name,
+                        last_name: values.last_name,
+                        role: values.role,
+                        especialidade_id:
+                            values.especialidade_id === "none"
+                                ? null
+                                : values.especialidade_id
+                    })
+                    .eq("id", user.id);
+
+                if (error) throw error;
+
+                toast.success("Usuário atualizado!");
+
+            }
+
+            // =====================================
+            // CRIAR
+            // =====================================
+            else {
+
+                const { error } = await supabase.auth.signUp({
+                    email: values.email,
+                    password: values.password,
+                    options: {
+                        data: {
+                            first_name: values.first_name,
+                            last_name: values.last_name,
+
+                            unidade_id: unidadeAtiva,
+
+                            role: values.role,
+
+                            especialidade_id:
+                                values.especialidade_id === "none"
+                                    ? null
+                                    : values.especialidade_id
+                        }
+                    }
+                });
+
+                toast.success("Usuário criado com sucesso!");
+            }
+
             onSuccess();
             onOpenChange(false);
+
         } catch (error: any) {
             toast.error(error.message);
         }
     };
 
+    // const onSubmit = async (values: any) => {
+    //     try {
+    //         const { error } = await supabase
+    //             .from("profiles")
+    //             .update({
+    //                 email: values.email, // Agora permitindo editar o email no profile
+    //                 first_name: values.first_name,
+    //                 last_name: values.last_name,
+    //                 role: values.role,
+    //                 especialidade_id: values.especialidade_id === "none" ? null : values.especialidade_id
+    //             })
+    //             .eq("id", user.id);
+
+    //         if (error) throw error;
+
+    //         toast.success("Dados atualizados com sucesso!");
+    //         onSuccess();
+    //         onOpenChange(false);
+    //     } catch (error: any) {
+    //         toast.error(error.message);
+    //     }
+    // };
+
     const handleDelete = async () => {
         if (!confirm("Tem certeza que deseja excluir este perfil? Esta ação não remove o login do Auth, apenas o perfil do banco.")) return;
-        
+
         try {
             setIsDeleting(true);
             const { error } = await supabase
@@ -108,7 +173,7 @@ export default function UserFormDialog({ open, onOpenChange, user, unidadeAtiva,
         }
     };
 
-    if (!user) return null;
+    // if (!user) return null;
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -118,9 +183,9 @@ export default function UserFormDialog({ open, onOpenChange, user, unidadeAtiva,
                         <User className="w-4 h-4 text-emerald-400" />
                         Editar Profissional
                     </DialogTitle>
-                    <Button 
-                        type="button" 
-                        variant="ghost" 
+                    <Button
+                        type="button"
+                        variant="ghost"
                         onClick={handleDelete}
                         disabled={isDeleting}
                         className="h-8 w-8 p-0 text-rose-500 hover:bg-rose-500/10 hover:text-rose-600"
@@ -130,7 +195,7 @@ export default function UserFormDialog({ open, onOpenChange, user, unidadeAtiva,
                 </DialogHeader>
 
                 <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-6">
-                    
+
                     <div className="space-y-4">
                         <p className="text-[9px] font-black text-emerald-500 uppercase tracking-[0.2em]">01. Informações de Acesso</p>
                         <div className="space-y-2">
@@ -141,6 +206,19 @@ export default function UserFormDialog({ open, onOpenChange, user, unidadeAtiva,
                                 className="bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 h-12 text-[11px] font-bold"
                             />
                         </div>
+                        {!user && (
+                            <div className="space-y-2">
+                                <Label className="text-[10px] font-black uppercase text-slate-500 ml-1">
+                                    Senha Inicial
+                                </Label>
+
+                                <Input
+                                    type="password"
+                                    {...register("password")}
+                                    className="bg-slate-50 dark:bg-slate-900 h-12 text-[11px] font-bold"
+                                />
+                            </div>
+                        )}
                     </div>
 
                     <div className="space-y-4 pt-2">
@@ -148,11 +226,11 @@ export default function UserFormDialog({ open, onOpenChange, user, unidadeAtiva,
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label className="text-[10px] font-black uppercase text-slate-500 ml-1">Nome Visível</Label>
-                                <Input {...register("first_name")} className="bg-slate-50 dark:bg-slate-900 h-12 uppercase text-[11px] font-bold" />
+                                <Input {...register("first_name")} className="bg-slate-50 dark:bg-slate-900 h-12 text-[11px] font-bold" />
                             </div>
                             <div className="space-y-2">
                                 <Label className="text-[10px] font-black uppercase text-slate-500 ml-1">Sobrenome</Label>
-                                <Input {...register("last_name")} className="bg-slate-50 dark:bg-slate-900 h-12 uppercase text-[11px] font-bold" />
+                                <Input {...register("last_name")} className="bg-slate-50 dark:bg-slate-900 h-12 text-[11px] font-bold" />
                             </div>
                         </div>
                     </div>

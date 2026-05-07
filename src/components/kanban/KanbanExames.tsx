@@ -134,18 +134,12 @@ export default function KanbanExames() {
             if (user) {
                 const { data: profile } = await supabase
                     .from('profiles')
-                    .select('unidade_id, role') // Busque o role também
+                    .select('unidade_id, role') 
                     .eq('id', user.id)
                     .single();
 
                 if (profile) {
-                    // Lógica idêntica à do Header para consistência
-                    const salvaLocal = localStorage.getItem('unidade_ativa_id');
-
-                    // Se for admin, prioriza o localStorage. Se não, usa o do perfil.
-                    const idParaUsar = (profile.role === 'admin' && salvaLocal)
-                        ? salvaLocal
-                        : profile.unidade_id;
+                    const idParaUsar = profile.unidade_id;
 
                     if (idParaUsar) {
                         setUnidadeId(idParaUsar);

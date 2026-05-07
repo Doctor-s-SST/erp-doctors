@@ -16,7 +16,8 @@ import {
   Mail,
   Stethoscope,
   Filter,
-  Users
+  Users,
+  Plus
 } from "lucide-react";
 import UserFormDialog from "@/components/user/UserFormDialog";
 import { toast } from "sonner";
@@ -102,10 +103,10 @@ export default function UsersManagementPage() {
           let idFinal = profile.unidade_id;
 
           // Se for admin, verifica se há uma troca de unidade no Header
-          if (profile.role === 'admin') {
-            const salvaLocal = localStorage.getItem('unidade_ativa_id');
-            if (salvaLocal) idFinal = salvaLocal;
-          }
+          // if (profile.role === 'admin') {
+          //   const salvaLocal = localStorage.getItem('unidade_ativa_id');
+          //   if (salvaLocal) idFinal = salvaLocal;
+          // }
 
           setUnidadeId(idFinal);
           fetchUsers(idFinal);
@@ -144,6 +145,15 @@ export default function UsersManagementPage() {
               <p className="text-gray-400 text-[11px] font-bold tracking-[0.2em] uppercase">Gestão de Profissionais</p>
             </div>
           </div>
+          <Button
+              onClick={() => {
+                setSelectedUser(null);
+                setIsDialogOpen(true);
+              }}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white mr-5"
+            >
+              <Plus /> Novo Usuário
+            </Button>
         </div>
 
         {/* BARRA DE BUSCA E BOTÕES DE FILTRO */}
@@ -163,6 +173,7 @@ export default function UsersManagementPage() {
 
             {/* Filtros por Role */}
             <div className="flex flex-wrap gap-1 justify-center">
+
               {[
                 { id: "all", label: "TODOS", icon: Users },
                 { id: "admin", label: "ADMIN", icon: ShieldAlert },
@@ -185,8 +196,8 @@ export default function UsersManagementPage() {
             </div>
           </div>
 
-          <div className="flex items-center justify-end">
-            <Badge variant="outline" className="text-[9px] font-black border-gray-600 text-slate-400 uppercase py-1">
+          <div className="flex gap-3 items-center justify-end">
+                        <Badge variant="outline" className="text-[9px] font-black border-gray-600 text-slate-400 uppercase py-1">
               {filteredUsers.length} RESULTADOS ENCONTRADOS
             </Badge>
           </div>

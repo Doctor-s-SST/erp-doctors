@@ -50,8 +50,24 @@ export default function DashboardPage() {
     const [dataFim, setDataFim] = useState<Date>(new Date())
 
     useEffect(() => {
-        const unidadeSalva = localStorage.getItem('unidade_ativa_id');
-        if (unidadeSalva) setUnidadeId(unidadeSalva);
+        const fetchUserContext = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+
+            if (user) {
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('role, unidade_id')
+                    .eq('id', user.id)
+                    .single();
+
+                if (profile) {
+                    let idFinal = profile.unidade_id;
+                    setUnidadeId(idFinal);
+                }
+            }
+        };
+
+        fetchUserContext();
     }, []);
 
     // Determina se deve fazer polling (apenas se for visão geral/diário e a data for hoje)
@@ -187,14 +203,14 @@ export default function DashboardPage() {
                                         }}
                                         locale={ptBR}
                                         numberOfMonths={2}
-                                    className={cn(
-                                        "p-3 bg-gray-950 text-white rounded-xl border border-gray-800",
-                                        "[&_.rdp-day]:font-semi-bold",
-                                        "[&_.rdp-day_selected]:bg-emerald-600",                                        
-                                        "[&_.rdp-day:hover]:bg-gray-800",
-                                        "[&_.rdp-caption]:text-white",
-                                        "[&_.rdp-head_cell]:text-gray-400"
-                                    )}
+                                        className={cn(
+                                            "p-3 bg-gray-950 text-white rounded-xl border border-gray-800",
+                                            "[&_.rdp-day]:font-semi-bold",
+                                            "[&_.rdp-day_selected]:bg-emerald-600",
+                                            "[&_.rdp-day:hover]:bg-gray-800",
+                                            "[&_.rdp-caption]:text-white",
+                                            "[&_.rdp-head_cell]:text-gray-400"
+                                        )}
                                     />
                                 )}
 
@@ -211,14 +227,14 @@ export default function DashboardPage() {
                                         locale={ptBR}
                                         numberOfMonths={1}
 
-                                    className={cn(
-                                        "p-3 bg-gray-950 text-white rounded-xl border border-gray-800",
-                                        "[&_.rdp-day]:font-semi-bold",
-                                        "[&_.rdp-day_selected]:bg-emerald-600",                                        
-                                        "[&_.rdp-day:hover]:bg-gray-800",
-                                        "[&_.rdp-caption]:text-white",
-                                        "[&_.rdp-head_cell]:text-gray-400"
-                                    )}
+                                        className={cn(
+                                            "p-3 bg-gray-950 text-white rounded-xl border border-gray-800",
+                                            "[&_.rdp-day]:font-semi-bold",
+                                            "[&_.rdp-day_selected]:bg-emerald-600",
+                                            "[&_.rdp-day:hover]:bg-gray-800",
+                                            "[&_.rdp-caption]:text-white",
+                                            "[&_.rdp-head_cell]:text-gray-400"
+                                        )}
                                     />
                                 )}
 
@@ -247,7 +263,7 @@ function formatMinutos(min: number | null | undefined): string {
     if (h > 0) return `${h}h ${m}m`
     return `${m}m`
 }
- 
+
 /* ============================================================
    VIEW GERAL
 ============================================================ */
@@ -260,29 +276,29 @@ export function ViewGeral({ data }: { data: any }) {
         especialidade: item.especialidade,
         total: item.total ?? 0,
     }))
- 
+
     // total acumulado = todos que passaram da recepção
-    const acumulado: number      = cards.acumulado      ?? 0
-    const geradas: number        = cards.geradas        ?? 0
-    const finalizadas: number    = cards.finalizadas    ?? 0
-    const emAtendimento: number  = cards.em_atendimento ?? 0
-    const aguardando: number     = cards.aguardando     ?? 0
-    const cancelados: number     = cards.cancelados     ?? 0
- 
+    const acumulado: number = cards.acumulado ?? 0
+    const geradas: number = cards.geradas ?? 0
+    const finalizadas: number = cards.finalizadas ?? 0
+    const emAtendimento: number = cards.em_atendimento ?? 0
+    const aguardando: number = cards.aguardando ?? 0
+    const cancelados: number = cards.cancelados ?? 0
+
     const mediaMin: number | null = permanencia.media_minutos ?? null
-    const amostras: number        = permanencia.total_amostras ?? 0
- 
+    const amostras: number = permanencia.total_amostras ?? 0
+
     // taxa de conclusão (finalizados / acumulados)
     const taxaConclusao = acumulado > 0
         ? `${Math.round((finalizadas / acumulado) * 100)}%`
         : "—"
- 
+
     return (
         <div className="space-y-6">
- 
+
             {/* ── CARDS ── */}
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
- 
+
                 {/* Senhas Geradas */}
                 <CardMetric
                     title="Senhas Geradas"
@@ -291,7 +307,7 @@ export function ViewGeral({ data }: { data: any }) {
                     icon={<Hash className="w-5 h-5" />}
                     color="emerald"
                 />
- 
+
                 {/* Acumulado de Atendimentos */}
                 <CardMetric
                     title="Acumulado"
@@ -301,7 +317,7 @@ export function ViewGeral({ data }: { data: any }) {
                     color="blue"
                     badge={cancelados > 0 ? { label: `${cancelados} cancelados`, color: "text-red-400" } : undefined}
                 />
- 
+
                 {/* Tempo Médio de Permanência */}
                 <CardMetric
                     title="Tempo de Permanência"
@@ -310,9 +326,9 @@ export function ViewGeral({ data }: { data: any }) {
                     icon={<Clock className="w-5 h-5" />}
                     color="amber"
                 />
- 
+
             </div>
- 
+
             {/* ── CONTEÚDO RECEPÇÃO + ESPECIALIDADES ── */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <CardViewSimple
@@ -353,7 +369,7 @@ export function ViewGeral({ data }: { data: any }) {
                     chart={<GraficoTipoAtendimentoPaciente data={analytics.pacientes.tipoAtendimento} />}
                 />
             </div>
- 
+
         </div>
     )
 }
@@ -465,7 +481,7 @@ interface BadgeProps {
     label: string
     color: string
 }
- 
+
 function CardMetric({
     title,
     value,
@@ -483,28 +499,28 @@ function CardMetric({
 }) {
     const colorMap = {
         emerald: {
-            bg:   "bg-emerald-500/10 dark:bg-emerald-500/10",
+            bg: "bg-emerald-500/10 dark:bg-emerald-500/10",
             icon: "text-emerald-500",
             ring: "ring-emerald-500/20",
         },
         blue: {
-            bg:   "bg-blue-500/10",
+            bg: "bg-blue-500/10",
             icon: "text-blue-400",
             ring: "ring-blue-500/20",
         },
         amber: {
-            bg:   "bg-amber-500/10",
+            bg: "bg-amber-500/10",
             icon: "text-amber-400",
             ring: "ring-amber-500/20",
         },
         purple: {
-            bg:   "bg-purple-500/10",
+            bg: "bg-purple-500/10",
             icon: "text-purple-400",
             ring: "ring-purple-500/20",
         },
     }
     const c = colorMap[color]
- 
+
     return (
         <Card className="dark:bg-gray-900 border-gray-200 dark:border-gray-800">
             <CardContent className="p-5">
@@ -535,7 +551,7 @@ function CardMetric({
         </Card>
     )
 }
- 
+
 function CardViewSimple({ title, chart }: { title: string; chart: React.ReactNode }) {
     return (
         <Card className="dark:bg-gray-900 border-gray-800">

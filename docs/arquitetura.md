@@ -13,7 +13,7 @@ Supabase (Banco de Dados)
 ↓
 n8n (Automações)
 ↓
-Worker de Impressão (Java .exe)
+App de Impressão (Java .exe)
 ↓
 Impressora térmica (TCP)
 ```
@@ -37,6 +37,7 @@ Impressora térmica (TCP)
 
 * `/api/gerar-declaracao`
 * `/api/importar-ficha`
+* `/api/relatorio`
 * Processamento de dados
 * Integração com n8n
 
@@ -75,7 +76,7 @@ Impressora térmica (TCP)
 
 ---
 
-## Fluxo de Impressão
+<!-- ## Fluxo de Impressão
 
 1. App Acionador gera senha
 3. App Acionador chama função `gerar_senha` do Supabase
@@ -85,15 +86,15 @@ Impressora térmica (TCP)
 
 ---
 
-<!-- ## Fluxo de Importação de Ficha
+## Fluxo de Importação de Ficha
 
-1. Usuário seleciona período e/ou filtros
-2. Frontend chama `/api/relatorio`
-3. API chama n8n que puxa dados do Supabase
+1. Usuário seleciona a senha
+2. Frontend chama `/api/importar ficha`
+3. API chama n8n que puxa dados do ASO importado (pdf)
 4. Dados são processados
-5. Retorno para UI com filtros e ordenação
+5. Retorno para UI
 
---- -->
+---
 
 ## Fluxo de Relatórios
 
@@ -104,3 +105,13 @@ Impressora térmica (TCP)
 5. Retorno para UI com filtros e ordenação
 
 ---
+
+## Fluxo de Gerar Declaração de Comparecimento
+
+1. Usuário seleciona o atendimento
+2. Frontend chama `/api/gerar-declaracao`
+3. API chama n8n que puxa dados do Supabase
+4. Dados são processados
+5. Retorno para UI com filtros e ordenação
+
+--- -->
