@@ -77,7 +77,7 @@ export default function KanbanExames() {
     const [tipoModal, setTipoModal] = useState<"especialidade" | "exame">("exame")
 
     const [editandoExame, setEditandoExame] = useState<Exame | null>(null)
-    const [editandoEspecialidade, setEditandoEspecialidade] = useState<string | null>(null)
+    // const [editandoEspecialidade, setEditandoEspecialidade] = useState<string | null>(null)
     const [form, setForm] = useState<any>({})
     const [activeExame, setActiveExame] = useState<Exame | null>(null)
 
@@ -95,7 +95,7 @@ export default function KanbanExames() {
             .select(`
                 id, 
                 nome, 
-            `) 
+            `)
             .select(`id, nome, exames (*)`)
             .eq("unidade_id", currentUnidadeId)
             .order('nome', { ascending: true });
@@ -134,7 +134,7 @@ export default function KanbanExames() {
             if (user) {
                 const { data: profile } = await supabase
                     .from('profiles')
-                    .select('unidade_id, role') 
+                    .select('unidade_id, role')
                     .eq('id', user.id)
                     .single();
 
@@ -204,19 +204,10 @@ export default function KanbanExames() {
             }
 
             if (tipoModal === "especialidade") {
-                const payload = {
+                await supabase.from("especialidades").insert({
                     nome: form.nome.toUpperCase(),
                     unidade_id: unidadeId
-                };
-
-                if (editandoEspecialidade) {
-                    await supabase.from("especialidades")
-                        .update(payload)
-                        .eq("id", editandoEspecialidade)
-                        .eq("unidade_id", unidadeId); // Segurança extra: só edita se for da mesma unidade
-                } else {
-                    await supabase.from("especialidades").insert(payload);
-                }
+                });
             } else {
                 // No caso do EXAME
                 const payloadExame = {
@@ -232,7 +223,7 @@ export default function KanbanExames() {
                     await supabase.from("exames")
                         .update(payloadExame)
                         .eq("id", exameId)
-                        // .eq("unidade_id", unidadeId); 
+                    // .eq("unidade_id", unidadeId); 
                 } else {
                     const { data: n, error } = await supabase
                         .from("exames")
@@ -263,6 +254,33 @@ export default function KanbanExames() {
         }
     }
 
+    async function deletarEspecialidade(id: string) {
+        if (!confirm("Excluir especialidade?")) return;
+
+        const especialidade = data.find(e => e.id === id);
+
+        if (especialidade?.exames?.length) {
+            toast.error("Remova os exames antes de excluir a especialidade");
+            return;
+        }
+
+        const { error } = await supabase
+            .from("especialidades")
+            .delete()
+            .eq("id", id);
+
+        if (error) {
+            toast.error("Erro ao remover especialidade");
+            return;
+        }
+
+        toast.success("Especialidade removida");
+
+        if (unidadeId) {
+            fetchData(unidadeId);
+        }
+    }
+
     async function deletarExame() {
         // 1. Verificações de segurança
         if (!editandoExame || !confirm("Excluir exame?")) return;
@@ -282,7 +300,9 @@ export default function KanbanExames() {
     }
 
     const fecharModal = () => {
-        setOpenModal(false); setEditandoExame(null); setEditandoEspecialidade(null); setForm({})
+        setOpenModal(false)
+        setEditandoExame(null)
+        setForm({})
     }
 
     const renderExameCard = (exame: Exame, isOverlay = false) => {
@@ -358,12 +378,17 @@ export default function KanbanExames() {
                                     className="flex flex-col max-w-[200px] max-h-[70vh] bg-gray-500 dark:bg-gray-900/40 rounded-xl p-2 border border-gray-800 dark:border-gray-600 shrink-0"
                                 >
                                     {/* Título Fixo no topo da coluna */}
-                                    <div className="flex justify-between items-center mb-3 px-1 group cursor-pointer shrink-0"
-                                        onClick={() => { setTipoModal("especialidade"); setEditandoEspecialidade(col.id); setForm({ nome: col.nome }); setOpenModal(true); }}>
+                                    <div className="flex justify-between items-center mb-3 px-1 shrink-0 gap-2">
+                                        <Badge className="h-4 px-2 py-1 text-[12px] bg-white dark:bg-slate-800 text-slate-500 border-none shadow-sm">{col.exames.length}</Badge>
                                         <h2 className="font-black text-slate-900 dark:text-slate-300 uppercase text-[9px] tracking-widest truncate group-hover:text-emerald-500 transition-colors">
                                             {col.nome}
                                         </h2>
-                                        <Badge className="h-4 px-2 py-1 text-[12px] bg-white dark:bg-slate-800 text-slate-500 border-none shadow-sm">{col.exames.length}</Badge>
+                                        <button
+                                            onClick={() => deletarEspecialidade(col.id)}
+                                            className="p-1 rounded hover:bg-rose-500/10 text-rose-500 transition"
+                                        >
+                                            <Trash2 className="w-4.5 h-4.5 bg-white dark:bg-transparent p-0.5 rounded" />
+                                        </button>
                                     </div>
 
                                     {/* Lista de Exames */}
@@ -408,7 +433,9 @@ export default function KanbanExames() {
                             {tipoModal === "exame" ? <Activity className="w-8 h-8 text-emerald-500" /> : <Stethoscope className="w-8 h-8 text-emerald-500" />}
                         </div>
                         <DialogTitle className="text-center text-xl font-black uppercase tracking-tight text-slate-800 dark:text-white">
-                            {tipoModal === "exame" ? (editandoExame ? "Editar Exame" : "Novo Exame") : (editandoEspecialidade ? "Editar Especialidade" : "Nova Especialidade")}
+                            {tipoModal === "exame"
+                                ? (editandoExame ? "Editar Exame" : "Novo Exame")
+                                : "Nova Especialidade"}
                         </DialogTitle>
                     </DialogHeader>
 
