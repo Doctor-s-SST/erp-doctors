@@ -40,8 +40,8 @@ export default function PaginaRelatorio() {
         const carregarUnidade = async () => {
             try {
                 // Ajuste a URL abaixo para o seu endpoint que retorna a unidade do usuário logado 
-                const { data } = await supabase.from('profile').select('unidade_id');
-
+                const { data } = await supabase.from('profiles').select('unidade_id');
+                console.log("Unidade padrão do banco:", data);
                 if (data && data.length > 0 && data[0].unidade_id) {
                     setFiltros(prev => ({ ...prev, unidadeId: data[0].unidade_id }));
                 }

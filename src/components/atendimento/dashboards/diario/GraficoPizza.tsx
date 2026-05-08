@@ -1,12 +1,14 @@
 "use client"
 
+import { Badge } from "@/components/ui/badge"
 import {
     Pie,
     PieChart,
     Cell,
     ResponsiveContainer,
     Tooltip,
-    TooltipProps
+    TooltipProps,
+    Label
 } from "recharts"
 
 /* ============================================================
@@ -52,10 +54,9 @@ interface RecepItem {
 type ChartItem = SalaItem | RecepItem
 
 interface GraficoPizzaProps {
-    /** Array de salas (especialidade) ou atendentes (recepção) */
     data: ChartItem[]
-    /** "recepcao" mostra nome do atendente; "especialidade" mostra sala */
     mode?: "recepcao" | "especialidade"
+    aguardandoExterno?: number
 }
 
 /* ============================================================
@@ -142,12 +143,15 @@ function Row({
 /* ============================================================
    COMPONENTE PRINCIPAL
 ============================================================ */
-export function GraficoPizza({ data, mode = "especialidade" }: GraficoPizzaProps) {
-    const items = data || []
+export function GraficoPizza({ data, mode = "especialidade", aguardandoExterno = 0 }: GraficoPizzaProps) {
+    const items = Array.isArray(data) ? data : []
 
     // 1. Calculamos os totais para decidir a lógica de exibição
     const totalAtendimentos = items.reduce((acc, i) => acc + (i.total || 0), 0)
-    const totalAguardando = items.reduce((acc, i) => acc + (i.aguardando || 0), 0)
+    const totalAguardando =
+        aguardandoExterno > 0
+            ? aguardandoExterno
+            : (items[0]?.aguardando || 0)
 
     // 2. Se não houver absolutamente nada (nem atendimentos nem fila), exibe "Sem dados"
     if (items.length === 0 || (totalAtendimentos === 0 && totalAguardando === 0)) {
@@ -184,21 +188,80 @@ export function GraficoPizza({ data, mode = "especialidade" }: GraficoPizzaProps
     return (
         <div className="flex flex-col items-center gap-3 w-full">
             {/* ── DONUT ── */}
-            <div className="h-[150px] w-full">
+            <div className="h-60 w-full">
                 <ResponsiveContainer>
                     <PieChart>
                         <Tooltip
                             content={<CustomTooltip />}
                             wrapperStyle={{ zIndex: 50 }}
                         />
+
                         <Pie
                             data={chartData}
+                            isAnimationActive={false}
                             dataKey="value"
                             nameKey="nome"
                             innerRadius={42}
                             outerRadius={68}
                             paddingAngle={totalAtendimentos === 0 ? 0 : 2}
                             strokeWidth={0}
+
+                            /* LABEL EXTERNA */
+                            label={(props: any) => {
+                                const {
+                                    cx,
+                                    cy,
+                                    midAngle,
+                                    outerRadius,
+                                    payload,
+                                } = props
+
+                                const item = payload
+
+                                // remove aguardando das labels
+                                if (item.isQueue) return null
+
+                                const RADIAN = Math.PI / 180
+
+                                // distância da label pra fora do donut
+                                const radius = outerRadius + 36
+
+                                const x = cx + radius * Math.cos(-midAngle * RADIAN)
+                                const y = cy + radius * Math.sin(-midAngle * RADIAN)
+
+                                const nome =
+                                    mode === "especialidade"
+                                        ? `Sala ${item.nome}`
+                                        : item.nome
+
+                                return (
+                                    <g>
+                                        <text
+                                            x={x}
+                                            y={y}
+                                            textAnchor="middle"
+                                            fill={item.fill}
+                                            className="font-bold"
+                                        >
+                                            <tspan
+                                                x={x}
+                                                dy={0}
+                                                className="text-[11px]"
+                                            >
+                                                {nome}
+                                            </tspan>
+
+                                            <tspan
+                                                x={x}
+                                                dy={15}
+                                                className="text-[12px] font-black"
+                                            >
+                                                {item.total}
+                                            </tspan>
+                                        </text>
+                                    </g>
+                                )
+                            }}
                         >
                             {chartData.map((entry, index) => (
                                 <Cell
@@ -208,37 +271,68 @@ export function GraficoPizza({ data, mode = "especialidade" }: GraficoPizzaProps
                                     style={{ cursor: "pointer", outline: "none" }}
                                 />
                             ))}
+
+                            {/* TOTAL CENTRAL */}
+                            <Label
+                                content={({ viewBox }: any) => {
+                                    const { cx, cy } = viewBox
+
+                                    return (
+                                        <g>
+                                            <text
+                                                x={cx}
+                                                y={cy - 2}
+                                                textAnchor="middle"
+                                                className="fill-gray-900 dark:fill-white text-[20px] font-black"
+                                            >
+                                                {totalAtendimentos}
+                                            </text>
+
+                                            <text
+                                                x={cx}
+                                                y={cy + 16}
+                                                textAnchor="middle"
+                                                className="fill-gray-500 dark:fill-gray-400 text-[10px] uppercase tracking-widest"
+                                            >
+                                                atendidos
+                                            </text>
+                                        </g>
+                                    )
+                                }}
+                            />
                         </Pie>
                     </PieChart>
                 </ResponsiveContainer>
             </div>
 
             {/* ── LEGENDAS ── */}
-            <div className="w-full space-y-1">
-                {/* Se houver atendimentos, listamos as salas/atendentes na legenda */}
-                {/* {totalAtendimentos > 0 && ativas.map((item, idx) => (
-                    <LegendaItem 
-                        key={idx} 
-                        cor={item.fill} 
-                        rotulo={mode === "especialidade" ? `Sala ${item.nome}` : item.nome} 
-                        valor={item.total} 
+            {/* <div className="w-full flex flex-col gap-2 mt-1">
+                {ativas.map((item, idx) => (
+                    <LegendaItem
+                        key={idx}
+                        cor={item.fill}
+                        rotulo={
+                            mode === "especialidade"
+                                ? `Sala ${item.nome}`
+                                : item.nome
+                        }
+                        valor={item.total}
                     />
-                ))} */}
+                ))}
 
-                {/* Item fixo: aguardando sempre aparece na legenda */}
                 <LegendaItem
                     cor={AGUARDANDO_COLOR}
                     rotulo="Aguardando"
                     valor={totalAguardando}
                     dimmed
                 />
-                 <LegendaItem
-                    cor={AGUARDANDO_COLOR}
-                    rotulo="Atendidos"
-                    valor={totalAtendimentoEspecialidade}
-                    dimmed
-                />
-            </div>
+            </div> */}
+            <LegendaItem
+                cor={AGUARDANDO_COLOR}
+                rotulo="Aguardando"
+                valor={totalAguardando}
+                dimmed
+            />
         </div>
     )
 }
@@ -256,15 +350,10 @@ function LegendaItem({
 }) {
     return (
         <div className="w-full flex justify-center gap-1 text-[14px] px-2">
-            <div className="flex items-center gap-2 min-w-0">
-                {/* <span 
-                    className="w-2 h-2 rounded-full flex-shrink-0" 
-                    style={{ backgroundColor: cor, opacity: dimmed ? 0.6 : 1 }}
-                /> */}
-                <span className="font-medium text-gray-400 truncate">{rotulo}:</span>
-            </div>
-            <span className="font-bold">{valor}</span>
+            <Badge className="flex items-center gap-2 min-w-0 bg-amber-400 text-gray-800">
+                <span className="font-bold truncate">{rotulo}:</span>
+                <span className="font-bold truncate">{valor}</span>
+            </Badge>
         </div>
-        
     )
 }

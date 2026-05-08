@@ -80,21 +80,41 @@ export default function DashboardPage() {
     ]
 
     const { data, isLoading, isFetching } = useQuery({
-        queryKey: ['dashboard', view, format(dataInicio, 'yyyy-MM-dd'), format(dataFim, 'yyyy-MM-dd'), unidadeId],
-        queryFn: async () => {
-            if (!unidadeId) return null;
+    queryKey: [
+        'dashboard',
+        view,
+        format(dataInicio, 'yyyy-MM-dd'),
+        format(dataFim, 'yyyy-MM-dd'),
+        unidadeId
+    ],
 
-            const { data, error } = await supabase.rpc('get_dashboard_completo', {
-                p_unidade_id: unidadeId,
-                p_data_inicio: format(dataInicio, 'yyyy-MM-dd'),
-                p_data_fim: format(dataFim, 'yyyy-MM-dd')
-            })
-            if (error) throw error
-            return data
-        },
-        refetchInterval: pollingActive ? 3000 : false,
-        enabled: !!unidadeId
-    })
+    queryFn: async () => {
+        if (!unidadeId) return null;
+
+        const { data, error } = await supabase.rpc('get_dashboard_completo', {
+            p_unidade_id: unidadeId,
+            p_data_inicio: format(dataInicio, 'yyyy-MM-dd'),
+            p_data_fim: format(dataFim, 'yyyy-MM-dd')
+        })
+
+        if (error) throw error
+
+        return data
+    },
+
+    refetchInterval: pollingActive ? 3000 : false,
+
+    enabled: !!unidadeId,
+
+    // ✅ mantém dados anteriores durante refetch
+    placeholderData: (previousData) => previousData,
+
+    // ✅ evita loading piscando
+    staleTime: 2000,
+
+    // ✅ evita re-render inútil
+    refetchOnWindowFocus: false,
+})
 
     // Handler para troca de visão (ajusta as datas automaticamente)
     const handleViewChange = (newView: ViewType) => {
@@ -383,7 +403,7 @@ function ViewDiaria({ data }: any) {
 
     return (
         <div className="space-y-6">
-            <div className="w-full grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="w-full grid grid-cols-2 lg:grid-cols-5 gap-4">
 
                 <Card className="bg-blue-600 border-none text-white shadow-lg">
                     <CardContent className="p-4 text-center">
@@ -429,23 +449,54 @@ function ViewDiaria({ data }: any) {
                     </CardContent>
                 </Card>
 
+                <Card className="bg-red-500 border-none text-white shadow-lg">
+                    <CardContent className="p-4 text-center">
+                        <p className="text-1xl font-black uppercase opacity-95">
+                            Canceladas
+                        </p>
+                        <p className="text-4xl font-black italic">
+                            {cards.cancelados ?? 0}
+                        </p>
+                    </CardContent>
+                </Card>
             </div>
 
-            <CardPizzaSmall
-                title="Recepção"
-                data={analytics.distribuicoes.recepcao || []}
-            />
+            <div className="w-full grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-4">
+                <CardPizzaSmall
+                    title="Recepção"
+                    data={analytics.distribuicoes.recepcao || []}
+                />
+                {(analytics.distribuicoes.especialidades || []).map((esp: any) =>
+                    (esp.especialidade && (esp.especialidade.toLowerCase() == "clínico"))
+                        ? (
+                            <CardPizzaSmall
+                                key={esp.especialidade}
+                                title={esp.especialidade}
+                                data={esp.salas}
+                                aguardando={esp.aguardando}
+                            />
+                        )
+                        : null
+                )}
+            </div>
+
+
 
             <div className="w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 
                 {/* ESPECIALIDADES POR SALA */}
-                {(analytics.distribuicoes.especialidades || []).map((esp: any) => (
-                    <CardPizzaSmall
-                        key={esp.especialidade}
-                        title={esp.especialidade}
-                        data={esp.salas}
-                    />
-                ))}
+                {(analytics.distribuicoes.especialidades || []).map((esp: any) =>
+                    (esp.especialidade && (esp.especialidade.toLowerCase() !== "clínico"))
+                        ? (
+                            <CardPizzaSmall
+                                key={esp.especialidade}
+                                title={esp.especialidade}
+                                data={esp.salas}
+                                aguardando={esp.aguardando}
+                            />
+                        )
+                        : null
+                )}
 
             </div>
         </div>
@@ -564,10 +615,9 @@ function CardViewSimple({ title, chart }: { title: string; chart: React.ReactNod
         </Card>
     )
 }
-function CardPizzaSmall({ title, data }: any) {
-    console.log("Data para CardPizzaSmall:", data) // Log para verificar os dados recebidos
+function CardPizzaSmall({ title, data, aguardando = 0 }: any) {
     return (
-        <Card className="w-full dark:bg-gray-900 border-gray-800">
+        <Card className={`w-full dark:bg-gray-900 border-gray-800 ${title == "Recepção" ? "lg:col-span-2" : ""}`}>
             <CardHeader className="p-1 border-b dark:border-gray-800">
                 <CardTitle className="text-1xl font-black uppercase text-center text-gray-500">
                     {title}
@@ -576,23 +626,19 @@ function CardPizzaSmall({ title, data }: any) {
 
             <CardContent className="p-1 flex flex-col items-center">
                 <div className="h-fit w-full">
-                    <GraficoPizza data={data || []} />
+                    <GraficoPizza
+                        data={data || []}
+                        aguardandoExterno={aguardando}
+                        mode={title == "Recepção" ? "recepcao" : "especialidade"}
+                    />
                 </div>
 
-                {/* detalhe */}
-                <div className="text-[12px] text-gray-500 text-center mt-2">
-                    {data.length != 4 ? `${data.length} Salas` : `${data.length} Recepcionistas`}
-                </div>
+                {/* <div className="text-[12px] text-gray-500 text-center mt-2">
+                    {title != "Recepção"
+                        ? `${data.length} Salas`
+                        : `${data.length} Recepcionistas`}
+                </div> */}
             </CardContent>
         </Card>
-    )
-}
-
-function LoadingScreen() {
-    return (
-        <div className="flex h-screen flex-col items-center justify-center bg-slate-950 gap-4">
-            <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-            <p className="font-mono text-[10px] text-emerald-500 animate-pulse tracking-[0.3em]">RECONSTRUINDO AMBIENTE DE DADOS...</p>
-        </div>
     )
 }
