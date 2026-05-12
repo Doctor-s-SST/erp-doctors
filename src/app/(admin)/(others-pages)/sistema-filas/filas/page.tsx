@@ -247,6 +247,7 @@ export default function SelecionarFila() {
                     autoFocus
                     className="h-12 bg-slate-50 dark:bg-gray-900 border-emerald-500/50 text-slate-900 dark:text-white font-bold"
                     value={form.sala}
+                    type="number"
                     onChange={(e) => setForm({ ...form, sala: e.target.value })}
                   />
                   <X className="absolute right-3 top-4 w-4 h-4 text-slate-400 cursor-pointer" onClick={() => setIsOutraSala(false)} />

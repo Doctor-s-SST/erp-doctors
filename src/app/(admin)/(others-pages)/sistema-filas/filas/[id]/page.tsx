@@ -164,17 +164,49 @@ export default function FilaPage() {
         )
     }, [profissionais, id])
 
+    // const entrar = async () => {
+    //     if (!form.sala || !form.profissional) {
+    //         alert("Por favor, preencha a sala e o profissional.");
+    //         return;
+    //     }
+
+    //     const { data: { user } } = await supabase.auth.getUser();
+    //     if (user) {
+    //         const userKey = `fila_session_${user.id}`;
+    //         localStorage.setItem(userKey, JSON.stringify(form));
+    //         setSession(form);
+    //         setOpenModal(false);
+    //     }
+    // };
+
     const entrar = async () => {
         if (!form.sala || !form.profissional) {
             alert("Por favor, preencha a sala e o profissional.");
             return;
         }
 
+        // remove "Sala " caso venha junto
+        const salaNormalizada = form.sala
+            .replace(/^sala\s*/i, "")
+            .trim();
+
+        const dadosSessao = {
+            ...form,
+            sala: salaNormalizada
+        };
+
         const { data: { user } } = await supabase.auth.getUser();
+
         if (user) {
             const userKey = `fila_session_${user.id}`;
-            localStorage.setItem(userKey, JSON.stringify(form));
-            setSession(form);
+
+            localStorage.setItem(
+                userKey,
+                JSON.stringify(dadosSessao)
+            );
+
+            setSession(dadosSessao);
+
             setOpenModal(false);
         }
     };
@@ -1118,6 +1150,7 @@ export default function FilaPage() {
                                         autoFocus
                                         className="h-12 bg-slate-50 dark:bg-gray-900 border-emerald-500/50 text-slate-900 dark:text-white font-bold uppercase"
                                         value={form.sala}
+                                        type="number"
                                         onChange={(e) => setForm({ ...form, sala: e.target.value.toUpperCase() })}
                                     />
                                     <X className="absolute right-3 top-4 w-4 h-4 text-slate-400 cursor-pointer" onClick={() => setIsOutraSala(false)} />

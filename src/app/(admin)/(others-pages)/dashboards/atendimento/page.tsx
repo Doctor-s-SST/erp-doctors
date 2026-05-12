@@ -80,41 +80,41 @@ export default function DashboardPage() {
     ]
 
     const { data, isLoading, isFetching } = useQuery({
-    queryKey: [
-        'dashboard',
-        view,
-        format(dataInicio, 'yyyy-MM-dd'),
-        format(dataFim, 'yyyy-MM-dd'),
-        unidadeId
-    ],
+        queryKey: [
+            'dashboard',
+            view,
+            format(dataInicio, 'yyyy-MM-dd'),
+            format(dataFim, 'yyyy-MM-dd'),
+            unidadeId
+        ],
 
-    queryFn: async () => {
-        if (!unidadeId) return null;
+        queryFn: async () => {
+            if (!unidadeId) return null;
 
-        const { data, error } = await supabase.rpc('get_dashboard_completo', {
-            p_unidade_id: unidadeId,
-            p_data_inicio: format(dataInicio, 'yyyy-MM-dd'),
-            p_data_fim: format(dataFim, 'yyyy-MM-dd')
-        })
+            const { data, error } = await supabase.rpc('get_dashboard_completo', {
+                p_unidade_id: unidadeId,
+                p_data_inicio: format(dataInicio, 'yyyy-MM-dd'),
+                p_data_fim: format(dataFim, 'yyyy-MM-dd')
+            })
 
-        if (error) throw error
+            if (error) throw error
 
-        return data
-    },
+            return data
+        },
 
-    refetchInterval: pollingActive ? 3000 : false,
+        refetchInterval: pollingActive ? 3000 : false,
 
-    enabled: !!unidadeId,
+        enabled: !!unidadeId,
 
-    // ✅ mantém dados anteriores durante refetch
-    placeholderData: (previousData) => previousData,
+        // ✅ mantém dados anteriores durante refetch
+        placeholderData: (previousData) => previousData,
 
-    // ✅ evita loading piscando
-    staleTime: 2000,
+        // ✅ evita loading piscando
+        staleTime: 2000,
 
-    // ✅ evita re-render inútil
-    refetchOnWindowFocus: false,
-})
+        // ✅ evita re-render inútil
+        refetchOnWindowFocus: false,
+    })
 
     // Handler para troca de visão (ajusta as datas automaticamente)
     const handleViewChange = (newView: ViewType) => {
@@ -353,7 +353,11 @@ export function ViewGeral({ data }: { data: any }) {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <CardViewSimple
                     title="Recepção"
-                    chart={<GraficoAtendimentosPorRecep data={analytics.distribuicoes.recepcao} />}
+                    chart={<GraficoPizza
+                        data={analytics.distribuicoes.recepcao || []}
+                        aguardandoExterno={aguardando}
+                        mode="recepcaoGeral"
+                    />}
                 />
                 <CardViewSimple
                     title="Especialidades"
@@ -400,104 +404,102 @@ export function ViewGeral({ data }: { data: any }) {
 function ViewDiaria({ data }: any) {
     const analytics = resolveDashboardAnalytics(data)
     const cards = analytics.cards
+    const especialidadesOrdenadas = [
+        ...(analytics.distribuicoes.especialidades || [])
+    ].sort((a: any, b: any) => (b.total || 0) - (a.total || 0))
 
     return (
         <div className="space-y-6">
             <div className="w-full grid grid-cols-2 lg:grid-cols-5 gap-4">
-
-                <Card className="bg-blue-600 border-none text-white shadow-lg">
-                    <CardContent className="p-4 text-center">
-                        <p className="text-1xl font-black uppercase opacity-95">
-                            Senhas Geradas
-                        </p>
-                        <p className="text-4xl font-black italic">
-                            {cards.geradas ?? 0}
-                        </p>
+                <Card className="dark:bg-gray-900 border-gray-200 dark:border-gray-800">
+                    <CardContent className="p-4">
+                        <div className="w-full flex flex-col items-center gap-1">
+                            <p className="text-1xl font-black text-gray-700 dark:text-gray-400 uppercase tracking-widest mb-1">
+                                Senhas Geradas
+                            </p>
+                            <p className="text-4xl font-black text-gray-900 dark:text-white italic tracking-tight leading-none">
+                                {cards.geradas ?? 0}
+                            </p>
+                        </div>
                     </CardContent>
                 </Card>
 
-                <Card className="bg-orange-600 border-none text-white shadow-lg">
-                    <CardContent className="p-4 text-center">
-                        <p className="text-1xl font-black uppercase opacity-95">
-                            Em Atendimento
-                        </p>
-                        <p className="text-4xl font-black italic">
-                            {cards.em_atendimento ?? 0}
-                        </p>
+                <Card className="dark:bg-gray-900 border-gray-200 dark:border-gray-800">
+                    <CardContent className="p-4">
+                        <div className="w-full flex flex-col items-center gap-1">
+                            <p className="text-1xl font-black text-gray-700 dark:text-gray-400 uppercase tracking-widest mb-1">
+                                Em Atendimento
+                            </p>
+                            <p className="text-4xl font-black text-gray-900 dark:text-white italic tracking-tight leading-none">
+                                {cards.em_atendimento ?? 0}
+                            </p>
+                        </div>
                     </CardContent>
                 </Card>
 
-                <Card className="bg-yellow-500 border-none text-white shadow-lg">
-                    <CardContent className="p-4 text-center">
-                        <p className="text-1xl font-black uppercase opacity-95">
-                            Aguardando
-                        </p>
-                        <p className="text-4xl font-black italic">
-                            {cards.aguardando ?? 0}
-                        </p>
+                <Card className="dark:bg-gray-900 border-gray-200 dark:border-gray-800">
+                    <CardContent className="p-4">
+                        <div className="w-full flex flex-col items-center gap-1">
+                            <p className="text-1xl font-black text-gray-700 dark:text-gray-400 uppercase tracking-widest mb-1">
+                                Aguardando
+                            </p>
+                            <p className="text-4xl font-black text-gray-900 dark:text-white italic tracking-tight leading-none">
+                                {cards.em_atendimento ?? 0}
+                            </p>
+                        </div>
                     </CardContent>
                 </Card>
 
-                <Card className="bg-emerald-600 border-none text-white shadow-lg">
-                    <CardContent className="p-4 text-center">
-                        <p className="text-1xl font-black uppercase opacity-95">
-                            Finalizadas
-                        </p>
-                        <p className="text-4xl font-black italic">
-                            {cards.finalizadas ?? 0}
-                        </p>
+                <Card className="dark:bg-gray-900 border-gray-200 dark:border-gray-800">
+                    <CardContent className="p-4">
+                        <div className="w-full flex flex-col items-center gap-1">
+                            <p className="text-1xl font-black text-gray-700 dark:text-gray-400 uppercase tracking-widest mb-1">
+                                Finalizadas
+                            </p>
+                            <p className="text-4xl font-black text-gray-900 dark:text-white italic tracking-tight leading-none">
+                                {cards.finalizadas ?? 0}
+                            </p>
+                        </div>
                     </CardContent>
                 </Card>
 
-                <Card className="bg-red-500 border-none text-white shadow-lg">
-                    <CardContent className="p-4 text-center">
-                        <p className="text-1xl font-black uppercase opacity-95">
-                            Canceladas
-                        </p>
-                        <p className="text-4xl font-black italic">
-                            {cards.cancelados ?? 0}
-                        </p>
+                <Card className="dark:bg-gray-900 border-gray-200 dark:border-gray-800">
+                    <CardContent className="p-4">
+                        <div className="w-full flex flex-col items-center gap-1">
+                            <p className="text-1xl font-black text-gray-700 dark:text-gray-400 uppercase tracking-widest mb-1">
+                                Canceladas
+                            </p>
+                            <p className="text-4xl font-black text-gray-900 dark:text-white italic tracking-tight leading-none">
+                                {cards.cancelados ?? 0}
+                            </p>
+                        </div>
                     </CardContent>
                 </Card>
             </div>
-
-            <div className="w-full grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-4">
-                <CardPizzaSmall
-                    title="Recepção"
-                    data={analytics.distribuicoes.recepcao || []}
-                />
-                {(analytics.distribuicoes.especialidades || []).map((esp: any) =>
-                    (esp.especialidade && (esp.especialidade.toLowerCase() == "clínico"))
-                        ? (
-                            <CardPizzaSmall
-                                key={esp.especialidade}
-                                title={esp.especialidade}
-                                data={esp.salas}
-                                aguardando={esp.aguardando}
-                            />
-                        )
-                        : null
-                )}
-            </div>
-
-
 
             <div className="w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 
-                {/* ESPECIALIDADES POR SALA */}
-                {(analytics.distribuicoes.especialidades || []).map((esp: any) =>
-                    (esp.especialidade && (esp.especialidade.toLowerCase() !== "clínico"))
-                        ? (
-                            <CardPizzaSmall
-                                key={esp.especialidade}
-                                title={esp.especialidade}
-                                data={esp.salas}
-                                aguardando={esp.aguardando}
-                            />
-                        )
-                        : null
-                )}
+                {/* RECEPÇÃO */}
+                <div className="md:col-span-2 lg:col-span-2">
+                    <CardPizzaSmall
+                        title="Recepção"
+                        data={analytics.distribuicoes.recepcao || []}
+                    />
+                </div>
 
+                {/* ESPECIALIDADES */}
+                {especialidadesOrdenadas.map((esp: any, index: number) => (
+                    <div
+                        key={esp.especialidade}
+
+                    >
+                        <CardPizzaSmall
+                            title={esp.especialidade}
+                            data={esp.salas}
+                            aguardando={esp.aguardando}
+                        />
+                    </div>
+                ))}
             </div>
         </div>
     )
@@ -607,7 +609,7 @@ function CardViewSimple({ title, chart }: { title: string; chart: React.ReactNod
     return (
         <Card className="dark:bg-gray-900 border-gray-800">
             <CardHeader className="pb-2 border-b dark:border-gray-800 mb-4">
-                <CardTitle className="text-[10px] font-black uppercase text-gray-500">
+                <CardTitle className="text-[10px] font-black uppercase text-gray-500 dark:text-gray-100">
                     {title}
                 </CardTitle>
             </CardHeader>
@@ -617,9 +619,9 @@ function CardViewSimple({ title, chart }: { title: string; chart: React.ReactNod
 }
 function CardPizzaSmall({ title, data, aguardando = 0 }: any) {
     return (
-        <Card className={`w-full dark:bg-gray-900 border-gray-800 ${title == "Recepção" ? "lg:col-span-2" : ""}`}>
+        <Card className={`w-full dark:bg-gray-900 border-gray-800`}>
             <CardHeader className="p-1 border-b dark:border-gray-800">
-                <CardTitle className="text-1xl font-black uppercase text-center text-gray-500">
+                <CardTitle className="text-1xl font-black uppercase text-center text-gray-500 dark:text-gray-100">
                     {title}
                 </CardTitle>
             </CardHeader>

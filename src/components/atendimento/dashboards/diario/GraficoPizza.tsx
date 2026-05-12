@@ -16,15 +16,15 @@ import {
 ============================================================ */
 const PALETTE = [
     "#10b981", // emerald
+    "#f97316", // orange
     "#3b82f6", // blue
     "#f59e0b", // amber
-    "#8b5cf6", // violet
-    "#14b8a6", // teal
-    "#f97316", // orange
     "#6366f1", // indigo
-    "#ec4899", // pink
-    "#84cc16", // lime
-    "#06b6d4", // cyan
+    // "#8b5cf6", // violet
+    // "#14b8a6", // teal
+    // "#ec4899", // pink
+    // "#84cc16", // lime
+    // "#06b6d4", // cyan
 ]
 
 const AGUARDANDO_COLOR = "#64748b" // slate-500
@@ -55,7 +55,7 @@ type ChartItem = SalaItem | RecepItem
 
 interface GraficoPizzaProps {
     data: ChartItem[]
-    mode?: "recepcao" | "especialidade"
+    mode?: "recepcao" | "especialidade" | "recepcaoGeral"
     aguardandoExterno?: number
 }
 
@@ -64,21 +64,28 @@ interface GraficoPizzaProps {
 ============================================================ */
 function CustomTooltip(props: any) {
     const { active, payload } = props;
-    if (!active || !payload?.length) return null
 
-    const entry = payload[0]
+    if (!active || !payload?.length) return null;
+
+    const entry = payload[0];
     const item = entry.payload as ChartItem & {
         isQueue?: boolean
         fill?: string
+        totalGeral?: number
     }
 
     if (item.isQueue) {
         return (
             <div className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-xs shadow-xl">
-                <p className="font-black text-slate-300 uppercase tracking-widest mb-1">Fila</p>
+                <p className="font-black text-slate-300 uppercase tracking-widest mb-1">
+                    Fila
+                </p>
+
                 <p className="text-white">
                     <span className="text-slate-400">Aguardando: </span>
-                    <span className="font-black text-amber-400">{item.aguardando}</span>
+                    <span className="font-black text-amber-400">
+                        {item.aguardando}
+                    </span>
                 </p>
             </div>
         )
@@ -87,14 +94,21 @@ function CustomTooltip(props: any) {
     const nome = (item as RecepItem).nome
     const isEsp = "ociosidade" in item
 
+    const porcentagem =
+        item.totalGeral && item.totalGeral > 0
+            ? ((item.total / item.totalGeral) * 100).toFixed(2)
+            : "0"
+
     return (
         <div className="bg-gray-900 border border-gray-700 rounded-xl px-3.5 py-2.5 text-xs shadow-2xl min-w-[160px]">
+
             {/* header */}
             <div className="flex items-center gap-2 mb-2 pb-2 border-b border-gray-700">
                 <span
                     className="w-2.5 h-2.5 rounded-full flex-shrink-0"
                     style={{ background: item.fill || "#10b981" }}
                 />
+
                 <p className="font-black text-white uppercase tracking-wider truncate">
                     {isEsp ? `Sala ${nome}` : nome}
                 </p>
@@ -102,8 +116,19 @@ function CustomTooltip(props: any) {
 
             {/* métricas */}
             <div className="space-y-1">
-                <Row label="Atendimentos" value={item.total} color="text-emerald-400" />
-                <Row label="Aguardando" value={item.aguardando} color="text-amber-400" />
+
+                <Row
+                    label="Atendidos"
+                    value={`${porcentagem}%`}
+                    color="text-emerald-400"
+                />
+
+                <Row
+                    label="Aguardando"
+                    value={item.aguardando}
+                    color="text-amber-400"
+                />
+
                 {item.tempo_medio !== undefined && item.tempo_medio > 0 && (
                     <Row
                         label="Tempo médio"
@@ -111,6 +136,7 @@ function CustomTooltip(props: any) {
                         color="text-blue-400"
                     />
                 )}
+
                 {isEsp && (item as SalaItem).ociosidade !== undefined && (
                     <Row
                         label="Ociosidade"
@@ -163,10 +189,16 @@ export function GraficoPizza({ data, mode = "especialidade", aguardandoExterno =
     }
 
     // 3. Mapeamos os itens ativos (salas ou atendentes)
+    const totalGeral = items.reduce(
+        (acc, item) => acc + (item.total || 0),
+        0
+    )
+
     const ativas = items.map((item, index) => ({
         ...item,
         fill: getColor(index),
-        value: item.total, // O gráfico de pizza usa o total de atendimentos
+        value: item.total,
+        totalGeral,
     }))
 
     // 4. Lógica solicitada: Se não houver atendimentos, a fila vira uma fatia visível
@@ -188,7 +220,7 @@ export function GraficoPizza({ data, mode = "especialidade", aguardandoExterno =
     return (
         <div className="flex flex-col items-center gap-3 w-full">
             {/* ── DONUT ── */}
-            <div className="h-60 w-full">
+            <div className="h-70 w-full">
                 <ResponsiveContainer>
                     <PieChart>
                         <Tooltip
@@ -201,8 +233,8 @@ export function GraficoPizza({ data, mode = "especialidade", aguardandoExterno =
                             isAnimationActive={false}
                             dataKey="value"
                             nameKey="nome"
-                            innerRadius={42}
-                            outerRadius={68}
+                            innerRadius={52}
+                            outerRadius={80}
                             paddingAngle={totalAtendimentos === 0 ? 0 : 2}
                             strokeWidth={0}
 
@@ -224,7 +256,7 @@ export function GraficoPizza({ data, mode = "especialidade", aguardandoExterno =
                                 const RADIAN = Math.PI / 180
 
                                 // distância da label pra fora do donut
-                                const radius = outerRadius + 36
+                                const radius = outerRadius + 30
 
                                 const x = cx + radius * Math.cos(-midAngle * RADIAN)
                                 const y = cy + radius * Math.sin(-midAngle * RADIAN)
@@ -236,29 +268,31 @@ export function GraficoPizza({ data, mode = "especialidade", aguardandoExterno =
 
                                 return (
                                     <g>
-                                        <text
-                                            x={x}
-                                            y={y}
-                                            textAnchor="middle"
-                                            fill={item.fill}
-                                            className="font-bold"
-                                        >
-                                            <tspan
+                                        {item.total !== 0 && (
+                                            <text
                                                 x={x}
-                                                dy={0}
-                                                className="text-[11px]"
+                                                y={y}
+                                                textAnchor="middle"
+                                                fill={item.fill}
+                                                className="font-bold"
                                             >
-                                                {nome}
-                                            </tspan>
+                                                <tspan
+                                                    x={x}
+                                                    dy={0}
+                                                    className="text-[11px]"
+                                                >
+                                                    {mode === "especialidade" ? nome : nome.split(" ")[0]}
+                                                </tspan>
 
-                                            <tspan
-                                                x={x}
-                                                dy={15}
-                                                className="text-[12px] font-black"
-                                            >
-                                                {item.total}
-                                            </tspan>
-                                        </text>
+                                                <tspan
+                                                    x={x}
+                                                    dy={15}
+                                                    className="text-[12px] font-black"
+                                                >
+                                                    {item.total}
+                                                </tspan>
+                                            </text>
+                                        )}
                                     </g>
                                 )
                             }}
@@ -281,9 +315,9 @@ export function GraficoPizza({ data, mode = "especialidade", aguardandoExterno =
                                         <g>
                                             <text
                                                 x={cx}
-                                                y={cy - 2}
+                                                y={cy}
                                                 textAnchor="middle"
-                                                className="fill-gray-900 dark:fill-white text-[20px] font-black"
+                                                className="fill-gray-500 dark:fill-gray-400 text-[20px] font-black"
                                             >
                                                 {totalAtendimentos}
                                             </text>
@@ -292,7 +326,7 @@ export function GraficoPizza({ data, mode = "especialidade", aguardandoExterno =
                                                 x={cx}
                                                 y={cy + 16}
                                                 textAnchor="middle"
-                                                className="fill-gray-500 dark:fill-gray-400 text-[10px] uppercase tracking-widest"
+                                                className="fill-gray-500 dark:fill-gray-400 text-[11px] uppercase tracking-widest font-bold"
                                             >
                                                 atendidos
                                             </text>
@@ -306,33 +340,14 @@ export function GraficoPizza({ data, mode = "especialidade", aguardandoExterno =
             </div>
 
             {/* ── LEGENDAS ── */}
-            {/* <div className="w-full flex flex-col gap-2 mt-1">
-                {ativas.map((item, idx) => (
-                    <LegendaItem
-                        key={idx}
-                        cor={item.fill}
-                        rotulo={
-                            mode === "especialidade"
-                                ? `Sala ${item.nome}`
-                                : item.nome
-                        }
-                        valor={item.total}
-                    />
-                ))}
-
+            {mode !== "recepcaoGeral" && (
                 <LegendaItem
                     cor={AGUARDANDO_COLOR}
                     rotulo="Aguardando"
                     valor={totalAguardando}
                     dimmed
-                />
-            </div> */}
-            <LegendaItem
-                cor={AGUARDANDO_COLOR}
-                rotulo="Aguardando"
-                valor={totalAguardando}
-                dimmed
-            />
+                />)
+            }
         </div>
     )
 }
@@ -349,7 +364,7 @@ function LegendaItem({
     dimmed?: boolean
 }) {
     return (
-        <div className="w-full flex justify-center gap-1 text-[14px] px-2">
+        <div className="w-full flex justify-center gap-1 text-[14px] px-2 mt-5">
             <Badge className="flex items-center gap-2 min-w-0 bg-amber-400 text-gray-800">
                 <span className="font-bold truncate">{rotulo}:</span>
                 <span className="font-bold truncate">{valor}</span>
