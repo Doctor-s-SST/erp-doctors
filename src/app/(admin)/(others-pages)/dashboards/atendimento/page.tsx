@@ -106,13 +106,13 @@ export default function DashboardPage() {
 
         enabled: !!unidadeId,
 
-        // ✅ mantém dados anteriores durante refetch
+        //mantém dados anteriores durante refetch
         placeholderData: (previousData) => previousData,
 
-        // ✅ evita loading piscando
+        // evita loading piscando
         staleTime: 2000,
 
-        // ✅ evita re-render inútil
+        // evita re-render inútil
         refetchOnWindowFocus: false,
     })
 

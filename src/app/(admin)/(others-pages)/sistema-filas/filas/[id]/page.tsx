@@ -475,34 +475,21 @@ export default function FilaPage() {
             .replace(/[\u0300-\u036f]/g, "")
             .trim();
 
-    const obterTempoExecucao = async (item: ItemFila) => {
-        // 1. Verificação por Especialidade (Sua nova regra)
-        // Normalizamos para garantir que a comparação funcione independente de maiúsculas/minúsculas
-        const nomeEsp = especialidadeNome?.toUpperCase();
-        const especialidadesLongas = ["ECG", "EEG"];
+    const obterTempoExecucao = async () => {
+        if (!id) return 20;
 
-        if (especialidadesLongas.some(esp => nomeEsp.includes(esp))) {
-            return 300;
-        }
-
-        // 2. Verificação residual por exames específicos (Lógica anterior que você já tinha)
-        const { data: atendimentoCompleto } = await supabase
-            .from('atendimentos')
-            .select('exames_list')
-            .eq('id', item.atendimento_id)
+        const { data, error } = await supabase
+            .from("especialidades")
+            .select("tempo_finalizacao_segundos")
+            .eq("id", id)
             .single();
 
-        if (!atendimentoCompleto || !atendimentoCompleto.exames_list) return 20;
+        if (error || !data) {
+            console.error("Erro ao buscar tempo da especialidade:", error);
+            return 20; // fallback
+        }
 
-        const temEEG = atendimentoCompleto.exames_list.some((e: any) => {
-            const nomeExame = normalizar(e.exame || "");
-            return (
-                nomeExame.includes(normalizar("Eletroencefalograma-EEG")) ||
-                nomeExame.includes(normalizar("Eletroencefalograma"))
-            );
-        });
-
-        return (temEEG && especialidadesLongas.some(esp => nomeEsp.includes(esp))) ? 300 : 20;
+        return data.tempo_finalizacao_segundos || 20;
     };
 
     async function executarAcao(rpcName: string, params: any) {
@@ -645,18 +632,16 @@ export default function FilaPage() {
     // Verifica se o profissional atual já está atendendo alguém
 
     const iniciarFinalizacao = async (item: ItemFila) => {
-        const tempo = await obterTempoExecucao(item);
+        const tempo = await obterTempoExecucao();
 
         const fimDate = new Date(Date.now() + tempo * 1000);
         const fimISO = fimDate.toISOString();
 
-        // salva no banco
         await supabase
             .from('atendimento_exames')
             .update({ finaliza_em: fimISO })
             .eq('id', item.id);
 
-        // atualiza estado local (UI instantânea)
         setFinalizandoIds(prev => ({
             ...prev,
             [item.id]: fimDate.getTime()

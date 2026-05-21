@@ -54,8 +54,6 @@ export default function PaginaRelatorio() {
 
                 if (error) throw error;
 
-                console.log("Unidade do usuário:", data);
-
                 if (data?.unidade_id) {
                     setFiltros(prev => ({
                         ...prev,

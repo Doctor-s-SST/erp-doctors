@@ -617,7 +617,6 @@ export default function RecepcaoPage() {
         setLoadingAction(tipo);
 
         try {
-            console.log("Session", session)
             const { data: senhaGerada, error } = await supabase.rpc("gerar_senha", {
                 tipo_param: tipo,
                 guiche_param: session?.guiche || "0",
@@ -810,8 +809,6 @@ export default function RecepcaoPage() {
 
             const data = await response.json();
 
-            console.log(data);
-
             // =========================
             // DADOS GERAIS
             // =========================
@@ -905,8 +902,6 @@ export default function RecepcaoPage() {
             });
 
         } catch (error) {
-            console.error(error);
-
             toast.error("Falha ao buscar ficha", {
                 id: toastId
             });

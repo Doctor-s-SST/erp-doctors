@@ -59,6 +59,27 @@ interface GraficoPizzaProps {
     aguardandoExterno?: number
 }
 
+function formatarTempo(minutos?: number) {
+    if (!minutos || minutos <= 0) {
+        return "0min 00seg"
+    }
+
+    const totalSegundos = Math.round(minutos * 60)
+
+    const horas = Math.floor(totalSegundos / 3600)
+    const mins = Math.floor((totalSegundos % 3600) / 60)
+    const segs = totalSegundos % 60
+
+    // sempre mostra min + seg
+    if (horas > 0) {
+        return `${horas}h ${mins.toString().padStart(2, "0")}min ${segs
+            .toString()
+            .padStart(2, "0")}seg`
+    }
+
+    return `${mins}min ${segs.toString().padStart(2, "0")}seg`
+}
+
 /* ============================================================
    TOOLTIP CUSTOMIZADO
 ============================================================ */
@@ -132,7 +153,7 @@ function CustomTooltip(props: any) {
                 {item.tempo_medio !== undefined && item.tempo_medio > 0 && (
                     <Row
                         label="Tempo médio"
-                        value={`${item.tempo_medio} min`}
+                        value={formatarTempo(item.tempo_medio)}
                         color="text-blue-400"
                     />
                 )}
@@ -140,7 +161,7 @@ function CustomTooltip(props: any) {
                 {isEsp && (item as SalaItem).ociosidade !== undefined && (
                     <Row
                         label="Ociosidade"
-                        value={`${(item as SalaItem).ociosidade} min`}
+                        value={formatarTempo((item as SalaItem).ociosidade)}
                         color="text-slate-400"
                     />
                 )}

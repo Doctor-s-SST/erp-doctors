@@ -36,7 +36,6 @@ type Exame = {
     id: string
     nome: string
     especialidade_id: string
-    tempo_execucao_segundos: number
     observacao?: string
     ordem?: number
     dependencia_id?: string
@@ -47,6 +46,7 @@ type Especialidade = {
     id: string
     nome: string
     exames: Exame[]
+    tempo_finalizacao_segundos?: number
 }
 
 // ================= COMPONENTS =================
@@ -77,10 +77,9 @@ export default function KanbanExames() {
     const [tipoModal, setTipoModal] = useState<"especialidade" | "exame">("exame")
 
     const [editandoExame, setEditandoExame] = useState<Exame | null>(null)
-    // const [editandoEspecialidade, setEditandoEspecialidade] = useState<string | null>(null)
+    const [editandoEspecialidade, setEditandoEspecialidade] = useState<Especialidade | null>(null)
     const [form, setForm] = useState<any>({})
     const [activeExame, setActiveExame] = useState<Exame | null>(null)
-
     const [unidadeId, setUnidadeId] = useState<string | null>(null);
 
     const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
@@ -96,7 +95,7 @@ export default function KanbanExames() {
                 id, 
                 nome, 
             `)
-            .select(`id, nome, exames (*)`)
+            .select(`id, nome, tempo_finalizacao_segundos, exames (*)`)
             .eq("unidade_id", currentUnidadeId)
             .order('nome', { ascending: true });
 
@@ -197,60 +196,98 @@ export default function KanbanExames() {
     }
 
     async function salvar() {
+        if (!form.nome?.trim()) {
+            toast.error("Informe o nome")
+            return
+        }
+
         try {
             if (!unidadeId) {
-                toast.error("Unidade não identificada.");
-                return;
+                toast.error("Unidade não identificada.")
+                return
             }
 
+            // ================= ESPECIALIDADE =================
             if (tipoModal === "especialidade") {
-                await supabase.from("especialidades").insert({
+
+                if (!form.tempo_finalizacao_segundos) {
+                    toast.error("Informe o tempo de finalização")
+                    return
+                }
+
+                const payloadEspecialidade = {
                     nome: form.nome.toUpperCase(),
+                    tempo_finalizacao_segundos: Number(form.tempo_finalizacao_segundos),
                     unidade_id: unidadeId
-                });
-            } else {
-                // No caso do EXAME
+                }
+
+                if (editandoEspecialidade) {
+                    await supabase
+                        .from("especialidades")
+                        .update(payloadEspecialidade)
+                        .eq("id", editandoEspecialidade.id)
+                } else {
+                    await supabase
+                        .from("especialidades")
+                        .insert(payloadEspecialidade)
+                }
+            }
+
+            // ================= EXAME =================
+            else {
+
+                if (!form.especialidade_id) {
+                    toast.error("Selecione a especialidade")
+                    return
+                }
+
                 const payloadExame = {
                     nome: form.nome.toUpperCase(),
-                    especialidade_id: form.especialidade_id,
-                    tempo_execucao_segundos: Number(form.tempo),
-                    // unidade_id: unidadeId 
-                };
+                    especialidade_id: form.especialidade_id
+                }
 
-                let exameId = editandoExame?.id;
+                let exameId = editandoExame?.id
 
                 if (editandoExame) {
-                    await supabase.from("exames")
+                    await supabase
+                        .from("exames")
                         .update(payloadExame)
                         .eq("id", exameId)
-                    // .eq("unidade_id", unidadeId); 
                 } else {
                     const { data: n, error } = await supabase
                         .from("exames")
                         .insert(payloadExame)
                         .select()
-                        .single();
+                        .single()
 
-                    if (error) throw error;
-                    exameId = n.id;
+                    if (error) throw error
+
+                    exameId = n.id
                 }
 
-                // Dependências (Tabela pivo geralmente não precisa de unidade_id se os exames já tiverem)
-                await supabase.from("exame_dependencias").delete().eq("exame_id", exameId);
+                await supabase
+                    .from("exame_dependencias")
+                    .delete()
+                    .eq("exame_id", exameId)
 
                 if (form.depende_de_exame_id) {
-                    await supabase.from("exame_dependencias").insert({
-                        exame_id: exameId,
-                        depende_de_exame_id: form.depende_de_exame_id
-                    });
+                    await supabase
+                        .from("exame_dependencias")
+                        .insert({
+                            exame_id: exameId,
+                            depende_de_exame_id: form.depende_de_exame_id
+                        })
                 }
             }
 
-            toast.success("Salvo com sucesso");
-            fecharModal();
-            fetchData(unidadeId); // Recarrega passando a unidade
+            toast.success("Salvo com sucesso")
+
+            fecharModal()
+            fetchData(unidadeId)
+
         } catch (err) {
-            toast.error("Erro ao salvar");
+            console.error(err)
+            toast.error("Erro ao salvar")
         }
     }
 
@@ -302,6 +339,7 @@ export default function KanbanExames() {
     const fecharModal = () => {
         setOpenModal(false)
         setEditandoExame(null)
+        setEditandoEspecialidade(null)
         setForm({})
     }
 
@@ -317,13 +355,6 @@ export default function KanbanExames() {
                     </div>
 
                     <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-700/50 pt-2">
-                        {/* <div className="flex items-center gap-3"> */}
-                        {/* Tempo de Execução */}
-                        {/* <div className="flex items-center gap-1">
-                                <Activity className="w-3 h-3 text-emerald-500" />
-                                <span className="text-[10px] font-black text-slate-500 uppercase">{exame.tempo_execucao_segundos}s</span>
-                            </div> */}
-
                         {/* Dependência Visual ao lado do tempo */}
                         {exame.depende_de_exame_id && (
                             <div className="flex items-center gap-1 bg-blue-50 dark:bg-blue-900/20 px-1.5 py-0.5 rounded border border-blue-100 dark:border-blue-800">
@@ -381,7 +412,24 @@ export default function KanbanExames() {
                                     <div className="flex justify-between items-center mb-3 px-1 shrink-0 gap-2">
                                         <Badge className="h-4 px-2 py-1 text-[12px] bg-white dark:bg-slate-800 text-slate-500 border-none shadow-sm">{col.exames.length}</Badge>
                                         <h2 className="font-black text-slate-900 dark:text-slate-300 uppercase text-[9px] tracking-widest truncate group-hover:text-emerald-500 transition-colors">
-                                            {col.nome}
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setTipoModal("especialidade")
+                                                    setEditandoEspecialidade(col)
+
+                                                    setForm({
+                                                        nome: col.nome,
+                                                        tempo_finalizacao_segundos:
+                                                            col.tempo_finalizacao_segundos || "",
+                                                    })
+
+                                                    setOpenModal(true)
+                                                }}
+                                                className="font-black text-slate-900 dark:text-slate-300 uppercase text-[9px] tracking-widest truncate hover:text-emerald-500 transition-colors"
+                                            >
+                                                {col.nome}
+                                            </button>
                                         </h2>
                                         <button
                                             onClick={() => deletarEspecialidade(col.id)}
@@ -403,7 +451,7 @@ export default function KanbanExames() {
                                                                 onClick={() => {
                                                                     setTipoModal("exame");
                                                                     setEditandoExame(exame);
-                                                                    setForm({ ...exame, tempo: exame.tempo_execucao_segundos });
+                                                                    setForm({ ...exame });
                                                                     setOpenModal(true);
                                                                 }}
                                                             >
@@ -448,6 +496,28 @@ export default function KanbanExames() {
                                 onChange={e => setForm({ ...form, nome: e.target.value.toUpperCase() })}
                             />
                         </div>
+
+                        {tipoModal === "especialidade" && (
+                            <div className="space-y-2">
+                                <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">
+                                    Tempo para Finalização (segundos)
+                                </Label>
+
+                                <Input
+                                    type="number"
+                                    min={1}
+                                    required
+                                    className="h-12 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-bold text-xs"
+                                    value={form.tempo_finalizacao_segundos || ""}
+                                    onChange={(e) =>
+                                        setForm({
+                                            ...form,
+                                            tempo_finalizacao_segundos: e.target.value,
+                                        })
+                                    }
+                                />
+                            </div>
+                        )}
 
                         {tipoModal === "exame" && (
                             <>
