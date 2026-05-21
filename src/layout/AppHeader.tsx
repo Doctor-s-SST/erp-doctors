@@ -29,7 +29,6 @@ const AppHeader: React.FC = () => {
     last_name: "",
     role: ''
   });
-  const [listaUnidades, setListaUnidades] = useState<{ id: string, nome: string }[]>([]);
 
   const { isMobileOpen, toggleSidebar, toggleMobileSidebar } = useSidebar();
 

@@ -17,7 +17,8 @@ import {
   Stethoscope,
   Filter,
   Users,
-  Plus
+  Plus,
+  Monitor
 } from "lucide-react";
 import UserFormDialog from "@/components/user/UserFormDialog";
 import { toast } from "sonner";
@@ -27,6 +28,7 @@ const ROLE_COLORS: any = {
   admin: { bg: "bg-blue-500", light: "bg-blue-500/10", text: "text-blue-500", border: "hover:border-blue-500/30" },
   recepcao: { bg: "bg-orange-500", light: "bg-orange-500/10", text: "text-orange-500", border: "hover:border-orange-500/30" },
   especialista: { bg: "bg-emerald-500", light: "bg-emerald-500/10", text: "text-emerald-500", border: "hover:border-emerald-500/30" },
+  painel: { bg: "bg-yellow-500", light: "bg-yellow-500/10", text: "text-yellow-500", border: "hover:border-yellow-500/30" },
   all: { bg: "bg-gray-900", light: "bg-slate-100", text: "text-slate-600" }
 };
 
@@ -146,14 +148,14 @@ export default function UsersManagementPage() {
             </div>
           </div>
           <Button
-              onClick={() => {
-                setSelectedUser(null);
-                setIsDialogOpen(true);
-              }}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white mr-5"
-            >
-              <Plus /> Novo Usuário
-            </Button>
+            onClick={() => {
+              setSelectedUser(null);
+              setIsDialogOpen(true);
+            }}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white mr-5"
+          >
+            <Plus /> Novo Usuário
+          </Button>
         </div>
 
         {/* BARRA DE BUSCA E BOTÕES DE FILTRO */}
@@ -179,6 +181,7 @@ export default function UsersManagementPage() {
                 { id: "admin", label: "ADMIN", icon: ShieldAlert },
                 { id: "recepcao", label: "RECEPÇÃO", icon: User },
                 { id: "especialista", label: "ESPECIALISTAS", icon: Stethoscope },
+                { id: "painel", label: "PAINEL", icon: Monitor },
               ].map((role) => (
                 <Button
                   key={role.id}
@@ -197,7 +200,7 @@ export default function UsersManagementPage() {
           </div>
 
           <div className="flex gap-3 items-center justify-end">
-                        <Badge variant="outline" className="text-[9px] font-black border-gray-600 text-slate-400 uppercase py-1">
+            <Badge variant="outline" className="text-[9px] font-black border-gray-600 text-slate-400 uppercase py-1">
               {filteredUsers.length} RESULTADOS ENCONTRADOS
             </Badge>
           </div>
@@ -225,6 +228,8 @@ export default function UsersManagementPage() {
                         <div className={`p-2 rounded-lg ${colorScheme.light}`}>
                           {user.role === 'admin' ? (
                             <ShieldAlert className={`w-5 h-5 ${colorScheme.text}`} />
+                          ) : user.role === 'painel' ? (
+                            <Monitor className={`w-5 h-5 ${colorScheme.text}`} />
                           ) : (
                             <User className={`w-5 h-5 ${colorScheme.text}`} />
                           )}
@@ -258,7 +263,7 @@ export default function UsersManagementPage() {
                         )}
 
                         <Badge className={`${colorScheme.bg} text-white text-[9px] font-black border-none uppercase tracking-widest py-1`}>
-                          {user.role === 'recepcao' ? 'RECEPÇÃO' : user.role === 'admin' ? 'ADMIN' : 'ESPECIALISTA'}
+                          {user.role === 'recepcao' ? 'RECEPÇÃO' : user.role === 'admin' ? 'ADMIN' : user.role === 'especialista' ? 'ESPECIALISTA' : 'PAINEL'}
                         </Badge>
                       </div>
                     </div>

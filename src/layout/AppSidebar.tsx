@@ -27,7 +27,7 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   {
-    icon: <House className="w-5 h-5"/>,
+    icon: <House className="w-5 h-5" />,
     name: "Home",
     path: "/",
     roles: ["admin", "recepcao", "especialista", "painel"],
@@ -41,24 +41,25 @@ const navItems: NavItem[] = [
       { name: "Filas", path: "/sistema-filas/filas", roles: ["admin", "recepcao", "especialista", "painel"] },
       { name: "Painel TV", path: "/painel-senhas", roles: ["admin", "painel"] },
       { name: "Relatórios", path: "/sistema-filas/relatorios", roles: ["admin", "painel", "recepcao"] },
-      { name: "Kanban", path: "/sistema-filas/kanban", roles: ["admin", "painel"] },
+      { name: "Kanban", path: "/sistema-filas/kanban", roles: ["admin"] },
     ],
-  },  
+  },
   {
     name: "Dashboards",
-    icon: <ChartGantt  className="w-5 h-5" />,
+    icon: <ChartGantt className="w-5 h-5" />,
     roles: ["admin"],
     subItems: [
       { name: "Depto. Atendimento", path: "/dashboards/atendimento/", roles: ["admin"] },
     ],
-  },  
+  },
   {
     name: "Configurações",
     icon: <Settings className="w-5 h-5" />,
-    roles: ["admin", "painel"],
+    roles: ["admin"],
     subItems: [
-      { name: "Usuários", path: "/configuracoes/users", roles: ["admin", "painel"] },
-      { name: "Salas e Profissionais", path: "/configuracoes/salas-profissionais", roles: ["admin", "painel"] },
+      { name: "Usuários", path: "/configuracoes/users", roles: ["admin"] },
+      { name: "Salas e Profissionais", path: "/configuracoes/salas-profissionais", roles: ["admin"] },
+      { name: "Unidade", path: "/configuracoes/unidade", roles: ["admin"] },
     ],
   },
   // {
@@ -82,26 +83,52 @@ const AppSidebar: React.FC = () => {
   const [subMenuHeight, setSubMenuHeight] = useState<Record<string, number>>({});
   const subMenuRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
+  const [unidadeLogo, setUnidadeLogo] = useState<string>("");
+  const [unidadeIcone, setUnidadeIcone] = useState<string>("");
+  const [unidadeNome, setUnidadeNome] = useState<string>("");
+
+
   const isActive = useCallback((path: string) => path === pathname, [pathname]);
 
   // Busca o Role do Banco de Dados
   useEffect(() => {
     async function getRole() {
+
+      // =========================
+      // USUÁRIO
+      // =========================
       const { data: { user } } = await supabase.auth.getUser();
+
       if (user) {
         const { data, error } = await supabase
           .from('profiles')
-          .select('role')
+          .select('role, unidade_id')
           .eq('id', user.id)
           .single();
 
         if (data && !error) {
           setUserRole(data.role);
+
+          // =========================
+          // UNIDADE
+          // =========================
+          const { data: unidade, error: unidadeError } = await supabase
+            .from('unidades')
+            .select('nome, logo_url, logo_icone_url')
+            .eq('id', data.unidade_id)
+            .single();
+
+          if (unidade && !unidadeError) {
+            setUnidadeLogo(unidade.logo_url || "");
+            setUnidadeIcone(unidade.logo_icone_url || "");
+            setUnidadeNome(unidade.nome || "");
+          }
         } else {
           setUserRole("user");
         }
       }
     }
+
     getRole();
   }, []);
 
@@ -153,13 +180,47 @@ const AppSidebar: React.FC = () => {
       onMouseEnter={() => !isExpanded && setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <div className={`py-2 my-1 flex justify-center`}>
-        <Link href="/">
+      <div className="py-3 my-1 flex justify-center items-center min-h-[70px]">
+        <Link href="/" className="flex items-center justify-center">
+
           {isExpanded || isHovered || isMobileOpen ? (
-            <Image src="/images/logo/doctors-svg.svg" alt="Logo" width={100} height={50} className="" />
+
+            unidadeLogo ? (
+              <div className="relative w-[200px] h-[100px]">
+                <Image
+                  src={unidadeLogo}
+                  alt={unidadeNome || "Logo"}
+                  fill
+                  className="object-contain"
+                  priority
+                />
+              </div>
+            ) : (
+              <div className="h-10 px-4 rounded-xl bg-emerald-500 flex items-center justify-center text-white font-black text-sm uppercase">
+                {unidadeNome || "UNIDADE"}
+              </div>
+            )
+
           ) : (
-            <Image src="/images/logo/doctors-fav.svg" alt="Logo" width={100} height={100} />
+
+            unidadeIcone ? (
+              <div className="relative w-10 h-10">
+                <Image
+                  src={unidadeIcone}
+                  alt="Ícone"
+                  fill
+                  className="object-contain"
+                  priority
+                />
+              </div>
+            ) : (
+              <div className="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center text-white font-black">
+                {unidadeNome?.charAt(0) || "U"}
+              </div>
+            )
+
           )}
+
         </Link>
       </div>
 

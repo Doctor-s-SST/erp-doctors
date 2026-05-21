@@ -3,13 +3,14 @@ import { NextResponse, type NextRequest } from "next/server"
 
 // Permissões por rota
 const ROUTE_PERMISSIONS: Record<string, string[]> = {
-  "/sistema-filas/kanban": ["admin", "painel"],
+  "/sistema-filas/kanban": ["admin"],
   "/painel-senhas": ["admin", "painel"],
   "/sistema-filas/senhas-recepcao": ["admin", "recepcao", "especialista", "painel"],
   "/sistema-filas/relatorios": ["admin", "painel", "recepcao"],
   "/sistema-filas/filas": ["admin", "especialista", "recepcao", "painel"],
-  "/configuracoes/salas-profissionais": ["admin", "painel"],
-  "/configuracoes/users": ["admin", "painel"],
+  "/configuracoes/salas-profissionais": ["admin"],
+  "/configuracoes/users": ["admin"],
+  "/configuracoes/unidade": ["admin"],
   "/dashboards/atendimento": ["admin",]
 }
 

@@ -2,7 +2,7 @@
 
 import UserAddressCard from "@/components/user-profile/UserAddressCard";
 import UserInfoCard from "@/components/user-profile/UserInfoCard";
-import UserMetaCard from "@/components/user-profile/UserMetaCard";
+import UserMetaCard from "@/components/user/user-profile/UserMetaCard";
 import { supabase } from "@/lib/supabase";
 import React, { useEffect } from "react";
 

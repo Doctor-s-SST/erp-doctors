@@ -128,31 +128,8 @@ export default function UserFormDialog({ open, onOpenChange, user, unidadeAtiva,
         }
     };
 
-    // const onSubmit = async (values: any) => {
-    //     try {
-    //         const { error } = await supabase
-    //             .from("profiles")
-    //             .update({
-    //                 email: values.email, // Agora permitindo editar o email no profile
-    //                 first_name: values.first_name,
-    //                 last_name: values.last_name,
-    //                 role: values.role,
-    //                 especialidade_id: values.especialidade_id === "none" ? null : values.especialidade_id
-    //             })
-    //             .eq("id", user.id);
-
-    //         if (error) throw error;
-
-    //         toast.success("Dados atualizados com sucesso!");
-    //         onSuccess();
-    //         onOpenChange(false);
-    //     } catch (error: any) {
-    //         toast.error(error.message);
-    //     }
-    // };
-
     const handleDelete = async () => {
-        if (!confirm("Tem certeza que deseja excluir este perfil? Esta ação não remove o login do Auth, apenas o perfil do banco.")) return;
+        if (!confirm("Tem certeza que deseja excluir este perfil?")) return;
 
         try {
             setIsDeleting(true);
@@ -252,6 +229,7 @@ export default function UserFormDialog({ open, onOpenChange, user, unidadeAtiva,
                                                 <SelectItem value="admin">Administrador</SelectItem>
                                                 <SelectItem value="recepcao">Recepção</SelectItem>
                                                 <SelectItem value="especialista">Especialista</SelectItem>
+                                                <SelectItem value="painel">Painel</SelectItem>
                                             </SelectContent>
                                         </Select>
                                     )}

@@ -79,6 +79,7 @@ export default function RecepcaoPage() {
     }, []);
 
     // ESTADOS DO MODAL DE IMPORTAÇÃO
+    const [sequencialInput, setSequencialInput] = useState("");
     const [importModal, setImportModal] = useState<{ open: boolean, item: Atendimento | null }>({ open: false, item: null })
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [especialidades, setEspecialidades] = useState<any[]>([])
@@ -782,6 +783,138 @@ export default function RecepcaoPage() {
         }
     };
 
+    const handleBuscarSequencial = async () => {
+        if (!sequencialInput.trim()) {
+            toast.error("Digite o número sequencial");
+            return;
+        }
+
+        setLoadingAction("processing_sequencial");
+
+        const toastId = toast.loading("Buscando ficha...");
+
+        try {
+            const response = await fetch("/api/importar-ficha-sequencial", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    sequencial: sequencialInput
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error("Falha ao buscar ficha");
+            }
+
+            const data = await response.json();
+
+            console.log(data);
+
+            // =========================
+            // DADOS GERAIS
+            // =========================
+            const dados = data.dados_gerais || {};
+
+            // =========================
+            // EXAMES
+            // =========================
+            const examesRecebidos = data.exames || [];
+
+            // busca exames oficiais
+            const { data: examesCadastrados, error: dbError } = await supabase
+                .from("exames")
+                .select("nome");
+
+            if (dbError) throw dbError;
+
+            const normalizar = (str: string) =>
+                str.normalize("NFD")
+                    .replace(/[\u0300-\u036f]/g, "")
+                    .trim()
+                    .toUpperCase();
+
+            const listaOficialNormalizada = new Set(
+                examesCadastrados.map(e => normalizar(e.nome))
+            );
+
+            const hoje = new Date().toLocaleDateString("pt-BR");
+
+            const examesFiltrados = examesRecebidos.filter((ex: any) => {
+                const nomeExame = normalizar(ex.nome_exame || "");
+
+                const existeNoBanco = listaOficialNormalizada.has(nomeExame);
+
+                const dataValida =
+                    !ex.data_exame || ex.data_exame === hoje;
+
+                return existeNoBanco && dataValida;
+            }).map((ex: any) => ({
+                exame: ex.nome_exame,
+                data: ex.data_exame
+            }));
+
+            // =========================
+            // UPDATE FORM
+            // =========================
+            setFormFicha(prev => ({
+                ...prev,
+
+                sequencial:
+                    dados.sequencial_ficha || sequencialInput,
+
+                empresa: {
+                    razao_social:
+                        dados.razao_social || "",
+
+                    cnpj:
+                        dados.cnpj || ""
+                },
+
+                funcionario: {
+                    nome:
+                        formatarNome(dados.nome) || "",
+
+                    rg:
+                        dados.rg || "",
+
+                    nascimento:
+                        dados.data_nascimento || "",
+
+                    cargo:
+                        dados.cargo || "",
+
+                    setor:
+                        dados.setor || "",
+
+                    cpf:
+                        dados.cpf || ""
+                },
+
+                exame: {
+                    tipo:
+                        dados.tipo_aso || ""
+                },
+
+                exames: examesFiltrados
+            }));
+
+            toast.success("Ficha carregada com sucesso!", {
+                id: toastId
+            });
+
+        } catch (error) {
+            console.error(error);
+
+            toast.error("Falha ao buscar ficha", {
+                id: toastId
+            });
+        } finally {
+            setLoadingAction(null);
+        }
+    };
+
     const handlePrint = useReactToPrint({
         contentRef: componentRef,
         documentTitle: `Ficha_${formFicha.sequencial}`,
@@ -1297,9 +1430,12 @@ export default function RecepcaoPage() {
                 open={importModal.open}
                 onOpenChange={(val) => {
                     setImportModal({ ...importModal, open: val });
-                    if (!val) setFormFicha(initialFormFicha);
-                }
-                }
+
+                    if (!val) {
+                        setFormFicha(initialFormFicha);
+                        setSequencialInput("");
+                    }
+                }}
             >
                 <DialogContent className="sm:max-w-200 bg-white dark:bg-gray-900 border-none shadow-2xl max-h-[95vh] overflow-y-auto p-0">
                     <DialogHeader className="p-6 pb-0">
@@ -1311,25 +1447,70 @@ export default function RecepcaoPage() {
 
                     <div className="p-6 space-y-8">
                         {/* 1. UPLOAD E BOTÃO DE IMPORTAÇÃO */}
-                        <div className="relative group">
-                            {loadingAction === "processing_pdf" && (
-                                <div className="absolute inset-0 z-50 bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm rounded-xl flex flex-col items-center justify-center border-2 border-blue-500 border-dashed">
-                                    <RefreshCw className="w-10 h-10 animate-spin text-blue-600 mb-2" />
-                                    <p className="font-black text-blue-600 uppercase tracking-widest text-[10px]">Lendo PDF...</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                            {/* IMPORTAÇÃO PDF */}
+                            <div className="relative group">
+                                {loadingAction === "processing_pdf" && (
+                                    <div className="absolute inset-0 z-50 bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm rounded-xl flex flex-col items-center justify-center border-2 border-blue-500 border-dashed">
+                                        <RefreshCw className="w-10 h-10 animate-spin text-blue-600 mb-2" />
+                                        <p className="font-black text-blue-600 uppercase tracking-widest text-[10px]">
+                                            Lendo PDF...
+                                        </p>
+                                    </div>
+                                )}
+
+                                <div className="h-full border-2 border-dashed border-gray-200 dark:border-gray-800 hover:border-blue-400 bg-gray-50/50 dark:bg-gray-800/50 transition-all rounded-xl p-4 text-center relative cursor-pointer flex items-center justify-center min-h-[88px]">
+                                    <input
+                                        type="file"
+                                        accept="application/pdf"
+                                        className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                                        onChange={(e) =>
+                                            e.target.files?.[0] && handleUploadPDF(e.target.files[0])
+                                        }
+                                    />
+
+                                    <div className="flex items-center justify-center gap-3">
+                                        <UploadCloud className="w-6 h-6 text-gray-400" />
+
+                                        <p className="text-sm font-bold text-gray-500">
+                                            {formFicha.arquivo?.name ??
+                                                "Importar PDF do ASO"}
+                                        </p>
+                                    </div>
                                 </div>
-                            )}
-                            <div className="border-2 border-dashed border-gray-200 dark:border-gray-800 hover:border-blue-400 bg-gray-50/50 dark:bg-gray-800/50 transition-all rounded-xl p-4 text-center relative cursor-pointer">
-                                <input
-                                    type="file"
-                                    accept="application/pdf"
-                                    className="absolute inset-0 opacity-0 cursor-pointer z-10"
-                                    onChange={(e) => e.target.files?.[0] && handleUploadPDF(e.target.files[0])}
-                                />
-                                <div className="flex items-center justify-center gap-3">
-                                    <UploadCloud className="w-6 h-6 text-gray-400" />
-                                    <p className="text-sm font-bold text-gray-500">
-                                        {formFicha.arquivo?.name ?? "Importar PDF da Ficha (Preenchimento Automático)"}
-                                    </p>
+                            </div>
+
+                            {/* BUSCA SEQUENCIAL */}
+                            <div className="border rounded-xl border-gray-200 dark:border-gray-800 p-2 bg-gray-50/50 dark:bg-gray-800/50 flex flex-col justify-center">
+                                <div className="flex gap-2">
+                                    <Input
+                                        placeholder="Nº sequencial..."
+                                        className="h-11 font-black text-center text-lg"
+                                        value={sequencialInput}
+                                        onChange={(e) => setSequencialInput(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === "Enter") {
+                                                handleBuscarSequencial();
+                                            }
+                                        }}
+                                    />
+
+                                    <Button
+                                        type="button"
+                                        onClick={handleBuscarSequencial}
+                                        disabled={loadingAction === "processing_sequencial"}
+                                        className="h-11 px-5 bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase"
+                                    >
+                                        {loadingAction === "processing_sequencial" ? (
+                                            <RefreshCw className="w-4 h-4 animate-spin" />
+                                        ) : (
+                                            <>
+                                                <Search className="w-4 h-4 mr-2" />
+                                                Buscar
+                                            </>
+                                        )}
+                                    </Button>
                                 </div>
                             </div>
                         </div>

@@ -1,0 +1,53 @@
+import { NextRequest, NextResponse } from "next/server";
+
+export async function POST(req: NextRequest) {
+    try {
+        const body = await req.json();
+
+        const { sequencial } = body;
+
+        if (!sequencial) {
+            return NextResponse.json(
+                { error: "Sequencial não informado" },
+                { status: 400 }
+            );
+        }
+
+        const n8nResponse = await fetch(
+            process.env.N8N_WEBHOOK_SEQUENCIAL_URL!,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "x-api-key": process.env.N8N_API_KEY!,
+                },
+                body: JSON.stringify({
+                    sequencial,
+                }),
+            }
+        );
+
+        if (!n8nResponse.ok) {
+            const errorText = await n8nResponse.text();
+
+            console.error("Erro n8n:", errorText);
+
+            return NextResponse.json(
+                { error: "n8n recusou a requisição" },
+                { status: n8nResponse.status }
+            );
+        }
+
+        const data = await n8nResponse.json();
+
+        return NextResponse.json(data);
+
+    } catch (error) {
+        console.error("Erro na API Route:", error);
+
+        return NextResponse.json(
+            { error: "Erro interno no servidor" },
+            { status: 500 }
+        );
+    }
+}
