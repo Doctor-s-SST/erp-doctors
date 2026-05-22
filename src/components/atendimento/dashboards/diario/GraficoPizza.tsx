@@ -38,6 +38,7 @@ function getColor(index: number): string {
 ============================================================ */
 interface SalaItem {
     nome: string
+    profissional?: string
     total: number
     aguardando: number
     tempo_medio?: number
@@ -131,8 +132,16 @@ function CustomTooltip(props: any) {
                 />
 
                 <p className="font-black text-white uppercase tracking-wider truncate">
-                    {isEsp ? `Sala ${nome}` : nome}
+                    {isEsp
+                        ? `Sala ${nome}`
+                        : nome}
                 </p>
+
+                {isEsp && (item as SalaItem).profissional && (
+                    <p className="text-[12px] text-gray-400">
+                        {(item as SalaItem).profissional}
+                    </p>
+                )}
             </div>
 
             {/* métricas */}

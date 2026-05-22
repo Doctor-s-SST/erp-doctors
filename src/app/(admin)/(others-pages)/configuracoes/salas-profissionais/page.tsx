@@ -55,14 +55,16 @@ export default function ConfiguracoesPage() {
       const { data: p } = await supabase
         .from("profissionais")
         .select(`
-        id, 
-        nome, 
-        recepcao,
-        profissional_especialidades (
-          id,
-          especialidade_id
-        )
-      `)
+          id, 
+          nome, 
+          recepcao,
+          hora_inicio,
+          hora_fim,
+          profissional_especialidades (
+            id,
+            especialidade_id
+          )
+        `)
         .eq("unidade_id", idAtivo) // Filtro essencial
         .order("nome");
 
@@ -181,10 +183,20 @@ export default function ConfiguracoesPage() {
   }
 
   async function salvarEdicaoNomeProfissional() {
-    const { error } = await supabase.from("profissionais")
-      .update({ nome: editandoProfissional.nome })
+    const { error } = await supabase
+      .from("profissionais")
+      .update({
+        nome: editandoProfissional.nome,
+        hora_inicio: editandoProfissional.hora_inicio || null,
+        hora_fim: editandoProfissional.hora_fim || null,
+      })
       .eq('id', editandoProfissional.id);
-    if (!error) { toast.success("Nome atualizado!"); setEditandoProfissional(null); fetchAll(); }
+
+    if (!error) {
+      toast.success("Profissional atualizado!");
+      setEditandoProfissional(null);
+      fetchAll();
+    }
   }
 
   async function removerProfissional(id: string) {
@@ -314,16 +326,76 @@ export default function ConfiguracoesPage() {
 
                     {editandoProfissional?.id === p.id ? (
                       <div className="space-y-2">
-                        <Input className="h-8 text-[11px] font-black" value={editandoProfissional.nome} onChange={e => setEditandoProfissional({ ...editandoProfissional, nome: e.target.value })} />
+                        <Input
+                          className="h-8 text-[11px] font-black"
+                          value={editandoProfissional.nome}
+                          onChange={e =>
+                            setEditandoProfissional({
+                              ...editandoProfissional,
+                              nome: e.target.value
+                            })
+                          }
+                        />
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <Input
+                            type="time"
+                            className="h-8 text-[10px] font-black"
+                            value={editandoProfissional.hora_inicio || ""}
+                            onChange={e =>
+                              setEditandoProfissional({
+                                ...editandoProfissional,
+                                hora_inicio: e.target.value
+                              })
+                            }
+                          />
+
+                          <Input
+                            type="time"
+                            className="h-8 text-[10px] font-black"
+                            value={editandoProfissional.hora_fim || ""}
+                            onChange={e =>
+                              setEditandoProfissional({
+                                ...editandoProfissional,
+                                hora_fim: e.target.value
+                              })
+                            }
+                          />
+                        </div>
                         <div className="flex gap-2">
                           <Button size="sm" className="bg-green-600 h-7 text-[9px] font-black" onClick={salvarEdicaoNomeProfissional}><Check className="w-3 h-3" /></Button>
                           <Button size="sm" variant="ghost" className="h-7 text-[9px] font-black" onClick={() => setEditandoProfissional(null)}><X className="w-3 h-3" /></Button>
                         </div>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-black text-slate-800 dark:text-slate-100 text-[14px] truncate">{p.nome}</h3>
-                        <Button variant="ghost" size="icon" onClick={() => setEditandoProfissional(p)} className="h-4 w-4"><Pencil className="h-3 w-3" /></Button>
+                      <div className="flex flex-col gap-2">
+                        <div className="w-full flex items-center gap-2">
+                          <h3 className="font-black text-slate-800 dark:text-slate-100 text-[14px] truncate">
+                            {p.nome}
+                          </h3>
+
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setEditandoProfissional(p)}
+                            className="h-4 w-4 ml-auto"
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                        </div>
+
+                        {(!p.hora_inicio || !p.hora_fim) ? (
+                          <Badge className="w-fit bg-amber-500/15 text-amber-400 border border-amber-500/30 text-[9px] font-black uppercase tracking-wider">
+                            definir jornada
+                          </Badge>
+                        ) : (
+                          <div className="flex items-center gap-2 w-fit px-2.5 py-1 rounded-lg border border-emerald-500/20 bg-emerald-500/10">
+                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                            <span className="text-[10px] text-slate-400 font-bold">
+                              {p.hora_inicio.slice(0, 5)} → {p.hora_fim.slice(0, 5)}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     )}
 
