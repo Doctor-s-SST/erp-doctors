@@ -27,7 +27,7 @@ export default function ConfiguracoesPage() {
   const [especialidades, setEspecialidades] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [novaSala, setNovaSala] = useState({ numero: "", especialidade_id: "" });
+  const [novaSala, setNovaSala] = useState({ numero: "", especialidades: [] as string[] });
   const [novoProfissional, setNovoProfissional] = useState({ nome: "", especialidade_id: "" });
 
   const [editandoSala, setEditandoSala] = useState<any | null>(null);
@@ -47,8 +47,14 @@ export default function ConfiguracoesPage() {
       // Fetch Salas filtradas
       const { data: s } = await supabase
         .from("salas")
-        .select("*")
-        .eq("unidade_id", idAtivo) // Filtro essencial
+        .select(`
+          *,
+          sala_especialidades (
+            id,
+            especialidade_id
+          )
+        `)
+        .eq("unidade_id", idAtivo)
         .order("numero");
 
       // Fetch Profissionais filtrados
@@ -70,7 +76,13 @@ export default function ConfiguracoesPage() {
 
       const { data: esp } = await supabase.from("especialidades").select("*").eq("unidade_id", idAtivo).order("nome");
 
-      if (s) setSalas(s);
+      if (s) {
+        const ordenadas = [...s].sort(
+          (a, b) => Number(a.numero) - Number(b.numero)
+        );
+
+        setSalas(ordenadas);
+      }
       if (p) setProfissionais(p);
       if (esp) setEspecialidades(esp);
     } finally {
@@ -112,28 +124,103 @@ export default function ConfiguracoesPage() {
 
   // --- AÇÕES DE SALAS ---
   async function criarSala() {
-    if (!novaSala.numero || !novaSala.especialidade_id) return toast.error("Preencha todos os campos");
-    const { error } = await supabase.from("salas").insert({
-      numero: novaSala.numero,
-      especialidade_id: novaSala.especialidade_id === ID_RECEPCAO ? null : novaSala.especialidade_id,
-      unidade_id: unidadeId
+    if (!novaSala.numero || novaSala.especialidades.length === 0) {
+      return toast.error("Preencha todos os campos");
+    }
+
+    const { data: sala, error } = await supabase
+      .from("salas")
+      .insert({
+        numero: Number(novaSala.numero),
+        unidade_id: unidadeId
+      })
+      .select()
+      .single();
+
+    if (error || !sala) {
+      toast.error("Erro ao criar sala");
+      return;
+    }
+
+    await supabase
+      .from("sala_especialidades")
+      .insert(
+        novaSala.especialidades.map((espId: string) => ({
+          sala_id: sala.id,
+          especialidade_id: espId,
+          unidade_id: unidadeId
+        }))
+      );
+
+    toast.success("Sala criada!");
+
+    setNovaSala({
+      numero: "",
+      especialidades: []
     });
-    console.log("teste: ", unidadeId)
-    if (!error) { toast.success("Sala criada!"); fetchAll(); setNovaSala({ numero: "", especialidade_id: "" }); }
+
+    fetchAll();
   }
 
   async function salvarEdicaoSala() {
-    const { error } = await supabase.from("salas").update({
-      numero: editandoSala.numero,
-      especialidade_id: editandoSala.especialidade_id === ID_RECEPCAO ? null : editandoSala.especialidade_id
-    }).eq('id', editandoSala.id);
-    if (!error) { toast.success("Sala atualizada!"); setEditandoSala(null); fetchAll(); }
+    const { error } = await supabase
+      .from("salas")
+      .update({
+        numero: Number(editandoSala.numero)
+      })
+      .eq("id", editandoSala.id);
+
+    if (error) {
+      toast.error("Erro ao atualizar sala");
+      return;
+    }
+
+    // remove vínculos antigos
+    await supabase
+      .from("sala_especialidades")
+      .delete()
+      .eq("sala_id", editandoSala.id);
+
+    // cria novamente
+    if (editandoSala.especialidades?.length > 0) {
+      await supabase
+        .from("sala_especialidades")
+        .insert(
+          editandoSala.especialidades.map((espId: string) => ({
+            sala_id: editandoSala.id,
+            especialidade_id: espId,
+            unidade_id: unidadeId
+          }))
+        );
+    }
+
+    toast.success("Sala atualizada!");
+    setEditandoSala(null);
+    fetchAll();
   }
 
   async function removerSala(id: string) {
     if (!confirm("Deseja excluir esta sala?")) return;
-    const { error } = await supabase.from("salas").delete().eq('id', id);
-    if (!error) { toast.success("Sala removida!"); fetchAll(); }
+
+    // remove vínculos
+    await supabase
+      .from("sala_especialidades")
+      .delete()
+      .eq("sala_id", id);
+
+    // remove sala
+    const { error } = await supabase
+      .from("salas")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      toast.error("Erro ao remover sala");
+      return;
+    }
+
+    toast.success("Sala removida!");
+    fetchAll();
   }
 
   // --- AÇÕES DE PROFISSIONAIS ---
@@ -244,13 +331,45 @@ export default function ConfiguracoesPage() {
 
           <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-400 dark:border-gray-600 flex flex-col sm:flex-row gap-3 shadow-sm">
             <Input placeholder="Nº DA SALA" type="number" className="h-10 text-[10px] border border-gray-400 dark:border-gray-600 font-black uppercase tracking-widest" value={novaSala.numero} onChange={e => setNovaSala({ ...novaSala, numero: e.target.value })} />
-            <Select onValueChange={(val) => setNovaSala({ ...novaSala, especialidade_id: val })}>
+            <Select
+              onValueChange={(val) => {
+                if (novaSala.especialidades.includes(val)) return;
+
+                setNovaSala({
+                  ...novaSala,
+                  especialidades: [...novaSala.especialidades, val]
+                });
+              }}
+            >
               <SelectTrigger className="h-10 w-full sm:w-[300px] text-[10px] font-black uppercase border border-gray-400 dark:border-gray-600"><SelectValue placeholder="SETOR / ESPECIALIDADE" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value={ID_RECEPCAO} className="text-[10px] font-black uppercase text-blue-500">RECEPÇÃO</SelectItem>
                 {especialidades.map(e => (<SelectItem key={e.id} value={e.id} className="text-[10px] font-black uppercase">{e.nome}</SelectItem>))}
               </SelectContent>
             </Select>
+            <div className="flex flex-wrap gap-1 mt-2">
+              {novaSala.especialidades.map((espId) => (
+                <Badge
+                  key={espId}
+                  className="flex items-center gap-1 text-[9px]"
+                >
+                  {getEspecialidadeNome(espId)}
+
+                  <button
+                    onClick={() =>
+                      setNovaSala({
+                        ...novaSala,
+                        especialidades: novaSala.especialidades.filter(
+                          (id) => id !== espId
+                        )
+                      })
+                    }
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </Badge>
+              ))}
+            </div>
             <Button onClick={criarSala} className="bg-blue-600 font-black uppercase text-[10px] px-8"><Plus className="w-4 h-4 mr-2" /> Adicionar Sala</Button>
           </div>
 
@@ -259,32 +378,116 @@ export default function ConfiguracoesPage() {
               <Card key={s.id} className="w-full sm:w-64 border border-gray-400 dark:border-gray-600 bg-white dark:bg-gray-900 shadow-sm hover:border-blue-500/30 transition-all border">
                 <CardContent className="p-5 py-3 space-y-3 ">
                   {editandoSala?.id === s.id ? (
-                    <div className="space-y-3">
-                      <Input className="h-8 text-[10px] font-black uppercase" value={editandoSala.numero} onChange={e => setEditandoSala({ ...editandoSala, numero: e.target.value })} />
-                      <Select value={editandoSala.especialidade_id || ID_RECEPCAO} onValueChange={(val) => setEditandoSala({ ...editandoSala, especialidade_id: val })}>
-                        <SelectTrigger className="h-8 text-[9px] font-black uppercase"><SelectValue /></SelectTrigger>
+                    <><div className="flex flex-wrap gap-1">
+                      <Input
+                        className="h-8 text-[10px] font-black uppercase"
+                        value={editandoSala.numero}
+                        onChange={e =>
+                          setEditandoSala({
+                            ...editandoSala,
+                            numero: e.target.value
+                          })
+                        }
+                      />
+                      {editandoSala.especialidades?.map((espId: string) => (
+                        <Badge
+                          key={espId}
+                          className="flex items-center gap-1 text-[9px]"
+                        >
+                          {getEspecialidadeNome(espId)}
+
+                          <button
+                            onClick={() => {
+                              setEditandoSala({
+                                ...editandoSala,
+                                especialidades: editandoSala.especialidades.filter(
+                                  (id: string) => id !== espId
+                                )
+                              });
+                            }}
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </Badge>
+                      ))}
+                    </div>
+                      <Select
+                        onValueChange={(val) => {
+                          if (editandoSala.especialidades.includes(val)) return;
+
+                          setEditandoSala({
+                            ...editandoSala,
+                            especialidades: [...editandoSala.especialidades, val]
+                          });
+                        }}
+                      >
+                        <SelectTrigger className="h-8 text-[9px] font-black uppercase">
+                          <SelectValue placeholder="Adicionar especialidade" />
+                        </SelectTrigger>
+
                         <SelectContent>
-                          <SelectItem value={ID_RECEPCAO}>RECEPÇÃO</SelectItem>
-                          {especialidades.map(e => (<SelectItem key={e.id} value={e.id} className="text-[10px] font-black uppercase">{e.nome}</SelectItem>))}
+                          {especialidades.map((e) => (
+                            <SelectItem
+                              key={e.id}
+                              value={e.id}
+                              className="text-[10px] font-black uppercase"
+                            >
+                              {e.nome}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                       <div className="flex gap-2">
-                        <Button size="sm" className="flex-1 bg-green-600 h-7 text-[9px] font-black" onClick={salvarEdicaoSala}><Check className="w-3 h-3 mr-1" /> Salvar</Button>
-                        <Button size="sm" variant="ghost" className="flex-1 h-7 text-[9px] font-black" onClick={() => setEditandoSala(null)}><X className="w-3 h-3 mr-1" /> Sair</Button>
+                        <Button
+                          size="sm"
+                          className="flex-1 bg-green-600 h-7 text-[9px] font-black"
+                          onClick={salvarEdicaoSala}
+                        >
+                          <Check className="w-3 h-3 mr-1" />
+                          Salvar
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="flex-1 h-7 text-[9px] font-black"
+                          onClick={() => setEditandoSala(null)}
+                        >
+                          <X className="w-3 h-3 mr-1" />
+                          Sair
+                        </Button>
                       </div>
-                    </div>
+                    </>
                   ) : (
                     <>
                       <div className="flex justify-between items-center">
                         <div className="bg-blue-500/10 p-2 rounded-lg text-blue-500"><DoorOpen className="w-5 h-5" /></div>
                         <div className="flex gap-1">
-                          <Button variant="ghost" size="icon" onClick={() => setEditandoSala(s)} className="h-7 w-7"><Pencil className="h-3 w-3 text-slate-400" /></Button>
+                          <Button variant="ghost" size="icon" onClick={() =>
+                            setEditandoSala({
+                              ...s,
+                              especialidades:
+                                s.sala_especialidades?.map(
+                                  (v: any) => v.especialidade_id
+                                ) || []
+                            })
+                          } className="h-7 w-7"><Pencil className="h-3 w-3 text-slate-400" /></Button>
                           <Button variant="ghost" size="icon" onClick={() => removerSala(s.id)} className="h-7 w-7"><Trash2 className="h-3 w-3 text-red-400" /></Button>
                         </div>
                       </div>
                       <div className="border-t border-gray-400 dark:border-gray-600 pt-2">
                         <h3 className="font-black text-slate-800 dark:text-slate-100 text-sm uppercase">SALA {s.numero}</h3>
-                        <Badge variant="outline" className="mt-2 text-[9px] font-black uppercase border-gray-600 text-slate-500">{getEspecialidadeNome(s.especialidade_id)}</Badge>
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {s.sala_especialidades?.map((v: any) => (
+                            <Badge
+                              key={v.id}
+                              variant="outline"
+                              className="text-[9px] font-black uppercase"
+                            >
+                              {getEspecialidadeNome(v.especialidade_id)}
+                            </Badge>
+                          ))}
+                        </div>
                       </div>
                     </>
                   )}

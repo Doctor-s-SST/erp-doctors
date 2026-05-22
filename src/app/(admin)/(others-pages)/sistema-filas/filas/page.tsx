@@ -16,7 +16,14 @@ import { Stethoscope, UserCog, ArrowRight, Activity, X } from "lucide-react" // 
 
 // ================= TYPES =================
 type Especialidade = { id: string; nome: string }
-type Sala = { id: string; numero: string; especialidade_id: string }
+type SalaEspecialidade = {
+  especialidade_id: string
+}
+type Sala = {
+  id: string
+  numero: string
+  sala_especialidades: SalaEspecialidade[]
+}
 type Profissional = {
   profissional_especialidades: any; id: string; nome: string; especialidade_id: string
 }
@@ -37,8 +44,14 @@ export default function SelecionarFila() {
 
   // Filtro baseado na especialidade selecionada no Card
   const salasFiltradas = useMemo(() => {
-    return salas.filter(s => s.especialidade_id === selected?.id)
-  }, [salas, selected])
+    if (!selected) return [];
+
+    return salas.filter((s) =>
+      s.sala_especialidades?.some(
+        (rel) => rel.especialidade_id === selected.id
+      )
+    );
+  }, [salas, selected]);
 
   const profissionaisFiltrados = useMemo(() => {
     if (!selected) return []
@@ -62,10 +75,20 @@ export default function SelecionarFila() {
         .eq("unidade_id", currentUnidadeId) // Filtro crucial
         .order("nome");
 
-      const { data: sls } = await supabase
+      const { data: sls, error: salasError } = await supabase
         .from("salas")
-        .select("*")
-        .eq("unidade_id", currentUnidadeId); // Filtro crucial
+        .select(`
+          id,
+          numero,
+          sala_especialidades!left (
+            especialidade_id
+          )
+        `)
+        .eq("unidade_id", currentUnidadeId)
+        .order("numero");
+
+      console.log("SALAS:", sls)
+      console.log("ERRO:", salasError) // Filtro crucial
 
       const { data: profs } = await supabase
         .from("profissionais")
