@@ -37,6 +37,7 @@ type Atendimento = {
     tipo_exame: string
     // unidadeId: string
     encaixe: boolean
+    codigo_empresa: string
 }
 
 type ConfigOrdenacao = {
@@ -86,7 +87,7 @@ export default function RecepcaoPage() {
     const initialFormFicha = {
         sequencial: "",
         arquivo: null as File | null,
-        empresa: { razao_social: "", cnpj: "" },
+        empresa: { razao_social: "", cnpj: "", codigo_empresa: "" },
         funcionario: { nome: "", rg: "", nascimento: "", cargo: "", setor: "", cpf: "" },
         exame: { tipo: "" },
         exames: [] as Array<{ exame: string }>,
@@ -259,17 +260,6 @@ export default function RecepcaoPage() {
 
         initialize();
     }, []); // Roda apenas no mount da página
-
-    // 2. Efeito para buscar dados do painel (Depende do unidadeId)
-    // useEffect(() => {
-    //     if (!unidadeId) return;
-
-    //     fetchData(); // Busca imediata
-    //     const interval = setInterval(fetchData, 5000); // Polling
-
-    //     return () => clearInterval(interval);
-    // }, [unidadeId]); // <--- Roda sempre que o unidadeId for definido ou mudar
-
 
     const getTempoEsperaEvolutivo = (item: any) => {
         if (!item.created_at) return { texto: "--", isCancelado: false };
@@ -489,6 +479,7 @@ export default function RecepcaoPage() {
             p_paciente_setor: formFicha.funcionario.setor,
             p_empresa_razao: formFicha.empresa.razao_social,
             p_empresa_cnpj: formFicha.empresa.cnpj,
+            p_codigo_empresa: formFicha.empresa.codigo_empresa,
             p_especialidades_ids: especialidadesSelecionadas,
             p_exames_nomes: formFicha.exames,
             p_observacao: formFicha.observacao,
@@ -581,7 +572,8 @@ export default function RecepcaoPage() {
                 arquivo: null,
                 empresa: {
                     razao_social: detalhes.pacientes?.empresa_razao || "",
-                    cnpj: detalhes.pacientes?.empresa_cnpj || ""
+                    cnpj: detalhes.pacientes?.empresa_cnpj || "",
+                    codigo_empresa: detalhes.pacientes?.codigo_empresa || ""
                 },
                 funcionario: {
                     nome: detalhes.pacientes?.nome || item.nome || "",
@@ -660,7 +652,7 @@ export default function RecepcaoPage() {
     };
 
     const iniciarFinalizacaoComDelay = (id: string, encaixe: boolean) => {
-        const TEMPO_ESPERA = encaixe ? 1800 : 30; // 🔥 30min ou 30s
+        const TEMPO_ESPERA = encaixe ? 1800 : 30; // 30min ou 30s
 
         const idsParaFinalizar = obterIdsConsolidados();
 
@@ -757,7 +749,8 @@ export default function RecepcaoPage() {
                 sequencial: data.funcionario?.ficha || prev.sequencial,
                 empresa: {
                     razao_social: data.empresa?.razao_social || "",
-                    cnpj: data.empresa?.cnpj || ""
+                    cnpj: data.empresa?.cnpj || "",
+                    codigo_empresa: data.empresa?.codigo_empresa || ""
                 },
                 funcionario: {
                     nome: formatarNome(data.funcionario?.nome) || "",
@@ -866,7 +859,10 @@ export default function RecepcaoPage() {
                         dados.razao_social || "",
 
                     cnpj:
-                        dados.cnpj || ""
+                        dados.cnpj || "",
+
+                    codigo_empresa:
+                        examesRecebidos?.[0]?.codigo_empresa || "",
                 },
 
                 funcionario: {
@@ -899,8 +895,9 @@ export default function RecepcaoPage() {
 
             toast.success("Ficha carregada com sucesso!", {
                 id: toastId
+                
             });
-
+            console.log(formFicha)
         } catch (error) {
             toast.error("Falha ao buscar ficha", {
                 id: toastId
@@ -1405,6 +1402,30 @@ export default function RecepcaoPage() {
                                                                     <span className={`text-[10px] font-bold uppercase italic ${isCancelado ? 'text-red-500' : 'text-gray-400'}`}>
                                                                         {isFinalizado ? "Atendido" : isCancelado ? "Cancelado" : "Não Atendido"}
                                                                     </span>
+                                                                    {isFinalizado && (
+                                                                        <div>
+                                                                            <TooltipProvider>
+                                                                                <Tooltip>
+                                                                                    <TooltipTrigger asChild>
+                                                                                        <Button
+                                                                                            size="sm"
+                                                                                            variant="secondary"
+                                                                                            className={`h-8 w-8 p-0 ${fichaPronta ? 'bg-emerald-600 text-muted' : 'bg-blue-600 text-white'} ${fichaPronta ? "hover:bg-emerald-300" : "hover:bg-blue-300"} transition-colors`}
+                                                                                            onClick={() => {
+                                                                                                abrirModalImportacao(item).then(() => {
+                                                                                                    // delay para garantir que o estado carregou antes de imprimir
+                                                                                                    setTimeout(handlePrint, 500);
+                                                                                                });
+                                                                                            }}
+                                                                                        >
+                                                                                            <Printer className="w-3.5 h-3.5" />
+                                                                                        </Button>
+                                                                                    </TooltipTrigger>
+                                                                                    <TooltipContent>Imprimir Ficha</TooltipContent>
+                                                                                </Tooltip>
+                                                                            </TooltipProvider>
+                                                                        </div>
+                                                                    )}
                                                                 </div>
                                                             )}
                                                         </div>
@@ -1594,6 +1615,14 @@ export default function RecepcaoPage() {
                                             className="h-9"
                                             value={formFicha.empresa.cnpj || ""}
                                             onChange={(e) => updateNestedField('empresa', 'cnpj', e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <Label className="text-[10px] font-bold opacity-70">Código Empresa</Label>
+                                        <Input
+                                            className="h-9"
+                                            value={formFicha.empresa.codigo_empresa || ""}
+                                            onChange={(e) => updateNestedField('empresa', 'codigo_empresa', e.target.value)}
                                         />
                                     </div>
                                 </div>

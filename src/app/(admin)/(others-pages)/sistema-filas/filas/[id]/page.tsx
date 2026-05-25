@@ -45,6 +45,7 @@ type ItemFila = {
     senha: string
     nome: string
     empresa_razao: string
+    codigo_empresa: string
     status: string
     status_atendimento: string
     created_at: string
@@ -980,25 +981,31 @@ export default function FilaPage() {
                                                                                 </TooltipProvider>
                                                                             </div>
                                                                         ) : (
-                                                                            <><Button
-                                                                                size="sm"
-                                                                                className="h-8 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700"
-                                                                                onClick={() => iniciarFinalizacao(item)}
-                                                                            >
-                                                                                <CheckCircle2 className="w-3 h-3 mr-1" />
-                                                                                Finalizar
-                                                                            </Button><Button
-                                                                                size="sm"
-                                                                                variant="outline"
-                                                                                className="h-8 text-[11px] border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white"
-                                                                                onClick={() => executarAcao("chamar_paciente", {
-                                                                                    p_atendimento_id: item.atendimento_id,
-                                                                                    p_atendimento_exame_id: item.id,
-                                                                                    p_sala: item.sala_atual || especialidadeNome,
-                                                                                    p_num_sala: session.sala,
-                                                                                    p_profissional: session.profissional,
-                                                                                })}
-                                                                            >
+                                                                            <>
+                                                                                {item.ultimo_atendimento && item.status === "EM_ATENDIMENTO" && (
+                                                                                    <Badge className="bg-gray-300 py-3 text-black border border-black/50">
+                                                                                        Último atendimento!
+                                                                                    </Badge>
+                                                                                )}
+                                                                                <Button
+                                                                                    size="sm"
+                                                                                    className="h-8 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700"
+                                                                                    onClick={() => iniciarFinalizacao(item)}
+                                                                                >
+                                                                                    <CheckCircle2 className="w-3 h-3 mr-1" />
+                                                                                    Finalizar
+                                                                                </Button><Button
+                                                                                    size="sm"
+                                                                                    variant="outline"
+                                                                                    className="h-8 text-[11px] border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white"
+                                                                                    onClick={() => executarAcao("chamar_paciente", {
+                                                                                        p_atendimento_id: item.atendimento_id,
+                                                                                        p_atendimento_exame_id: item.id,
+                                                                                        p_sala: item.sala_atual || especialidadeNome,
+                                                                                        p_num_sala: session.sala,
+                                                                                        p_profissional: session.profissional,
+                                                                                    })}
+                                                                                >
                                                                                     <BellRing className="w-3 h-3 mr-1" />
                                                                                     Chamar Novamente
                                                                                 </Button></>

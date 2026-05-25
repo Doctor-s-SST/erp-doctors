@@ -33,6 +33,13 @@ export const TemplateFicha = forwardRef<any, any>(({ dados }, ref) => {
               {dados?.empresa?.cnpj}
             </div>
           </div>
+
+          <div className="col-span-2">
+            <label className="text-[10px] font-semibold">Código Empresa:</label>
+            <div className="border border-black rounded p-1 text-[11px]">
+              {dados?.empresa?.codigo_empresa}
+            </div>
+          </div>
         </div>
       </section>
 

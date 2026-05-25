@@ -4,13 +4,13 @@ import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase" // Ajuste o caminho conforme seu projeto
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
-import { CheckCircle2, Clock, Circle, MapPin, User, FileText, Loader2 } from "lucide-react"
+import { CheckCircle2, Clock, Circle, MapPin, User, FileText, Loader2, MessageCircleWarning, Building } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
 interface StatusSenhaRecepProps {
   isOpen: boolean
   onClose: () => void
-  atendimento: any 
+  atendimento: any
 }
 
 export function StatusSenhaRecep({ isOpen, onClose, atendimento }: StatusSenhaRecepProps) {
@@ -45,7 +45,7 @@ export function StatusSenhaRecep({ isOpen, onClose, atendimento }: StatusSenhaRe
   const getStatusStep = (status: string) => {
     switch (status) {
       case 'FINALIZADO':
-        return { icon: <CheckCircle2 className="w-4 h-4 text-emerald-500" />, color: 'border-l-4 border-l-emerald-600', bg: 'bg-emerald-600',  text: 'Finalizado' }
+        return { icon: <CheckCircle2 className="w-4 h-4 text-emerald-500" />, color: 'border-l-4 border-l-emerald-600', bg: 'bg-emerald-600', text: 'Finalizado' }
       case 'EM_ATENDIMENTO':
         return { icon: <Clock className="w-4 h-4 text-amber-500 animate-pulse" />, color: 'border-l-4 border-l-amber-600', bg: 'bg-amber-600', text: 'Em Atendimento' }
       default:
@@ -70,16 +70,22 @@ export function StatusSenhaRecep({ isOpen, onClose, atendimento }: StatusSenhaRe
             <div className="flex items-center gap-1 text-[11px] font-bold text-slate-500 uppercase">
               <Clock className="w-3 h-3" /> Chegada: {new Date(atendimento.created_at).toLocaleTimeString()}
             </div>
-            {atendimento.observacao && 
-            <div className="flex items-center gap-1 text-[11px] font-bold text-slate-500 uppercase">
-              <Clock className="w-3 h-3" /> Observação: {atendimento.observacao}
-            </div>
+            {atendimento.observacao &&
+              <div className="flex items-center gap-1 text-[11px] font-bold text-slate-500 uppercase">
+                <MessageCircleWarning className="w-3 h-3" /> Observação: {atendimento.observacao}
+              </div>
             }
-            
-            {atendimento.encaixe && 
-            <div className="flex items-center gap-1 text-[11px] font-bold text-green-700 uppercase border-2 p-1 border-green-700 rounded-lg">
-              Encaixe
-            </div>
+
+            {atendimento.codigo_empresa &&
+              <div className="flex items-center gap-1 text-[11px] font-bold text-slate-500 uppercase">
+                <MessageCircleWarning className="w-3 h-3" /> Código Empresa: {atendimento.codigo_empresa}
+              </div>
+            }
+
+            {atendimento.encaixe &&
+              <div className="flex items-center gap-1 text-[11px] font-bold text-green-700 uppercase border-2 p-1 border-green-700 rounded-lg">
+                Encaixe
+              </div>
             }
           </div>
         </DialogHeader>
@@ -87,7 +93,7 @@ export function StatusSenhaRecep({ isOpen, onClose, atendimento }: StatusSenhaRe
         <div className="py-4">
           <div className="space-y-4">
             <h3 className="text-[12px] font-black uppercase tracking-widest text-slate-400">Salas de Destino</h3>
-            
+
             <ScrollArea className="h-[300px] pr-4">
               {loading ? (
                 <div className="flex items-center justify-center h-32">
@@ -103,10 +109,10 @@ export function StatusSenhaRecep({ isOpen, onClose, atendimento }: StatusSenhaRe
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-black uppercase truncate tracking-widest">{item.sala}</p>
                           <div className="flex items-center gap-2 mt-1">
-                             <Badge variant="outline" className="text-[11px] py-0 px-2 border-gray-500">
-                               <MapPin className="w-2 h-2 mr-1" /> Sala: {item.num_sala || 'A definir'}
-                             </Badge>
-                             <Badge className={`text-[10px] font-bold uppercase ${config.bg}`}>{config.text}</Badge>
+                            <Badge variant="outline" className="text-[11px] py-0 px-2 border-gray-500">
+                              <MapPin className="w-2 h-2 mr-1" /> Sala: {item.num_sala || 'A definir'}
+                            </Badge>
+                            <Badge className={`text-[10px] font-bold uppercase ${config.bg}`}>{config.text}</Badge>
                           </div>
                         </div>
                       </div>
@@ -115,7 +121,7 @@ export function StatusSenhaRecep({ isOpen, onClose, atendimento }: StatusSenhaRe
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center h-32 border-2 border-dashed rounded-xl">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase">Nenhum roteiro gerado</p>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase">Nenhum roteiro gerado</p>
                 </div>
               )}
             </ScrollArea>
