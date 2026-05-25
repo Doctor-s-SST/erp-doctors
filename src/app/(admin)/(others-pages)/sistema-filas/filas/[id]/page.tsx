@@ -984,7 +984,7 @@ export default function FilaPage() {
                                                                             <>
                                                                                 {item.ultimo_atendimento && item.status === "EM_ATENDIMENTO" && (
                                                                                     <Badge className="bg-gray-300 py-3 text-black border border-black/50">
-                                                                                        Último atendimento!
+                                                                                        Última especialidade!
                                                                                     </Badge>
                                                                                 )}
                                                                                 <Button
