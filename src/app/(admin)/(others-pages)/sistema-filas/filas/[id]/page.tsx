@@ -86,6 +86,9 @@ export default function FilaPage() {
     const [filtroTipo, setFiltroTipo] = useState<string>("TODOS")
     // const [listaGlobalExames, setListaGlobalExames] = useState<any[]>([]);
     const [examesPorAtendimento, setExamesPorAtendimento] = useState<Record<string, any[]>>({});
+    const [examesConcluidos, setExamesConcluidos] = useState<
+        Record<string, string[]>
+    >({});
     const [finalizandoIds, setFinalizandoIds] = useState<Record<string, number>>({});
     const [selectedAtendimento, setSelectedAtendimento] = useState<ItemFila | null>(null)
     const [isDetailsOpen, setIsDetailsOpen] = useState(false)
@@ -825,6 +828,41 @@ export default function FilaPage() {
                                         const examesList =
                                             examesPorAtendimento[item.atendimento_id] || [];
 
+
+
+                                        const toggleExame = (atendimentoId: string, exame: string) => {
+                                            setExamesConcluidos(prev => {
+                                                const atuais = prev[atendimentoId] || [];
+
+                                                const existe = atuais.includes(exame);
+
+                                                return {
+                                                    ...prev,
+                                                    [atendimentoId]: existe
+                                                        ? atuais.filter(e => e !== exame)
+                                                        : [...atuais, exame]
+                                                };
+                                            });
+                                        };
+
+                                        const todosExamesConcluidos = (
+                                            atendimentoId: string,
+                                            exames: any[]
+                                        ) => {
+                                            if (!exames.length) return true;
+
+                                            const concluidos = examesConcluidos[atendimentoId] || [];
+
+                                            return exames.every((ex: any) =>
+                                                concluidos.includes(ex.exame)
+                                            );
+                                        };
+
+                                        const examesOk = todosExamesConcluidos(
+                                            item.id,
+                                            examesList
+                                        );
+
                                         return (
                                             <tr
                                                 key={item.id}
@@ -884,52 +922,97 @@ export default function FilaPage() {
                                                                     <TooltipContent
                                                                         side="right"
                                                                         className="
-                                                                        text-black
-                                                                        dark:text-white
-                                                                            bg-white
-                                                                            dark:bg-black
-                                                                            border
-                                                                            border-slate-200
-                                                                            dark:border-slate-700
-                                                                            shadow-xl
-                                                                            min-w-[250px]
-                        p-3
-                    "
+        text-black
+        dark:text-white
+        bg-white
+        dark:bg-black
+        border
+        border-slate-200
+        dark:border-slate-700
+        shadow-xl
+        min-w-[280px]
+        p-3
+    "
                                                                     >
                                                                         <div className="space-y-2">
                                                                             <div className="flex items-center gap-2 border-b pb-2">
                                                                                 <Stethoscope className="w-4 h-4 text-emerald-500" />
+
                                                                                 <span className="font-black text-[11px] uppercase tracking-wider">
                                                                                     Exames da Especialidade
                                                                                 </span>
                                                                             </div>
 
-                                                                            <div className="space-y-1">
-                                                                                {examesList.map((ex: any, idx: number) => (
-                                                                                    <div
-                                                                                        key={idx}
-                                                                                        className="
-                                                                                            flex
-                                                                                            items-center
-                                                                                            justify-between
-                                                                                            gap-3
-                                                                                            text-[12px]
-                                                                                            bg-slate-200
-                                                                                            dark:bg-slate-800
-                                                                                            rounded-lg
-                                                                                            px-2
-                                                                                            py-1.5
-                                    "
-                                                                                    >
-                                                                                        <div className="flex items-center gap-2">
-                                                                                            <FlaskConical className="w-3 h-3 text-emerald-500" />
+                                                                            <div className="space-y-2">
+                                                                                {examesList.map((ex: any, idx: number) => {
+                                                                                    const checked =
+                                                                                        examesConcluidos[item.id]?.includes(ex.exame);
 
-                                                                                            <span className="font-medium">
-                                                                                                {ex.exame}
-                                                                                            </span>
-                                                                                        </div>
-                                                                                    </div>
-                                                                                ))}
+                                                                                    return (
+                                                                                        <label
+                                                                                            key={idx}
+                                                                                            className="
+                            flex
+                            items-center
+                            justify-between
+                            gap-3
+                            text-[12px]
+                            bg-slate-200
+                            dark:bg-slate-800
+                            rounded-lg
+                            px-2
+                            py-2
+                            cursor-pointer
+                            hover:bg-slate-300
+                            dark:hover:bg-slate-700
+                            transition-all
+                        "
+                                                                                        >
+                                                                                            <div className="flex items-center gap-2">
+                                                                                                <input
+                                                                                                    type="checkbox"
+                                                                                                    checked={checked || false}
+                                                                                                    onChange={() =>
+                                                                                                        toggleExame(
+                                                                                                            item.id,
+                                                                                                            ex.exame
+                                                                                                        )
+                                                                                                    }
+                                                                                                    className="
+                                    w-4
+                                    h-4
+                                    accent-emerald-600
+                                    cursor-pointer
+                                "
+                                                                                                />
+
+                                                                                                <FlaskConical className="w-3 h-3 text-emerald-500" />
+
+                                                                                                <span
+                                                                                                    className={
+                                                                                                        checked
+                                                                                                            ? "line-through opacity-60"
+                                                                                                            : ""
+                                                                                                    }
+                                                                                                >
+                                                                                                    {ex.exame}
+                                                                                                </span>
+                                                                                            </div>
+                                                                                        </label>
+                                                                                    );
+                                                                                })}
+                                                                            </div>
+
+                                                                            <div className="pt-2 border-t">
+                                                                                <div className="flex items-center justify-between text-[10px] uppercase font-bold">
+                                                                                    <span>Progresso</span>
+
+                                                                                    <span className="text-emerald-600">
+                                                                                        {(examesConcluidos[item.id] || []).length}
+                                                                                        /
+                                                                                        {examesList.length}
+                                                                                    </span>
+                                                                                </div>
                                                                             </div>
                                                                         </div>
                                                                     </TooltipContent>
@@ -1134,12 +1217,21 @@ export default function FilaPage() {
                                                                                 )}
                                                                                 <Button
                                                                                     size="sm"
-                                                                                    className="h-8 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700"
+                                                                                    disabled={!examesOk}
+                                                                                    className={`
+                                                                                            h-8
+                                                                                            text-[11px]
+                                                                                            font-bold
+                                                                                            transition-all
+                                                                                            ${examesOk
+                                                                                            ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                                                                                            : "bg-slate-400 hover:bg-slate-400 text-white cursor-not-allowed opacity-70"
+                                                                                        }
+    `}
                                                                                     onClick={() => iniciarFinalizacao(item)}
-                                                                                >
-                                                                                    <CheckCircle2 className="w-3 h-3 mr-1" />
-                                                                                    Finalizar
-                                                                                </Button><Button
+                                                                                >Finalizar
+                                                                                </Button>
+                                                                                <Button
                                                                                     size="sm"
                                                                                     variant="outline"
                                                                                     className="h-8 text-[11px] border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white"
