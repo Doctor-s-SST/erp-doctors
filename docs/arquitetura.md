@@ -66,16 +66,6 @@ Impressora térmica (TCP)
 * Envia comandos ESC/POS via TCP
 * Imprime senha gerada
 
----
-
-### 6. Impressora térmica
-
-* Modelo: Bematech MP-4200
-* Comunicação via porta 9100
-* Protocolo ESC/POS
-
----
-
 <!-- ## Fluxo de Impressão
 
 1. App Acionador gera senha

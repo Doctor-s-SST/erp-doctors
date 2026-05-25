@@ -84,12 +84,11 @@ export default function FilaPage() {
     const [ordenacao, setOrdenacao] = useState<ConfigOrdenacao>({ coluna: 'tempo_espera', direcao: 'desc' })
     const [filtroPesquisa, setFiltroPesquisa] = useState("")
     const [filtroTipo, setFiltroTipo] = useState<string>("TODOS")
-    const [listaGlobalExames, setListaGlobalExames] = useState<any[]>([]);
+    // const [listaGlobalExames, setListaGlobalExames] = useState<any[]>([]);
+    const [examesPorAtendimento, setExamesPorAtendimento] = useState<Record<string, any[]>>({});
     const [finalizandoIds, setFinalizandoIds] = useState<Record<string, number>>({});
     const [selectedAtendimento, setSelectedAtendimento] = useState<ItemFila | null>(null)
     const [isDetailsOpen, setIsDetailsOpen] = useState(false)
-
-
 
     const [salas, setSalas] = useState<Sala[]>([])
     const [profissionais, setProfissionais] = useState<Profissional[]>([])
@@ -164,21 +163,6 @@ export default function FilaPage() {
             )
         )
     }, [profissionais, id])
-
-    // const entrar = async () => {
-    //     if (!form.sala || !form.profissional) {
-    //         alert("Por favor, preencha a sala e o profissional.");
-    //         return;
-    //     }
-
-    //     const { data: { user } } = await supabase.auth.getUser();
-    //     if (user) {
-    //         const userKey = `fila_session_${user.id}`;
-    //         localStorage.setItem(userKey, JSON.stringify(form));
-    //         setSession(form);
-    //         setOpenModal(false);
-    //     }
-    // };
 
     const entrar = async () => {
         if (!form.sala || !form.profissional) {
@@ -395,15 +379,14 @@ export default function FilaPage() {
     useEffect(() => {
         if (!unidadeId) return;
         fetchFila()
-        console.log(`nome da sala: ${especialidadeNome}`)
 
         const interval = setInterval(fetchFila, 3000)
         // const channel = supabase.channel(`fila-${id}`).on("postgres_changes", { event: "*", schema: "public", table: "atendimento_exames" }, () => fetchFila()).subscribe()
-        const fetchExames = async () => {
-            const { data } = await supabase.from('exames').select('*');
-            if (data) setListaGlobalExames(data);
-        };
-        fetchExames();
+        // const fetchExames = async () => {
+        //     const { data } = await supabase.from('exames').select('*');
+        //     if (data) setListaGlobalExames(data);
+        // };
+        // fetchExames();
 
 
         return () => { clearInterval(interval); /*supabase.removeChannel(channel)*/ }
@@ -469,6 +452,71 @@ export default function FilaPage() {
         fetchConfig();
     }, [id]); // Adicione id como dependência
 
+    useEffect(() => {
+        if (data.length > 0) {
+
+            fetchExamesAtendimentos(data);
+        }
+    }, [data]);
+
+    async function fetchExamesAtendimentos(data: any) {
+        if (!data.length || !id) return;
+        const atendimentoIds = data.map((i: { atendimento_id: any }) => i.atendimento_id);
+
+
+        const { data: atendimentosData, error } = await supabase
+            .from("atendimentos")
+            .select(`
+            id,
+            exames_list
+        `)
+            .in("id", atendimentoIds);
+        if (error) {
+            return;
+        }
+
+
+        // pega exames da especialidade atual
+        const { data: examesEspecialidade } = await supabase
+            .from("exames")
+            .select(`
+            id,
+            nome,
+            especialidade_id
+        `)
+            .eq("especialidade_id", id);
+
+        // nomes dos exames da especialidade atual
+        const nomesExamesEspecialidade =
+            examesEspecialidade?.map(e =>
+                e.nome?.toLowerCase().trim()
+            ) || [];
+
+        const agrupado: Record<string, any[]> = {};
+
+        atendimentosData?.forEach((atendimento: any) => {
+
+            const examesList = Array.isArray(atendimento.exames_list)
+                ? atendimento.exames_list
+                : [];
+
+            // filtra somente exames da especialidade atual
+            const examesFiltrados = examesList.filter((ex: any) => {
+
+                const nomeExame = ex.exame
+                    ?.toLowerCase()
+                    .trim();
+
+                return nomesExamesEspecialidade.includes(nomeExame);
+            });
+
+            agrupado[atendimento.id] = examesFiltrados;
+        });
+
+
+        setExamesPorAtendimento(agrupado);
+    }
+
     const normalizar = (texto: string) =>
         texto
             .toLowerCase()
@@ -486,7 +534,6 @@ export default function FilaPage() {
             .single();
 
         if (error || !data) {
-            console.error("Erro ao buscar tempo da especialidade:", error);
             return 20; // fallback
         }
 
@@ -515,6 +562,7 @@ export default function FilaPage() {
 
     const dadosProcessados = useMemo(() => {
         let lista = [...data];
+
 
         // Remove duplicatas
         lista = Array.from(new Map(lista.map(item => [item.id, item])).values());
@@ -751,6 +799,7 @@ export default function FilaPage() {
 
                                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                                     {dadosProcessados.map((item: any) => {
+
                                         const styles = getStatusStyles(item);
                                         const tempoRestante = getTempoRestante(item.id);
 
@@ -772,6 +821,10 @@ export default function FilaPage() {
                                                             ? "bg-red-200/70 dark:bg-red-900/30" :
                                                             "hover:bg-slate-50/80 dark:hover:bg-slate-800/40"
 
+
+                                        const examesList =
+                                            examesPorAtendimento[item.atendimento_id] || [];
+
                                         return (
                                             <tr
                                                 key={item.id}
@@ -790,22 +843,114 @@ export default function FilaPage() {
                                                 {/* NOME */}
                                                 <td className="p-4">
                                                     <div className="flex items-center gap-2">
-                                                        <span className="font-bold text-slate-700 dark:text-slate-200 cursor-pointer" onClick={() => {
-                                                            if (item.nome) {
-                                                                setSelectedAtendimento(item);
-                                                                setIsDetailsOpen(true);
-                                                            }
-                                                        }}>
-
+                                                        <span
+                                                            className="font-bold text-slate-700 dark:text-slate-200 cursor-pointer"
+                                                            onClick={() => {
+                                                                if (item.nome) {
+                                                                    setSelectedAtendimento(item);
+                                                                    setIsDetailsOpen(true);
+                                                                }
+                                                            }}
+                                                        >
                                                             {item.nome}
                                                         </span>
+
+                                                        {/* EXAMES DA ESPECIALIDADE */}
+                                                        {examesList.length > 0 && (
+                                                            <TooltipProvider>
+                                                                <Tooltip>
+                                                                    <TooltipTrigger asChild>
+                                                                        <div className="relative flex items-center justify-center">
+                                                                            <div className="rounded-full cursor-pointer" />
+
+                                                                            {/* quantidade */}
+                                                                            <span className="
+                                                                                bg-emerald-600
+                                                                                text-white
+                                                                                text-[10px]
+                                                                                font-black
+                                                                                rounded-full
+                                                                                w-4
+                                                                                h-4
+                                                                                flex
+                                                                                items-center
+                                                                                justify-center
+                        ">
+                                                                                {examesList.length}
+                                                                            </span>
+                                                                        </div>
+                                                                    </TooltipTrigger>
+
+                                                                    <TooltipContent
+                                                                        side="right"
+                                                                        className="
+                                                                        text-black
+                                                                        dark:text-white
+                                                                            bg-white
+                                                                            dark:bg-black
+                                                                            border
+                                                                            border-slate-200
+                                                                            dark:border-slate-700
+                                                                            shadow-xl
+                                                                            min-w-[250px]
+                        p-3
+                    "
+                                                                    >
+                                                                        <div className="space-y-2">
+                                                                            <div className="flex items-center gap-2 border-b pb-2">
+                                                                                <Stethoscope className="w-4 h-4 text-emerald-500" />
+                                                                                <span className="font-black text-[11px] uppercase tracking-wider">
+                                                                                    Exames da Especialidade
+                                                                                </span>
+                                                                            </div>
+
+                                                                            <div className="space-y-1">
+                                                                                {examesList.map((ex: any, idx: number) => (
+                                                                                    <div
+                                                                                        key={idx}
+                                                                                        className="
+                                                                                            flex
+                                                                                            items-center
+                                                                                            justify-between
+                                                                                            gap-3
+                                                                                            text-[12px]
+                                                                                            bg-slate-200
+                                                                                            dark:bg-slate-800
+                                                                                            rounded-lg
+                                                                                            px-2
+                                                                                            py-1.5
+                                    "
+                                                                                    >
+                                                                                        <div className="flex items-center gap-2">
+                                                                                            <FlaskConical className="w-3 h-3 text-emerald-500" />
+
+                                                                                            <span className="font-medium">
+                                                                                                {ex.exame}
+                                                                                            </span>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                ))}
+                                                                            </div>
+                                                                        </div>
+                                                                    </TooltipContent>
+                                                                </Tooltip>
+                                                            </TooltipProvider>
+                                                        )}
+
+                                                        {/* EMPRESA */}
                                                         {item.empresa_razao && (
                                                             <TooltipProvider>
                                                                 <Tooltip>
                                                                     <TooltipTrigger>
-                                                                        <DatabaseSearch className="w-4 h-4 text-emerald-500" onClick={() => onEmpresaClick?.(item)} />
+                                                                        <DatabaseSearch
+                                                                            className="w-4 h-4 text-emerald-500"
+                                                                            onClick={() => onEmpresaClick?.(item)}
+                                                                        />
                                                                     </TooltipTrigger>
-                                                                    <TooltipContent onClick={() => onEmpresaClick?.(item)}>{item.empresa_razao}</TooltipContent>
+
+                                                                    <TooltipContent onClick={() => onEmpresaClick?.(item)}>
+                                                                        {item.empresa_razao}
+                                                                    </TooltipContent>
                                                                 </Tooltip>
                                                             </TooltipProvider>
                                                         )}
