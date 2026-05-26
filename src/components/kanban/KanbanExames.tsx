@@ -40,6 +40,7 @@ type Exame = {
     ordem?: number
     dependencia_id?: string
     depende_de_exame_id?: string
+    obrigatorio_checkbox?: boolean
 }
 
 type Especialidade = {
@@ -47,6 +48,7 @@ type Especialidade = {
     nome: string
     exames: Exame[]
     tempo_finalizacao_segundos?: number
+    obrigar_check_exames?: boolean
 }
 
 // ================= COMPONENTS =================
@@ -95,7 +97,7 @@ export default function KanbanExames() {
                 id, 
                 nome, 
             `)
-            .select(`id, nome, tempo_finalizacao_segundos, exames (*)`)
+            .select(`id, nome, tempo_finalizacao_segundos, obrigar_check_exames, exames (*)`)
             .eq("unidade_id", currentUnidadeId)
             .order('nome', { ascending: true });
 
@@ -218,6 +220,8 @@ export default function KanbanExames() {
                 const payloadEspecialidade = {
                     nome: form.nome.toUpperCase(),
                     tempo_finalizacao_segundos: Number(form.tempo_finalizacao_segundos),
+                    obrigar_check_exames:
+                        form.obrigar_check_exames ?? false,
                     unidade_id: unidadeId
                 }
 
@@ -243,7 +247,9 @@ export default function KanbanExames() {
 
                 const payloadExame = {
                     nome: form.nome.toUpperCase(),
-                    especialidade_id: form.especialidade_id
+                    especialidade_id: form.especialidade_id,
+                    obrigatorio_checkbox:
+                        form.obrigatorio_checkbox ?? false
                 }
 
                 let exameId = editandoExame?.id
@@ -422,6 +428,9 @@ export default function KanbanExames() {
                                                         nome: col.nome,
                                                         tempo_finalizacao_segundos:
                                                             col.tempo_finalizacao_segundos || "",
+
+                                                        obrigar_check_exames:
+                                                            col.obrigar_check_exames ?? false
                                                     })
 
                                                     setOpenModal(true)
@@ -498,7 +507,7 @@ export default function KanbanExames() {
                         </div>
 
                         {tipoModal === "especialidade" && (
-                            <div className="space-y-2">
+                            <><div className="space-y-2">
                                 <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">
                                     Tempo para Finalização (segundos)
                                 </Label>
@@ -509,19 +518,41 @@ export default function KanbanExames() {
                                     required
                                     className="h-12 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-bold text-xs"
                                     value={form.tempo_finalizacao_segundos || ""}
-                                    onChange={(e) =>
-                                        setForm({
-                                            ...form,
-                                            tempo_finalizacao_segundos: e.target.value,
-                                        })
-                                    }
-                                />
-                            </div>
+                                    onChange={(e) => setForm({
+                                        ...form,
+                                        tempo_finalizacao_segundos: e.target.value,
+                                    })} />
+                            </div><div className="space-y-2">
+                                    <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">
+                                        Exigir checklist dos exames?
+                                    </Label>
+
+                                    <label className="flex items-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 p-4 cursor-pointer bg-slate-50 dark:bg-slate-800">
+                                        <input
+                                            type="checkbox"
+                                            checked={form.obrigar_check_exames ?? false}
+                                            onChange={(e) => setForm({
+                                                ...form,
+                                                obrigar_check_exames: e.target.checked
+                                            })}
+                                            className="h-5 w-5" />
+
+                                        <div>
+                                            <p className="font-bold text-xs uppercase">
+                                                Bloquear finalização
+                                            </p>
+
+                                            <p className="text-[11px] text-slate-500">
+                                                Obriga marcar exames antes
+                                                de finalizar atendimento
+                                            </p>
+                                        </div>
+                                    </label>
+                                </div></>
                         )}
 
                         {tipoModal === "exame" && (
                             <>
-                                {/* NOVO CAMPO: SELEÇÃO DE ESPECIALIDADE */}
                                 <div className="space-y-2">
                                     <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Especialidade</Label>
                                     <select
@@ -537,15 +568,39 @@ export default function KanbanExames() {
                                         ))}
                                     </select>
                                 </div>
-                                {/* <div className="space-y-2">
-                                    <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Tempo (segundos)</Label>
-                                    <Input
-                                        type="number"
-                                        className="h-12 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-bold text-xs"
-                                        value={form.tempo || ""}
-                                        onChange={e => setForm({ ...form, tempo: e.target.value })}
-                                    />
-                                </div> */}
+                                <div className="space-y-2">
+                                    <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">
+                                        Confirmação obrigatória?
+                                    </Label>
+
+                                    <label className="flex items-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 p-4 cursor-pointer bg-slate-50 dark:bg-slate-800">
+                                        <input
+                                            type="checkbox"
+                                            checked={
+                                                form.obrigatorio_checkbox ?? false
+                                            }
+                                            onChange={(e) =>
+                                                setForm({
+                                                    ...form,
+                                                    obrigatorio_checkbox:
+                                                        e.target.checked
+                                                })
+                                            }
+                                            className="h-5 w-5"
+                                        />
+
+                                        <div>
+                                            <p className="font-bold text-xs uppercase">
+                                                Obrigatório no checklist
+                                            </p>
+
+                                            <p className="text-[11px] text-slate-500">
+                                                Este exame deve ser marcado
+                                                para liberar o botão finalizar
+                                            </p>
+                                        </div>
+                                    </label>
+                                </div>
                                 <div className="space-y-2">
                                     <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Depende de qual exame?</Label>
                                     <select

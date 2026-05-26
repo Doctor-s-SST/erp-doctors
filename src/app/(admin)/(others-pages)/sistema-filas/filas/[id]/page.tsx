@@ -479,14 +479,23 @@ export default function FilaPage() {
         }
 
 
-        // pega exames da especialidade atual
+        const { data: especialidadeAtual } = await supabase
+            .from("especialidades")
+            .select("obrigar_check_exames")
+            .eq("id", id)
+            .single();
+
+        const especialidadeObrigatoria =
+            especialidadeAtual?.obrigar_check_exames === true;
+
         const { data: examesEspecialidade } = await supabase
             .from("exames")
             .select(`
-            id,
-            nome,
-            especialidade_id
-        `)
+        id,
+        nome,
+        especialidade_id,
+        obrigatorio_checkbox
+    `)
             .eq("especialidade_id", id);
 
         // nomes dos exames da especialidade atual
@@ -496,6 +505,7 @@ export default function FilaPage() {
             ) || [];
 
         const agrupado: Record<string, any[]> = {};
+        const concluidosIniciais: Record<string, string[]> = {};
 
         atendimentosData?.forEach((atendimento: any) => {
 
@@ -504,20 +514,68 @@ export default function FilaPage() {
                 : [];
 
             // filtra somente exames da especialidade atual
-            const examesFiltrados = examesList.filter((ex: any) => {
+            const examesFiltrados = examesList
+                .map((ex: any) => {
+                    const exameSistema = examesEspecialidade?.find(
+                        e => normalizar(e.nome) === normalizar(ex.exame)
+                    );
 
-                const nomeExame = ex.exame
-                    ?.toLowerCase()
-                    .trim();
+                    if (!exameSistema) return null;
 
-                return nomesExamesEspecialidade.includes(nomeExame);
-            });
+                    return {
+                        ...ex,
+                        exame_id: exameSistema.id,
+                        obrigatorio_checkbox:
+                            exameSistema.obrigatorio_checkbox ?? true
+                    };
+                })
+                .filter(Boolean);
 
             agrupado[atendimento.id] = examesFiltrados;
+
+            // =========================
+            // AUTO MARCAR NÃO OBRIGATÓRIOS
+            // =========================
+            concluidosIniciais[atendimento.id] = examesFiltrados
+                .filter((ex: any) => {
+
+                    // PRIORIDADE:
+                    // se já existe realizado=true no banco,
+                    // respeita ele
+
+                    if (ex.realizado === true) {
+                        return true;
+                    }
+
+                    const exameSistema = examesEspecialidade?.find(
+                        e => e.id === ex.exame_id
+                    );
+
+                    const exameObrigatorio =
+                        exameSistema?.obrigatorio_checkbox === true;
+
+                    return (
+                        especialidadeObrigatoria === false &&
+                        exameObrigatorio === false
+                    );
+                })
+                .map((ex: any) => ex.exame);
         });
 
 
         setExamesPorAtendimento(agrupado);
+        setExamesConcluidos(prev => {
+            const novo = { ...prev };
+
+            Object.keys(concluidosIniciais).forEach((atendimentoId) => {
+                // só inicializa se ainda não existir
+                if (!novo[atendimentoId]) {
+                    novo[atendimentoId] = concluidosIniciais[atendimentoId];
+                }
+            });
+
+            return novo;
+        });
     }
 
     const normalizar = (texto: string) =>
@@ -542,6 +600,81 @@ export default function FilaPage() {
 
         return data.tempo_finalizacao_segundos || 20;
     };
+
+    async function salvarRealizacaoExames(
+        atendimentoId: string,
+        examesEspecialidadeAtual: any[]
+    ) {
+
+        // busca lista ORIGINAL completa
+        const { data: atendimento, error: erroBusca } = await supabase
+            .from("atendimentos")
+            .select("exames_list")
+            .eq("id", atendimentoId)
+            .single();
+
+        if (erroBusca || !atendimento) {
+            toast.error("Erro ao buscar exames");
+            return false;
+        }
+
+        const examesOriginais = Array.isArray(atendimento.exames_list)
+            ? atendimento.exames_list
+            : [];
+
+        const concluidos =
+            examesConcluidos[atendimentoId] || [];
+
+        // nomes da especialidade atual
+        const nomesEspecialidadeAtual = examesEspecialidadeAtual.map(
+            (e: any) => normalizar(e.exame)
+        );
+
+        // atualiza SOMENTE exames da especialidade atual
+        const examesAtualizados = examesOriginais.map((ex: any) => {
+
+            const pertenceEspecialidadeAtual =
+                nomesEspecialidadeAtual.includes(
+                    normalizar(ex.exame)
+                );
+
+            // mantém intacto
+            if (!pertenceEspecialidadeAtual) {
+                return ex;
+            }
+
+            // pega dados do exame atual da especialidade
+            const exameAtual = examesEspecialidadeAtual.find(
+                (e: any) =>
+                    normalizar(e.exame) === normalizar(ex.exame)
+            );
+
+            return {
+                ...ex,
+
+                // adiciona somente os novos campos
+                exame_id: exameAtual?.exame_id,
+                obrigatorio_checkbox:
+                    exameAtual?.obrigatorio_checkbox ?? false,
+
+                realizado: concluidos.includes(ex.exame)
+            };
+        });
+
+        const { error } = await supabase
+            .from("atendimentos")
+            .update({
+                exames_list: examesAtualizados
+            })
+            .eq("id", atendimentoId);
+
+        if (error) {
+            toast.error("Erro ao salvar exames");
+            return false;
+        }
+
+        return true;
+    }
 
     async function executarAcao(rpcName: string, params: any) {
         setLoadingAction(params.p_atendimento_id);
@@ -849,17 +982,27 @@ export default function FilaPage() {
                                             atendimentoId: string,
                                             exames: any[]
                                         ) => {
-                                            if (!exames.length) return true;
 
-                                            const concluidos = examesConcluidos[atendimentoId] || [];
+                                            // SOMENTE exames obrigatórios bloqueiam
+                                            const examesObrigatorios = exames.filter(
+                                                (ex: any) => ex.obrigatorio_checkbox === true
+                                            );
 
-                                            return exames.every((ex: any) =>
+                                            // não existe obrigatório -> libera
+                                            if (examesObrigatorios.length === 0) {
+                                                return true;
+                                            }
+
+                                            const concluidos =
+                                                examesConcluidos[atendimentoId] || [];
+
+                                            // todos obrigatórios precisam estar marcados
+                                            return examesObrigatorios.every((ex: any) =>
                                                 concluidos.includes(ex.exame)
                                             );
                                         };
-
                                         const examesOk = todosExamesConcluidos(
-                                            item.id,
+                                            item.atendimento_id,
                                             examesList
                                         );
 
@@ -945,8 +1088,12 @@ export default function FilaPage() {
 
                                                                             <div className="space-y-2">
                                                                                 {examesList.map((ex: any, idx: number) => {
+                                                                                    const podeEditarCheckbox =
+                                                                                        item.status === "EM_ATENDIMENTO" &&
+                                                                                        item.num_sala === session?.sala &&
+                                                                                        item.profissional === session?.profissional;
                                                                                     const checked =
-                                                                                        examesConcluidos[item.id]?.includes(ex.exame);
+                                                                                        examesConcluidos[item.atendimento_id]?.includes(ex.exame);
 
                                                                                     return (
                                                                                         <label
@@ -969,21 +1116,27 @@ export default function FilaPage() {
                         "
                                                                                         >
                                                                                             <div className="flex items-center gap-2">
+
                                                                                                 <input
                                                                                                     type="checkbox"
                                                                                                     checked={checked || false}
-                                                                                                    onChange={() =>
+                                                                                                    disabled={!podeEditarCheckbox}
+                                                                                                    onChange={() => {
+                                                                                                        if (!podeEditarCheckbox) return;
+
                                                                                                         toggleExame(
-                                                                                                            item.id,
+                                                                                                            item.atendimento_id,
                                                                                                             ex.exame
-                                                                                                        )
-                                                                                                    }
+                                                                                                        );
+                                                                                                    }}
                                                                                                     className="
-                                    w-4
-                                    h-4
-                                    accent-emerald-600
-                                    cursor-pointer
-                                "
+        w-4
+        h-4
+        accent-emerald-600
+        cursor-pointer
+        disabled:opacity-50
+        disabled:cursor-not-allowed
+    "
                                                                                                 />
 
                                                                                                 <FlaskConical className="w-3 h-3 text-emerald-500" />
@@ -991,7 +1144,7 @@ export default function FilaPage() {
                                                                                                 <span
                                                                                                     className={
                                                                                                         checked
-                                                                                                            ? "line-through opacity-60"
+                                                                                                            ? "opacity-60"
                                                                                                             : ""
                                                                                                     }
                                                                                                 >
@@ -1008,9 +1161,21 @@ export default function FilaPage() {
                                                                                     <span>Progresso</span>
 
                                                                                     <span className="text-emerald-600">
-                                                                                        {(examesConcluidos[item.id] || []).length}
+                                                                                        {
+                                                                                            (examesConcluidos[item.atendimento_id] || []).filter(nome =>
+                                                                                                examesList.some(
+                                                                                                    ex =>
+                                                                                                        ex.exame === nome &&
+                                                                                                        ex.obrigatorio_checkbox === true
+                                                                                                )
+                                                                                            ).length
+                                                                                        }
                                                                                         /
-                                                                                        {examesList.length}
+                                                                                        {
+                                                                                            examesList.filter(
+                                                                                                e => e.obrigatorio_checkbox === true
+                                                                                            ).length
+                                                                                        }
                                                                                     </span>
                                                                                 </div>
                                                                             </div>
@@ -1228,7 +1393,15 @@ export default function FilaPage() {
                                                                                             : "bg-slate-400 hover:bg-slate-400 text-white cursor-not-allowed opacity-70"
                                                                                         }
     `}
-                                                                                    onClick={() => iniciarFinalizacao(item)}
+                                                                                    onClick={async () => {
+                                                                                        const sucesso = await salvarRealizacaoExames(
+                                                                                            item.atendimento_id,
+                                                                                            examesList
+                                                                                        );
+
+                                                                                        if (!sucesso) return;
+                                                                                        iniciarFinalizacao(item)
+                                                                                    }}
                                                                                 >Finalizar
                                                                                 </Button>
                                                                                 <Button
