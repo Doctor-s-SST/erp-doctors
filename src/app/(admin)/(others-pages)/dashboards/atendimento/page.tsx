@@ -444,7 +444,7 @@ function ViewDiaria({ data }: any) {
                                 Aguardando
                             </p>
                             <p className="text-4xl font-black text-gray-900 dark:text-white italic tracking-tight leading-none">
-                                {cards.em_atendimento ?? 0}
+                                {cards.aguardando ?? 0}
                             </p>
                         </div>
                     </CardContent>

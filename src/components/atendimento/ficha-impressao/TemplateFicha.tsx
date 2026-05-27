@@ -23,7 +23,7 @@ export const TemplateFicha = forwardRef<any, any>(({ dados }, ref) => {
           <div className="col-span-8">
             <label className="text-[10px] font-semibold">Razão Social:</label>
             <div className="border border-black rounded p-1 text-[11px]">
-              {dados?.empresa?.razao_social}
+              {dados?.empresa?.codigo_empresa} - {dados?.empresa?.razao_social}
             </div>
           </div>
 
@@ -34,12 +34,6 @@ export const TemplateFicha = forwardRef<any, any>(({ dados }, ref) => {
             </div>
           </div>
 
-          <div className="col-span-2">
-            <label className="text-[10px] font-semibold">Código Empresa:</label>
-            <div className="border border-black rounded p-1 text-[11px]">
-              {dados?.empresa?.codigo_empresa}
-            </div>
-          </div>
         </div>
       </section>
 
@@ -90,22 +84,31 @@ export const TemplateFicha = forwardRef<any, any>(({ dados }, ref) => {
                 const e1 = dados.exames[i * 2];
                 const e2 = dados.exames[i * 2 + 1];
 
+                const formatarNome = (texto: string) =>
+                  texto
+                    ?.toLowerCase()
+                    .split(" ")
+                    .map(p =>
+                      p.charAt(0).toUpperCase() + p.slice(1)
+                    )
+                    .join(" ");
+
                 return (
                   <tr key={i}>
                     {/* PRIMEIRO EXAME */}
                     <td className="border border-black px-1">
                       {e1?.data || ""}
                     </td>
-                    <td className="border border-black px-1 capitalize">
-                      {e1?.exame || ""}
+                    <td className="border border-black px-1">
+                      {formatarNome(e1?.exame || "")}
                     </td>
 
                     {/* SEGUNDO EXAME */}
                     <td className="border border-black px-1">
                       {e2?.data || ""}
                     </td>
-                    <td className="border border-black px-1 capitalize">
-                      {e2?.exame || ""}
+                    <td className="border border-black px-1">
+                      {formatarNome(e2?.exame || "")}
                     </td>
                   </tr>
                 );

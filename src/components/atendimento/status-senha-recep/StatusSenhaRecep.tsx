@@ -78,7 +78,7 @@ export function StatusSenhaRecep({ isOpen, onClose, atendimento }: StatusSenhaRe
 
             {atendimento.codigo_empresa &&
               <div className="flex items-center gap-1 text-[11px] font-bold text-slate-500 uppercase">
-                <MessageCircleWarning className="w-3 h-3" /> Código Empresa: {atendimento.codigo_empresa}
+                <Building className="w-3 h-3" /> Código Empresa: {atendimento.codigo_empresa}
               </div>
             }
 

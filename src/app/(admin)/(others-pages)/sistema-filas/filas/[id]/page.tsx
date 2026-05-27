@@ -295,22 +295,22 @@ export default function FilaPage() {
                 p_sala: esp.nome,
                 p_unidade_id: unidadeId // <--- Filtro por unidade
             });
-
+            
             if (result) {
                 setData(result);
-
+                
                 const novosTimers: Record<string, number> = {};
                 const agora = Date.now();
-
+                
                 result.forEach((item: any) => {
                     if (item.finaliza_em) {
                         const fim = new Date(item.finaliza_em).getTime();
-
+                        
                         // recria timer visual
                         if (fim > agora) {
                             novosTimers[item.id] = fim;
                         }
-
+                        
                         // finaliza automaticamente (se já passou)
                         if (
                             item.finaliza_em &&
@@ -320,7 +320,7 @@ export default function FilaPage() {
                             executarAcao("finalizar_especialidade", {
                                 p_atendimento_id: item.atendimento_id,
                                 p_atendimento_exame_id: item.id,
-                                p_sala: item.sala_atual || especialidadeNome,
+                                p_sala: item.sala || especialidadeNome,
                                 p_num_sala: session?.sala,
                             });
                         }
@@ -1235,7 +1235,7 @@ export default function FilaPage() {
                                                             <Badge variant="destructive" className={`uppercase bg-green-600 text-green-100 border-none text-[10px] font-bold tracking-wider`}>
                                                                 Finalizado
                                                             </Badge>
-                                                            <span className="text-[10px] font-bold uppercase">{`${item.sala_atual} (Sala ${item.num_sala})`}</span>
+                                                            <span className="text-[10px] font-bold uppercase">{`${item.sala} (Sala ${item.num_sala})`}</span>
                                                         </div>
 
                                                     ) : isBloqueado ? (
@@ -1243,7 +1243,7 @@ export default function FilaPage() {
                                                             <Badge variant="destructive" className={`uppercase ${styles.bg} ${styles.color} border-none text-[10px] font-bold tracking-wider ${styles.animate || ""}`}>
                                                                 {styles.label}
                                                             </Badge>
-                                                            <span className="text-[10px] font-bold uppercase">{`${item.sala_atual} (Sala ${item.num_sala})`}</span>
+                                                            <span className="text-[10px] font-bold uppercase">{`${item.sala} (Sala ${item.num_sala})`}</span>
                                                         </div>
                                                     ) : (
                                                         <Badge
@@ -1326,7 +1326,7 @@ export default function FilaPage() {
                                                                         onClick={() => executarAcao("chamar_paciente_bloqueado", {
                                                                             p_atendimento_id: item.atendimento_id,
                                                                             p_atendimento_exame_id: item.id,
-                                                                            p_sala: item.sala_atual || especialidadeNome,
+                                                                            p_sala: item.sala || especialidadeNome,
                                                                             p_num_sala: session.sala,
                                                                             p_profissional: session.profissional
                                                                         })}
@@ -1411,7 +1411,7 @@ export default function FilaPage() {
                                                                                     onClick={() => executarAcao("chamar_paciente", {
                                                                                         p_atendimento_id: item.atendimento_id,
                                                                                         p_atendimento_exame_id: item.id,
-                                                                                        p_sala: item.sala_atual || especialidadeNome,
+                                                                                        p_sala: item.sala || especialidadeNome,
                                                                                         p_num_sala: session.sala,
                                                                                         p_profissional: session.profissional,
                                                                                     })}
