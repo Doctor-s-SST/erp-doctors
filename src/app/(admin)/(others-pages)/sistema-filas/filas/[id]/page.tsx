@@ -383,7 +383,7 @@ export default function FilaPage() {
         if (!unidadeId) return;
         fetchFila()
 
-        const interval = setInterval(fetchFila, 3000)
+        const interval = setInterval(fetchFila, 10000)
         // const channel = supabase.channel(`fila-${id}`).on("postgres_changes", { event: "*", schema: "public", table: "atendimento_exames" }, () => fetchFila()).subscribe()
         // const fetchExames = async () => {
         //     const { data } = await supabase.from('exames').select('*');

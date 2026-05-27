@@ -427,7 +427,7 @@ export default function RecepcaoPage() {
         fetchData();
         const interval = setInterval(() => {
             fetchData(unidadeId);
-        }, 3000);
+        }, 10000);
 
         return () => clearInterval(interval);
     }, [unidadeId]);
