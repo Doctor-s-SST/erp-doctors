@@ -295,22 +295,22 @@ export default function FilaPage() {
                 p_sala: esp.nome,
                 p_unidade_id: unidadeId // <--- Filtro por unidade
             });
-            
+
             if (result) {
                 setData(result);
-                
+
                 const novosTimers: Record<string, number> = {};
                 const agora = Date.now();
-                
+
                 result.forEach((item: any) => {
                     if (item.finaliza_em) {
                         const fim = new Date(item.finaliza_em).getTime();
-                        
+
                         // recria timer visual
                         if (fim > agora) {
                             novosTimers[item.id] = fim;
                         }
-                        
+
                         // finaliza automaticamente (se já passou)
                         if (
                             item.finaliza_em &&
@@ -379,21 +379,62 @@ export default function FilaPage() {
         return () => clearInterval(interval);
     }, [inicioAtendimento, atendimentoAtualId]);
 
+    // useEffect(() => {
+    //     if (!unidadeId) return;
+    //     fetchFila()
+
+    //     const interval = setInterval(fetchFila, 10000)
+    //     // const channel = supabase.channel(`fila-${id}`).on("postgres_changes", { event: "*", schema: "public", table: "atendimento_exames" }, () => fetchFila()).subscribe()
+    //     // const fetchExames = async () => {
+    //     //     const { data } = await supabase.from('exames').select('*');
+    //     //     if (data) setListaGlobalExames(data);
+    //     // };
+    //     // fetchExames();
+
+
+    //     return () => { clearInterval(interval); /*supabase.removeChannel(channel)*/ }
+    // }, [id, unidadeId])
+
     useEffect(() => {
-        if (!unidadeId) return;
-        fetchFila()
+    if (!unidadeId) return;
 
-        const interval = setInterval(fetchFila, 10000)
-        // const channel = supabase.channel(`fila-${id}`).on("postgres_changes", { event: "*", schema: "public", table: "atendimento_exames" }, () => fetchFila()).subscribe()
-        // const fetchExames = async () => {
-        //     const { data } = await supabase.from('exames').select('*');
-        //     if (data) setListaGlobalExames(data);
-        // };
-        // fetchExames();
+    // 1. Faz a busca inicial ao carregar a tela
+    fetchFila();
 
+    // 2. Cria o canal Realtime (Para quem estiver fora do bloqueio de rede)
+    const channel = supabase
+        .channel(`fila-especialidade-${id}`)
+        .on(
+            "postgres_changes",
+            {
+                event: "*", // Escuta INSERT, UPDATE e DELETE
+                schema: "public",
+                table: "atendimento_exames"
+            },
+            (payload) => {
+                // Se o WebSocket funcionar, atualiza instantaneamente
+                fetchFila();
+            }
+        )
+        .subscribe();
 
-        return () => { clearInterval(interval); /*supabase.removeChannel(channel)*/ }
-    }, [id, unidadeId])
+    // 3. Mecanismo de Contingência (Polling Seguro):
+    // Se o WebSocket falhar por causa do DNS Filter, este intervalo garante 
+    // que a fila atualize a cada 15 segundos de forma silenciosa e estável.
+    const fallbackInterval = setInterval(() => {
+        // Opcional: Só executa se o canal do realtime não estiver conectado 
+        // (Evita requisições duplicadas se o celular estiver no 4G voando baixo)
+        if (channel.state !== "joined") {
+            fetchFila();
+        }
+    }, 10000); // 15 segundos é o tempo ideal para manter o banco leve
+
+    // 4. Cleanup completo
+    return () => {
+        supabase.removeChannel(channel);
+        clearInterval(fallbackInterval);
+    };
+}, [id, unidadeId]);
 
     useEffect(() => {
         const initialize = async () => {
