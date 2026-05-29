@@ -421,16 +421,45 @@ export default function RecepcaoPage() {
         }
     }
 
+    // useEffect(() => {
+    //     if (!unidadeId) return;
+
+    //     fetchData();
+    //     const interval = setInterval(() => {
+    //         fetchData(unidadeId);
+    //     }, 10000);
+
+    //     return () => clearInterval(interval);
+    // }, [unidadeId]);
+
     useEffect(() => {
-        if (!unidadeId) return;
+    if (!unidadeId) return;
 
+    // 1. Busca inicial ao carregar a página
+    fetchData(); // ou fetchData() no painel da recepção
+
+    // 2. Conecta no seu microsserviço SSE local rodando na VPS
+    const eventSource = new EventSource(`https://doctors-distribuidor-sse.cgalnz.easypanel.host/stream-fila?unidadeId=${unidadeId}`);
+
+    // 3. Recebe o comando de atualização do servidor
+    eventSource.onmessage = (event) => {
+        const parsed = JSON.parse(event.data);
+        if (parsed.atualiza) {
+            fetchData(); // Executa o fetch focado
+        }
+    };
+
+    // 4. Se a internet oscilar, o fallback de 3 minutos garante a segurança
+    const fallbackInterval = setInterval(() => {
         fetchData();
-        const interval = setInterval(() => {
-            fetchData(unidadeId);
-        }, 10000);
+    }, 180000);
 
-        return () => clearInterval(interval);
-    }, [unidadeId]);
+    // Cleanup perfeito
+    return () => {
+        eventSource.close();
+        clearInterval(fallbackInterval);
+    };
+}, [unidadeId]);
 
     async function salvarSessao() {
         if (!session?.guiche || !session?.nome) return toast.warning("Preencha todos os campos")
@@ -897,7 +926,6 @@ export default function RecepcaoPage() {
                 id: toastId
                 
             });
-            console.log(formFicha)
         } catch (error) {
             toast.error("Falha ao buscar ficha", {
                 id: toastId

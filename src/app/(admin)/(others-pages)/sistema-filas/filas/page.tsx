@@ -87,9 +87,6 @@ export default function SelecionarFila() {
         .eq("unidade_id", currentUnidadeId)
         .order("numero");
 
-      console.log("SALAS:", sls)
-      console.log("ERRO:", salasError) // Filtro crucial
-
       const { data: profs } = await supabase
         .from("profissionais")
         .select(`
@@ -111,7 +108,6 @@ export default function SelecionarFila() {
       );
 
     } catch (error) {
-      console.error(error);
       toast.error("Erro ao carregar dados");
     } finally {
       setLoading(false);

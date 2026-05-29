@@ -130,14 +130,47 @@ export default function FilaPage() {
         return () => clearInterval(interval);
     }, []);
 
-    const getTempoRestante = (id: string) => {
-        const fim = finalizandoIds[id];
+    const finalizarAutomaticamente = async (item: any) => {
+        try {
+            await executarAcao("finalizar_especialidade", {
+                p_atendimento_id: item.atendimento_id,
+                p_atendimento_exame_id: item.id,
+                p_sala: item.sala || especialidadeNome,
+                p_num_sala: session?.sala,
+            });
+
+            // remove timer local imediatamente
+            setFinalizandoIds((prev) => {
+                const copia = { ...prev };
+                delete copia[item.id];
+                return copia;
+            });
+
+            // atualização otimista
+            setData((prev: any[]) =>
+                prev.map((i) =>
+                    i.id === item.id
+                        ? { ...i, status: "FINALIZADO" }
+                        : i
+                )
+            );
+
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    const getTempoRestante = (itemId: string) => {
+        const fim = finalizandoIds[itemId];
         if (!fim) return null;
 
-        const segundos = Math.max(
-            0,
-            Math.floor((fim - now) / 1000)
-        );
+        const agora = Date.now();
+        const segundos = Math.floor((fim - agora) / 1000);
+
+        // Se o tempo acabou ou passou do ponto, limpa do estado local na hora
+        if (segundos <= 0) {
+            return 0;
+        }
 
         return segundos;
     };
@@ -301,33 +334,40 @@ export default function FilaPage() {
 
                 const novosTimers: Record<string, number> = {};
                 const agora = Date.now();
+                let houveFinalizacaoAutomatica = false;
 
                 result.forEach((item: any) => {
                     if (item.finaliza_em) {
                         const fim = new Date(item.finaliza_em).getTime();
 
-                        // recria timer visual
                         if (fim > agora) {
+                            // Se ainda tem tempo, mantém o timer ativo na tela
                             novosTimers[item.id] = fim;
-                        }
+                        } 
+                        // else if (item.status !== "FINALIZADO") {
+                        //     // O tempo acabou E o status no banco ainda não atualizou localmente
+                        //     houveFinalizacaoAutomatica = true;
 
-                        // finaliza automaticamente (se já passou)
-                        if (
-                            item.finaliza_em &&
-                            fim <= agora &&
-                            item.status !== "FINALIZADO"
-                        ) {
-                            executarAcao("finalizar_especialidade", {
-                                p_atendimento_id: item.atendimento_id,
-                                p_atendimento_exame_id: item.id,
-                                p_sala: item.sala || especialidadeNome,
-                                p_num_sala: session?.sala,
-                            });
-                        }
+                        //     executarAcao("finalizar_especialidade", {
+                        //         p_atendimento_id: item.atendimento_id,
+                        //         p_atendimento_exame_id: item.id,
+                        //         p_sala: item.sala || especialidadeNome,
+                        //         p_num_sala: session?.sala,
+                        //     });
+                        // }
                     }
                 });
 
+                // Atualiza o estado apenas com os temporizadores que AINDA estão correndo
                 setFinalizandoIds(novosTimers);
+
+                // Se disparou uma finalização, força uma nova busca rápida após 1 segundo
+                // para garantir que a tela receba o novo status "FINALIZADO" do banco
+                // if (houveFinalizacaoAutomatica) {
+                //     setTimeout(() => {
+                //         fetchFila();
+                //     }, 1200);
+                // }
             }
         } catch (err) {
         } finally {
@@ -396,45 +436,33 @@ export default function FilaPage() {
     // }, [id, unidadeId])
 
     useEffect(() => {
-    if (!unidadeId) return;
+        if (!unidadeId) return;
 
-    // 1. Faz a busca inicial ao carregar a tela
-    fetchFila();
+        // 1. Busca inicial ao carregar a página
+        fetchFila(); // ou fetchData() no painel da recepção
 
-    // 2. Cria o canal Realtime (Para quem estiver fora do bloqueio de rede)
-    const channel = supabase
-        .channel(`fila-especialidade-${id}`)
-        .on(
-            "postgres_changes",
-            {
-                event: "*", // Escuta INSERT, UPDATE e DELETE
-                schema: "public",
-                table: "atendimento_exames"
-            },
-            (payload) => {
-                // Se o WebSocket funcionar, atualiza instantaneamente
-                fetchFila();
+        // 2. Conecta no seu microsserviço SSE local rodando na VPS
+        const eventSource = new EventSource(`https://doctors-distribuidor-sse.cgalnz.easypanel.host/stream-fila?unidadeId=${unidadeId}`);
+
+        // 3. Recebe o comando de atualização do servidor
+        eventSource.onmessage = (event) => {
+            const parsed = JSON.parse(event.data);
+            if (parsed.atualiza) {
+                fetchFila(); // Executa o fetch focado
             }
-        )
-        .subscribe();
+        };
 
-    // 3. Mecanismo de Contingência (Polling Seguro):
-    // Se o WebSocket falhar por causa do DNS Filter, este intervalo garante 
-    // que a fila atualize a cada 15 segundos de forma silenciosa e estável.
-    const fallbackInterval = setInterval(() => {
-        // Opcional: Só executa se o canal do realtime não estiver conectado 
-        // (Evita requisições duplicadas se o celular estiver no 4G voando baixo)
-        if (channel.state !== "joined") {
+        // 4. Se a internet oscilar, o fallback de 3 minutos garante a segurança
+        const fallbackInterval = setInterval(() => {
             fetchFila();
-        }
-    }, 10000); // 15 segundos é o tempo ideal para manter o banco leve
+        }, 180000);
 
-    // 4. Cleanup completo
-    return () => {
-        supabase.removeChannel(channel);
-        clearInterval(fallbackInterval);
-    };
-}, [id, unidadeId]);
+        // Cleanup perfeito
+        return () => {
+            eventSource.close();
+            clearInterval(fallbackInterval);
+        };
+    }, [id, unidadeId]);
 
     useEffect(() => {
         const initialize = async () => {
@@ -736,6 +764,20 @@ export default function FilaPage() {
         }
         setLoadingAction(null);
     }
+
+    useEffect(() => {
+        dadosProcessados.forEach((item: any) => {
+            const fim = finalizandoIds[item.id];
+
+            if (!fim) return;
+
+            const agora = Date.now();
+
+            if (agora >= fim) {
+                finalizarAutomaticamente(item);
+            }
+        });
+    }, [now]);
 
     const dadosProcessados = useMemo(() => {
         let lista = [...data];

@@ -126,39 +126,94 @@ export default function PainelTV() {
   }, [fila, processando, unidadeId, ativado]);
 
   // 3. BUSCA COM INTERCALAÇÃO (Zip-Merge)
+  // useEffect(() => {
+  //   if (!unidadeId) return;
+
+  //   const fetchDados = async () => {
+  //     try {
+  //       const { data: rec } = await supabase.from('atendimentos').select('id, senha_codigo, guiche, updated_at, pacientes(nome)').eq('status', 'EM_FILA').eq('unidade_id', unidadeId).order('updated_at', { ascending: true });
+  //       const { data: exm } = await supabase.from('atendimento_exames').select(`id, num_sala, atendimentos!inner(senha_codigo, updated_at, unidade_id, pacientes(nome))`).eq('status', 'EM_FILA').eq('atendimentos.unidade_id', unidadeId).order('atendimentos(updated_at)', { ascending: true });
+
+  //       const lRec: Chamada[] = rec?.map(r => ({ id: r.id, senha_codigo: r.senha_codigo, nome_paciente: (r.pacientes as any)?.nome, guiche: r.guiche, origem: 'RECEPCAO', updated_at: r.updated_at })) || [];
+  //       const lExm: Chamada[] = exm?.map(e => {
+  //         const a = Array.isArray(e.atendimentos) ? e.atendimentos[0] : (e.atendimentos as any);
+  //         return { id: e.id, senha_codigo: a.senha_codigo, nome_paciente: a.pacientes?.nome, guiche: e.num_sala, origem: 'EXAME', updated_at: a.updated_at };
+  //       }) || [];
+
+  //       const intercalados: Chamada[] = [];
+  //       const max = Math.max(lRec.length, lExm.length);
+  //       for (let i = 0; i < max; i++) {
+  //         if (lRec[i]) intercalados.push(lRec[i]);
+  //         if (lExm[i]) intercalados.push(lExm[i]);
+  //       }
+
+  //       if (intercalados.length > 0) {
+  //         setFila(prev => {
+  //           const ids = new Set(prev.map(p => p.id));
+  //           return [...prev, ...intercalados.filter(n => !ids.has(n.id))];
+  //         });
+  //       }
+  //     } catch (e) { console.error(e); }
+  //   };
+
+  //   fetchDados();
+  //   const inv = setInterval(fetchDados, 4000);
+  //   return () => clearInterval(inv);
+  // }, [unidadeId]);
+
+  const fetchDados = async () => {
+    try {
+      const { data: rec } = await supabase.from('atendimentos').select('id, senha_codigo, guiche, updated_at, pacientes(nome)').eq('status', 'EM_FILA').eq('unidade_id', unidadeId).order('updated_at', { ascending: true });
+      const { data: exm } = await supabase.from('atendimento_exames').select(`id, num_sala, atendimentos!inner(senha_codigo, updated_at, unidade_id, pacientes(nome))`).eq('status', 'EM_FILA').eq('atendimentos.unidade_id', unidadeId).order('atendimentos(updated_at)', { ascending: true });
+
+      const lRec: Chamada[] = rec?.map(r => ({ id: r.id, senha_codigo: r.senha_codigo, nome_paciente: (r.pacientes as any)?.nome, guiche: r.guiche, origem: 'RECEPCAO', updated_at: r.updated_at })) || [];
+      const lExm: Chamada[] = exm?.map(e => {
+        const a = Array.isArray(e.atendimentos) ? e.atendimentos[0] : (e.atendimentos as any);
+        return { id: e.id, senha_codigo: a.senha_codigo, nome_paciente: a.pacientes?.nome, guiche: e.num_sala, origem: 'EXAME', updated_at: a.updated_at };
+      }) || [];
+
+      const intercalados: Chamada[] = [];
+      const max = Math.max(lRec.length, lExm.length);
+      for (let i = 0; i < max; i++) {
+        if (lRec[i]) intercalados.push(lRec[i]);
+        if (lExm[i]) intercalados.push(lExm[i]);
+      }
+
+      if (intercalados.length > 0) {
+        setFila(prev => {
+          const ids = new Set(prev.map(p => p.id));
+          return [...prev, ...intercalados.filter(n => !ids.has(n.id))];
+        });
+      }
+    } catch (e) { console.error(e); }
+  };
+  // 3. BUSCA COM INTERCALAÇÃO (Zip-Merge)
   useEffect(() => {
     if (!unidadeId) return;
 
-    const fetchDados = async () => {
-      try {
-        const { data: rec } = await supabase.from('atendimentos').select('id, senha_codigo, guiche, updated_at, pacientes(nome)').eq('status', 'EM_FILA').eq('unidade_id', unidadeId).order('updated_at', { ascending: true });
-        const { data: exm } = await supabase.from('atendimento_exames').select(`id, num_sala, atendimentos!inner(senha_codigo, updated_at, unidade_id, pacientes(nome))`).eq('status', 'EM_FILA').eq('atendimentos.unidade_id', unidadeId).order('atendimentos(updated_at)', { ascending: true });
+    // busca inicial
+    fetchDados();
 
-        const lRec: Chamada[] = rec?.map(r => ({ id: r.id, senha_codigo: r.senha_codigo, nome_paciente: (r.pacientes as any)?.nome, guiche: r.guiche, origem: 'RECEPCAO', updated_at: r.updated_at })) || [];
-        const lExm: Chamada[] = exm?.map(e => {
-          const a = Array.isArray(e.atendimentos) ? e.atendimentos[0] : (e.atendimentos as any);
-          return { id: e.id, senha_codigo: a.senha_codigo, nome_paciente: a.pacientes?.nome, guiche: e.num_sala, origem: 'EXAME', updated_at: a.updated_at };
-        }) || [];
+    const eventSource = new EventSource(
+      `https://doctors-distribuidor-sse.cgalnz.easypanel.host/stream-fila?unidadeId=${unidadeId}`
+    );
 
-        const intercalados: Chamada[] = [];
-        const max = Math.max(lRec.length, lExm.length);
-        for (let i = 0; i < max; i++) {
-          if (lRec[i]) intercalados.push(lRec[i]);
-          if (lExm[i]) intercalados.push(lExm[i]);
-        }
+    eventSource.onmessage = (event) => {
+      const parsed = JSON.parse(event.data);
 
-        if (intercalados.length > 0) {
-          setFila(prev => {
-            const ids = new Set(prev.map(p => p.id));
-            return [...prev, ...intercalados.filter(n => !ids.has(n.id))];
-          });
-        }
-      } catch (e) { console.error(e); }
+      if (parsed.atualiza) {
+        console.log("Atualizando painel TV...");
+        fetchDados();
+      }
     };
 
-    fetchDados();
-    const inv = setInterval(fetchDados, 4000);
-    return () => clearInterval(inv);
+    eventSource.onerror = (err) => {
+      console.error("Erro SSE:", err);
+    };
+
+    return () => {
+      eventSource.close();
+    };
   }, [unidadeId]);
 
   useEffect(() => {

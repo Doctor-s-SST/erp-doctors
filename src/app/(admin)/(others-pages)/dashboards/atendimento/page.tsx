@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/lib/supabase"
 import { format, startOfMonth, endOfMonth } from "date-fns"
 import { ptBR } from "date-fns/locale"
@@ -42,7 +42,7 @@ import { resolveDashboardAnalytics } from "@/lib/dashboard-analytics"
 type ViewType = "geral" | "diario" | "mensal"
 
 export default function DashboardPage() {
-    const [view, setView] = useState<ViewType>("geral")
+    const [view, setView] = useState<ViewType>("diario")
     const [unidadeId, setUnidadeId] = useState("")
 
     // Estados de Filtro
@@ -98,21 +98,15 @@ export default function DashboardPage() {
             })
 
             if (error) throw error
-
             return data
         },
 
-        refetchInterval: pollingActive ? 3000 : false,
+        // O polling cego SAI daqui!
+        refetchInterval: false,
 
         enabled: !!unidadeId,
-
-        //mantém dados anteriores durante refetch
         placeholderData: (previousData) => previousData,
-
-        // evita loading piscando
         staleTime: 2000,
-
-        // evita re-render inútil
         refetchOnWindowFocus: false,
     })
 
@@ -136,6 +130,39 @@ export default function DashboardPage() {
             // mantém range atual (NÃO resetar)
         }
     }
+
+    const queryClient = useQueryClient();
+
+    useEffect(() => {
+        // Só abre o canal SSE se a unidade estiver carregada e se o filtro for para "hoje"
+        if (!unidadeId || !pollingActive) return;
+
+        // Conecta no seu distribuidor Node.js na VPS
+        const eventSource = new EventSource(
+            `https://doctors-distribuidor-sse.cgalnz.easypanel.host/stream-fila?unidadeId=${unidadeId}`
+        );
+
+        eventSource.onmessage = (event) => {
+            const parsed = JSON.parse(event.data);
+
+            if (parsed.atualiza) {
+                // Força o TanStack Query a atualizar as queries que começam com o prefixo ['dashboard']
+                queryClient.invalidateQueries({
+                    queryKey: ['dashboard']
+                });
+            }
+        };
+
+        eventSource.onerror = (err) => {
+            console.error("Erro ou desconexão no SSE do Dashboard:", err);
+        };
+
+        // Cleanup: Fecha a conexão SSE se trocar de unidade, mudar a data para o passado, ou sair da tela
+        return () => {
+            eventSource.close();
+        };
+    }, [unidadeId, pollingActive, queryClient]);
+
     // if (isLoading) return <LoadingScreen />
 
     return (
@@ -148,7 +175,7 @@ export default function DashboardPage() {
                         <Activity className={cn("w-5 h-5", pollingActive && "animate-pulse")} />
                     </div>
                     <div>
-                        <h1 className="text-lg font-black text-white uppercase tracking-tight">Dashboard - Depto. Atendimento</h1>
+                        <h1 className="text-lg font-black text-white uppercase tracking-tight">Dashboard diário</h1>
                         <div className="flex items-center gap-2">
                             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                             <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Atualizado em tempo real</p>
@@ -160,9 +187,9 @@ export default function DashboardPage() {
                     {/* TABS DE VISUALIZAÇÃO */}
                     <Tabs value={view} onValueChange={(v) => handleViewChange(v as ViewType)} className="bg-gray-800 p-1 rounded-lg border border-gray-700">
                         <TabsList className="bg-transparent h-8 gap-1">
-                            <TabsTrigger value="geral" className="data-[state=active]:bg-emerald-600 text-[10px] uppercase text-white font-bold">Geral</TabsTrigger>
+                            {/* <TabsTrigger value="geral" className="data-[state=active]:bg-emerald-600 text-[10px] uppercase text-white font-bold">Geral</TabsTrigger> */}
                             <TabsTrigger value="diario" className="data-[state=active]:bg-blue-600 text-[10px] uppercase text-white font-bold">Diário</TabsTrigger>
-                            <TabsTrigger value="mensal" className="data-[state=active]:bg-purple-600 text-[10px] uppercase text-white font-bold">Mensal</TabsTrigger>
+                            {/* <TabsTrigger value="mensal" className="data-[state=active]:bg-purple-600 text-[10px] uppercase text-white font-bold">Mensal</TabsTrigger> */}
                         </TabsList>
                     </Tabs>
 
@@ -266,9 +293,9 @@ export default function DashboardPage() {
             </header>
 
             {/* CONTEÚDO DINÂMICO BASEADO NA VIEW */}
-            {view === "geral" && <ViewGeral data={data} />}
+            {/* {view === "geral" && <ViewGeral data={data} />} */}
             {view === "diario" && <ViewDiaria data={data} />}
-            {view === "mensal" && <ViewMensal data={data} />}
+            {/* {view === "mensal" && <ViewMensal data={data} />} */}
         </div>
     )
 }
@@ -287,116 +314,116 @@ function formatMinutos(min: number | null | undefined): string {
 /* ============================================================
    VIEW GERAL
 ============================================================ */
-export function ViewGeral({ data }: { data: any }) {
-    const analytics = resolveDashboardAnalytics(data)
-    const cards = analytics.cards
-    const permanencia = analytics.tempos.permanencia
-    const salasPorEspecialidade = (analytics.distribuicoes.salasTodas || []).map((item) => ({
-        sala: `${item.sala} - ${item.especialidade}`,
-        especialidade: item.especialidade,
-        total: item.total ?? 0,
-    }))
+// export function ViewGeral({ data }: { data: any }) {
+//     const analytics = resolveDashboardAnalytics(data)
+//     const cards = analytics.cards
+//     const permanencia = analytics.tempos.permanencia
+//     const salasPorEspecialidade = (analytics.distribuicoes.salasTodas || []).map((item) => ({
+//         sala: `${item.sala} - ${item.especialidade}`,
+//         especialidade: item.especialidade,
+//         total: item.total ?? 0,
+//     }))
 
-    // total acumulado = todos que passaram da recepção
-    const acumulado: number = cards.acumulado ?? 0
-    const geradas: number = cards.geradas ?? 0
-    const finalizadas: number = cards.finalizadas ?? 0
-    const emAtendimento: number = cards.em_atendimento ?? 0
-    const aguardando: number = cards.aguardando ?? 0
-    const cancelados: number = cards.cancelados ?? 0
+//     // total acumulado = todos que passaram da recepção
+//     const acumulado: number = cards.acumulado ?? 0
+//     const geradas: number = cards.geradas ?? 0
+//     const finalizadas: number = cards.finalizadas ?? 0
+//     const emAtendimento: number = cards.em_atendimento ?? 0
+//     const aguardando: number = cards.aguardando ?? 0
+//     const cancelados: number = cards.cancelados ?? 0
 
-    const mediaMin: number | null = permanencia.media_minutos ?? null
-    const amostras: number = permanencia.total_amostras ?? 0
+//     const mediaMin: number | null = permanencia.media_minutos ?? null
+//     const amostras: number = permanencia.total_amostras ?? 0
 
-    // taxa de conclusão (finalizados / acumulados)
-    const taxaConclusao = acumulado > 0
-        ? `${Math.round((finalizadas / acumulado) * 100)}%`
-        : "—"
+//     // taxa de conclusão (finalizados / acumulados)
+//     const taxaConclusao = acumulado > 0
+//         ? `${Math.round((finalizadas / acumulado) * 100)}%`
+//         : "—"
 
-    return (
-        <div className="space-y-6">
+//     return (
+//         <div className="space-y-6">
 
-            {/* ── CARDS ── */}
-            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+//             {/* ── CARDS ── */}
+//             <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
 
-                {/* Senhas Geradas */}
-                <CardMetric
-                    title="Senhas Geradas"
-                    value={geradas}
-                    sub={`Total do período`}
-                    icon={<Hash className="w-5 h-5" />}
-                    color="emerald"
-                />
+//                 {/* Senhas Geradas */}
+//                 <CardMetric
+//                     title="Senhas Geradas"
+//                     value={geradas}
+//                     sub={`Total do período`}
+//                     icon={<Hash className="w-5 h-5" />}
+//                     color="emerald"
+//                 />
 
-                {/* Acumulado de Atendimentos */}
-                <CardMetric
-                    title="Acumulado"
-                    value={acumulado}
-                    sub={`Total do período`}
-                    icon={<Users className="w-5 h-5" />}
-                    color="blue"
-                    badge={cancelados > 0 ? { label: `${cancelados} cancelados`, color: "text-red-400" } : undefined}
-                />
+//                 {/* Acumulado de Atendimentos */}
+//                 <CardMetric
+//                     title="Acumulado"
+//                     value={acumulado}
+//                     sub={`Total do período`}
+//                     icon={<Users className="w-5 h-5" />}
+//                     color="blue"
+//                     badge={cancelados > 0 ? { label: `${cancelados} cancelados`, color: "text-red-400" } : undefined}
+//                 />
 
-                {/* Tempo Médio de Permanência */}
-                <CardMetric
-                    title="Tempo de Permanência"
-                    value={formatMinutos(mediaMin)}
-                    sub={amostras > 0 ? `Média de ${amostras} atendimentos finalizados` : "Sem dados finalizados"}
-                    icon={<Clock className="w-5 h-5" />}
-                    color="amber"
-                />
+//                 {/* Tempo Médio de Permanência */}
+//                 <CardMetric
+//                     title="Tempo de Permanência"
+//                     value={formatMinutos(mediaMin)}
+//                     sub={amostras > 0 ? `Média de ${amostras} atendimentos finalizados` : "Sem dados finalizados"}
+//                     icon={<Clock className="w-5 h-5" />}
+//                     color="amber"
+//                 />
 
-            </div>
+//             </div>
 
-            {/* ── CONTEÚDO RECEPÇÃO + ESPECIALIDADES ── */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <CardViewSimple
-                    title="Recepção"
-                    chart={<GraficoPizza
-                        data={analytics.distribuicoes.recepcao || []}
-                        aguardandoExterno={aguardando}
-                        mode="recepcaoGeral"
-                    />}
-                />
-                <CardViewSimple
-                    title="Especialidades"
-                    chart={<GraficoAtendimentosPorEsp data={analytics.distribuicoes.especialidades} />}
-                />
-                <CardViewSimple
-                    title="Atendimentos por Sala"
-                    chart={<GraficoAtendimentosPorSala data={salasPorEspecialidade} />}
-                />
-                <CardViewSimple
-                    title="Tempo Médio por Especialidade"
-                    chart={<GraficoTempoMedioEsp data={analytics.distribuicoes.especialidades} />}
-                />
-                <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-2xl overflow-hidden">
-                    <CardHeader className="bg-slate-50/50 dark:bg-white/[0.02] border-b dark:border-gray-800">
-                        <CardTitle className="text-xs font-black uppercase flex items-center gap-2">
-                            <BarChart3 className="w-4 h-4 text-emerald-500" />
-                            Fluxo de Atendimento por Horário
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="pt-6">
-                        <div className="h-[300px]">
-                            <GraficoAtendimentosHora data={analytics.series.fluxoHora} />
-                        </div>
-                    </CardContent>
-                </Card>
-                <CardViewSimple
-                    title="Top 10 Empresas"
-                    chart={<GraficoTopEmpresas data={analytics.pacientes.topEmpresas} />}
-                />
-                <CardViewSimple
-                    title="Clínico/Triagem x Complementar"
-                    chart={<GraficoTipoAtendimentoPaciente data={analytics.pacientes.tipoAtendimento} />}
-                />
-            </div>
+//             {/* ── CONTEÚDO RECEPÇÃO + ESPECIALIDADES ── */}
+//             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+//                 <CardViewSimple
+//                     title="Recepção"
+//                     chart={<GraficoPizza
+//                         data={analytics.distribuicoes.recepcao || []}
+//                         aguardandoExterno={aguardando}
+//                         mode="recepcaoGeral"
+//                     />}
+//                 />
+//                 <CardViewSimple
+//                     title="Especialidades"
+//                     chart={<GraficoAtendimentosPorEsp data={analytics.distribuicoes.especialidades} />}
+//                 />
+//                 <CardViewSimple
+//                     title="Atendimentos por Sala"
+//                     chart={<GraficoAtendimentosPorSala data={salasPorEspecialidade} />}
+//                 />
+//                 <CardViewSimple
+//                     title="Tempo Médio por Especialidade"
+//                     chart={<GraficoTempoMedioEsp data={analytics.distribuicoes.especialidades} />}
+//                 />
+//                 <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-2xl overflow-hidden">
+//                     <CardHeader className="bg-slate-50/50 dark:bg-white/[0.02] border-b dark:border-gray-800">
+//                         <CardTitle className="text-xs font-black uppercase flex items-center gap-2">
+//                             <BarChart3 className="w-4 h-4 text-emerald-500" />
+//                             Fluxo de Atendimento por Horário
+//                         </CardTitle>
+//                     </CardHeader>
+//                     <CardContent className="pt-6">
+//                         <div className="h-[300px]">
+//                             <GraficoAtendimentosHora data={analytics.series.fluxoHora} />
+//                         </div>
+//                     </CardContent>
+//                 </Card>
+//                 <CardViewSimple
+//                     title="Top 10 Empresas"
+//                     chart={<GraficoTopEmpresas data={analytics.pacientes.topEmpresas} />}
+//                 />
+//                 <CardViewSimple
+//                     title="Clínico/Triagem x Complementar"
+//                     chart={<GraficoTipoAtendimentoPaciente data={analytics.pacientes.tipoAtendimento} />}
+//                 />
+//             </div>
 
-        </div>
-    )
-}
+//         </div>
+//     )
+// }
 
 /* ==========================================================================
    VIEW DIÁRIA (Foco em Pizza e Senhas)
@@ -508,23 +535,23 @@ function ViewDiaria({ data }: any) {
 /* ==========================================================================
    VIEW MENSAL
    ========================================================================== */
-function ViewMensal({ data }: any) {
-    return (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card className="lg:col-span-2 dark:bg-gray-900 border-gray-800">
-                <CardHeader>
-                    <CardTitle className="text-xs font-black uppercase">Volume Mensal Consolidado</CardTitle>
-                </CardHeader>
-                <CardContent className="h-[400px]">
-                    {/* Aqui entraria um gráfico de Barras por Dia do Mês */}
-                    <div className="flex items-center justify-center h-full text-gray-600 font-mono text-[10px] uppercase tracking-widest">
-                        <GraficoAtendimentosHora data={data?.volumeDiario} />
-                    </div>
-                </CardContent>
-            </Card>
-        </div>
-    )
-}
+// function ViewMensal({ data }: any) {
+//     return (
+//         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+//             <Card className="lg:col-span-2 dark:bg-gray-900 border-gray-800">
+//                 <CardHeader>
+//                     <CardTitle className="text-xs font-black uppercase">Volume Mensal Consolidado</CardTitle>
+//                 </CardHeader>
+//                 <CardContent className="h-[400px]">
+//                     {/* Aqui entraria um gráfico de Barras por Dia do Mês */}
+//                     <div className="flex items-center justify-center h-full text-gray-600 font-mono text-[10px] uppercase tracking-widest">
+//                         <GraficoAtendimentosHora data={data?.volumeDiario} />
+//                     </div>
+//                 </CardContent>
+//             </Card>
+//         </div>
+//     )
+// }
 
 /* ==========================================================================
    HELPERS / SUBCOMPONENTS
