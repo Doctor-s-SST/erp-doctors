@@ -423,52 +423,41 @@ export default function RecepcaoPage() {
         }
     }
 
-    // useEffect(() => {
-    //     if (!unidadeId) return;
-
-    //     fetchData();
-    //     const interval = setInterval(() => {
-    //         fetchData(unidadeId);
-    //     }, 10000);
-
-    //     return () => clearInterval(interval);
-    // }, [unidadeId]);
-
     useEffect(() => {
         if (!unidadeId) return;
 
-        fetchData();
+        // fetchData();
 
         const eventSource = new EventSource(
-            `https://doctors-distribuidor-sse.cgalnz.easypanel.host/stream-fila?unidadeId=${unidadeId}`
+            `https://doctors-distribuidor-teste.cgalnz.easypanel.host/stream-fila` +
+            `?tipo=recepcao` +
+            `&unidadeId=${unidadeId}`
         );
 
-        eventSource.onmessage = () => {
+        eventSource.onmessage = (event) => {
 
-            if (debounceRef.current) {
-                clearTimeout(debounceRef.current);
+            try {
+
+                const payload = JSON.parse(event.data);
+                console.log("sse recep teste", payload)
+                if (payload.tipo === 'recepcao') {
+                    setData(payload.dados);
+                }
+
+            } catch (err) {
+                console.error('Erro SSE:', err);
             }
-
-            debounceRef.current = setTimeout(() => {
-                fetchData();
-            }, 500);
 
         };
 
-        const fallbackInterval = setInterval(() => {
-            fetchData();
-        }, 180000);
+        eventSource.onerror = (err) => {
+            console.error('Erro SSE:', err);
+        };
 
         return () => {
-
-            if (debounceRef.current) {
-                clearTimeout(debounceRef.current);
-            }
-
             eventSource.close();
-            clearInterval(fallbackInterval);
-
         };
+
 
     }, [unidadeId]);
 
@@ -484,7 +473,7 @@ export default function RecepcaoPage() {
             setOpenModal(false)
             setData([]); // Limpa a lista da unidade anterior
             // setUnidadeId(novaUnidade);
-            fetchData()
+            // fetchData()
         } else {
             toast.error("Usuário não autenticado")
         }
@@ -533,7 +522,7 @@ export default function RecepcaoPage() {
         } else {
             toast.success("Dados salvos com sucesso!");
             setImportModal({ open: false, item: null });
-            fetchData();
+            // fetchData();
         }
         setLoadingAction(null);
         handlePrint();
@@ -659,7 +648,7 @@ export default function RecepcaoPage() {
             if (error) throw error;
 
             toast.success(`Senha ${senhaGerada} gerada!`);
-            fetchData();
+            // fetchData();
 
         } catch (err) {
             toast.error("Erro ao gerar senha");
@@ -674,7 +663,10 @@ export default function RecepcaoPage() {
         setLoadingAction(params.p_atendimento_id)
         const { error } = await supabase.rpc(rpcName, params)
         if (error) toast.error("Erro na operação")
-        else { toast.success("Sucesso!"); fetchData() }
+        else {
+            toast.success("Sucesso!");
+            // fetchData()
+        }
         setLoadingAction(null)
     }
 

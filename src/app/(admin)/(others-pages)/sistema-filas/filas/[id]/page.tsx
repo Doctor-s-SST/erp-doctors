@@ -111,7 +111,7 @@ export default function FilaPage() {
     const [unidadeId, setUnidadeId] = useState<string | null>(null);
     const finalizandoEmAndamento = useRef<Set<string>>(new Set());
     const [now, setNow] = useState(Date.now());
-    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     useEffect(() => {
         const interval = setInterval(() => {
             setNow(Date.now());
@@ -121,35 +121,6 @@ export default function FilaPage() {
     }, []);
 
     const canceladosRef = useRef(new Set<string>());
-
-    // const finalizarAutomaticamente = async (item: any) => {
-
-    //     if (canceladosRef.current.has(item.id)) {
-    //         return;
-    //     }
-
-    //     try {
-    //         console.log("ENTROU FINALIZAR", item.id);
-    //         setFinalizandoIds(prev => {
-    //             const copia = { ...prev };
-    //             delete copia[item.id];
-    //             return copia;
-    //         });
-
-    //         await executarAcao(
-    //             "finalizar_especialidade",
-    //             {
-    //                 p_atendimento_id: item.atendimento_id,
-    //                 p_atendimento_exame_id: item.id,
-    //                 p_sala: item.sala || especialidadeNome,
-    //                 p_num_sala: session?.sala,
-    //             }
-    //         );
-
-    //     } catch (err) {
-    //         console.error(err);
-    //     }
-    // };
 
     const getTempoRestante = (id: string) => {
         const fim = finalizandoIds[id];
@@ -350,6 +321,37 @@ export default function FilaPage() {
     }
 
     useEffect(() => {
+
+        async function inicializar() {
+
+            const { data: esp } = await supabase
+                .from('especialidades')
+                .select('nome')
+                .eq('id', id)
+                .single();
+
+            if (!esp || !unidadeId) return;
+
+            setEspecialidadeNome(esp.nome);
+
+            const { data: result } = await supabase.rpc(
+                "get_fila_especialidade",
+                {
+                    p_sala: esp.nome,
+                    p_unidade_id: unidadeId
+                }
+            );
+
+            if (result) {
+                setData(result);
+            }
+        }
+
+        inicializar();
+
+    }, [id, unidadeId]);
+
+    useEffect(() => {
         // Busca se existe alguém sendo atendido por VOCÊ nesta sala
         const emAtendimento = data.find(item =>
             item.status === "EM_ATENDIMENTO" &&
@@ -392,59 +394,51 @@ export default function FilaPage() {
         return () => clearInterval(interval);
     }, [inicioAtendimento, atendimentoAtualId]);
 
-    // useEffect(() => {
-    //     if (!unidadeId) return;
-    //     fetchFila()
-
-    //     const interval = setInterval(fetchFila, 10000)
-    //     // const channel = supabase.channel(`fila-${id}`).on("postgres_changes", { event: "*", schema: "public", table: "atendimento_exames" }, () => fetchFila()).subscribe()
-    //     // const fetchExames = async () => {
-    //     //     const { data } = await supabase.from('exames').select('*');
-    //     //     if (data) setListaGlobalExames(data);
-    //     // };
-    //     // fetchExames();
-
-
-    //     return () => { clearInterval(interval); /*supabase.removeChannel(channel)*/ }
-    // }, [id, unidadeId])
-
     useEffect(() => {
-        if (!unidadeId) return;
 
-        fetchFila();
+        if (!unidadeId || !especialidadeNome) return;
 
         const eventSource = new EventSource(
-            `https://doctors-distribuidor-sse.cgalnz.easypanel.host/stream-fila?unidadeId=${unidadeId}`
+            `https://doctors-distribuidor-teste.cgalnz.easypanel.host/stream-fila` +
+            `?tipo=especialidade` +
+            `&unidadeId=${unidadeId}` +
+            `&sala=${encodeURIComponent(especialidadeNome)}`
         );
 
-        eventSource.onmessage = () => {
+        eventSource.onmessage = (event) => {
+            const payload = JSON.parse(event.data);
+            console.log("teste sse: ", payload)
 
-            if (debounceRef.current) {
-                clearTimeout(debounceRef.current);
-            }
+            setData(payload.dados);
 
-            debounceRef.current = setTimeout(() => {
-                fetchFila();
-            }, 500);
+            // Atualiza timers
+            const novosTimers: Record<string, number> = {};
+            const agora = Date.now();
+
+            payload.dados.forEach((item: any) => {
+
+                if (!item.finaliza_em) return;
+
+                const fim = new Date(item.finaliza_em).getTime();
+
+                if (fim > agora) {
+                    novosTimers[item.id] = fim;
+                }
+
+            });
+
+            setFinalizandoIds(prev => ({
+                ...prev,
+                ...novosTimers
+            }));
 
         };
-
-        const fallbackInterval = setInterval(() => {
-            fetchFila();
-        }, 180000);
 
         return () => {
-
-            if (debounceRef.current) {
-                clearTimeout(debounceRef.current);
-            }
-
             eventSource.close();
-            clearInterval(fallbackInterval);
-
         };
 
-    }, [id, unidadeId]);
+    }, [unidadeId, especialidadeNome]);
 
     useEffect(() => {
         const initialize = async () => {
@@ -490,21 +484,40 @@ export default function FilaPage() {
     useEffect(() => {
         async function fetchConfig() {
             setLoading(true);
-            const { data: s } = await supabase.from("salas").select("*").order("numero");
+            const { data: s } = await supabase
+                .from("salas")
+                .select(`
+                    id,
+                    numero,
+                    sala_especialidades!left (
+                        especialidade_id
+                    )
+                    `)
+                .eq("unidade_id", unidadeId)
+                .order("numero");
             const { data: p } = await supabase.from("profissionais").select(`
                 id,
                 nome,
                 profissional_especialidades (especialidade_id)
             `).order("nome");
 
-            setSalas(s || []);
+            // Normaliza os dados retornados para o tipo Sala esperado pela aplicação
+            setSalas(
+                (s || []).map((row: any) => ({
+                    id: String(row.id),
+                    numero: String(row.numero),
+                    especialidade_id: String(row.sala_especialidades?.[0]?.especialidade_id ?? "")
+                }))
+            );
             // Não use .map se for remover a lista de especialidades, 
             // ou garanta que ela continue lá:
             setProfissionais(p || []);
             setLoading(false);
+            
         }
         fetchConfig();
-    }, [id]); // Adicione id como dependência
+        console.log("SSalas", salasFiltradas);
+    }, [unidadeId]); // Adicione id como dependência
 
     useEffect(() => {
         if (data.length > 0) {
@@ -742,7 +755,7 @@ export default function FilaPage() {
             if (rpcName === "chamar_paciente_bloqueado") {
                 setNaoAtendidosRecentes(prev => prev.filter(id => id !== params.p_atendimento_exame_id));
             }
-            fetchFila();
+            // fetchFila();
         }
         setLoadingAction(null);
     }
@@ -1637,7 +1650,7 @@ export default function FilaPage() {
                                     </SelectTrigger>
                                     <SelectContent className="bg-white dark:bg-gray-900 border-slate-200 dark:border-slate-800">
                                         {salasFiltradas.map(s => (
-                                            <SelectItem key={s.id} value={s.numero} className="font-bold uppercase text-slate-900 dark:text-slate-100">SALA {s.numero}</SelectItem>
+                                            <SelectItem key={s.id} value={s.numero} className="font-bold text-slate-900 dark:text-slate-100">Sala {s.numero}</SelectItem>
                                         ))}
                                         <SelectItem value="OUTRO" className="font-black text-emerald-600 dark:text-emerald-400">-- DIGITAR OUTRO --</SelectItem>
                                     </SelectContent>
