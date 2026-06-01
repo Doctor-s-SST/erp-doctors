@@ -109,68 +109,56 @@ export default function FilaPage() {
     const ultimoAlertaRef = useRef<number | null>(null);
 
     const [unidadeId, setUnidadeId] = useState<string | null>(null);
-    const [tick, setTick] = useState(0);
-
-    useEffect(() => {
-        // Se houver itens que não estão encerrados, atualiza a tela a cada 30 segundos
-        const timer = setInterval(() => {
-            setTick((prev) => prev + 1);
-        }, 30000);
-
-        return () => clearInterval(timer);
-    }, []);
-
+    const finalizandoEmAndamento = useRef<Set<string>>(new Set());
     const [now, setNow] = useState(Date.now());
-
+    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     useEffect(() => {
         const interval = setInterval(() => {
             setNow(Date.now());
-        }, 1000);
+        }, 200);
 
         return () => clearInterval(interval);
     }, []);
 
-    const finalizarAutomaticamente = async (item: any) => {
-        try {
-            await executarAcao("finalizar_especialidade", {
-                p_atendimento_id: item.atendimento_id,
-                p_atendimento_exame_id: item.id,
-                p_sala: item.sala || especialidadeNome,
-                p_num_sala: session?.sala,
-            });
+    const canceladosRef = useRef(new Set<string>());
 
-            // remove timer local imediatamente
-            setFinalizandoIds((prev) => {
-                const copia = { ...prev };
-                delete copia[item.id];
-                return copia;
-            });
+    // const finalizarAutomaticamente = async (item: any) => {
 
-            // atualização otimista
-            setData((prev: any[]) =>
-                prev.map((i) =>
-                    i.id === item.id
-                        ? { ...i, status: "FINALIZADO" }
-                        : i
-                )
-            );
+    //     if (canceladosRef.current.has(item.id)) {
+    //         return;
+    //     }
 
-        } catch (err) {
-            console.error(err);
-        }
-    };
+    //     try {
+    //         console.log("ENTROU FINALIZAR", item.id);
+    //         setFinalizandoIds(prev => {
+    //             const copia = { ...prev };
+    //             delete copia[item.id];
+    //             return copia;
+    //         });
 
-    const getTempoRestante = (itemId: string) => {
-        const fim = finalizandoIds[itemId];
+    //         await executarAcao(
+    //             "finalizar_especialidade",
+    //             {
+    //                 p_atendimento_id: item.atendimento_id,
+    //                 p_atendimento_exame_id: item.id,
+    //                 p_sala: item.sala || especialidadeNome,
+    //                 p_num_sala: session?.sala,
+    //             }
+    //         );
+
+    //     } catch (err) {
+    //         console.error(err);
+    //     }
+    // };
+
+    const getTempoRestante = (id: string) => {
+        const fim = finalizandoIds[id];
         if (!fim) return null;
 
-        const agora = Date.now();
-        const segundos = Math.floor((fim - agora) / 1000);
-
-        // Se o tempo acabou ou passou do ponto, limpa do estado local na hora
-        if (segundos <= 0) {
-            return 0;
-        }
+        const segundos = Math.max(
+            0,
+            Math.floor((fim - now) / 1000)
+        );
 
         return segundos;
     };
@@ -340,34 +328,19 @@ export default function FilaPage() {
                     if (item.finaliza_em) {
                         const fim = new Date(item.finaliza_em).getTime();
 
+                        // recria timer visual
                         if (fim > agora) {
-                            // Se ainda tem tempo, mantém o timer ativo na tela
-                            novosTimers[item.id] = fim;
-                        } 
-                        // else if (item.status !== "FINALIZADO") {
-                        //     // O tempo acabou E o status no banco ainda não atualizou localmente
-                        //     houveFinalizacaoAutomatica = true;
 
-                        //     executarAcao("finalizar_especialidade", {
-                        //         p_atendimento_id: item.atendimento_id,
-                        //         p_atendimento_exame_id: item.id,
-                        //         p_sala: item.sala || especialidadeNome,
-                        //         p_num_sala: session?.sala,
-                        //     });
-                        // }
+                            novosTimers[item.id] = fim;
+                        }
                     }
                 });
 
                 // Atualiza o estado apenas com os temporizadores que AINDA estão correndo
-                setFinalizandoIds(novosTimers);
-
-                // Se disparou uma finalização, força uma nova busca rápida após 1 segundo
-                // para garantir que a tela receba o novo status "FINALIZADO" do banco
-                // if (houveFinalizacaoAutomatica) {
-                //     setTimeout(() => {
-                //         fetchFila();
-                //     }, 1200);
-                // }
+                setFinalizandoIds(prev => ({
+                    ...prev,
+                    ...novosTimers
+                }));
             }
         } catch (err) {
         } finally {
@@ -438,30 +411,39 @@ export default function FilaPage() {
     useEffect(() => {
         if (!unidadeId) return;
 
-        // 1. Busca inicial ao carregar a página
-        fetchFila(); // ou fetchData() no painel da recepção
+        fetchFila();
 
-        // 2. Conecta no seu microsserviço SSE local rodando na VPS
-        const eventSource = new EventSource(`https://doctors-distribuidor-sse.cgalnz.easypanel.host/stream-fila?unidadeId=${unidadeId}`);
+        const eventSource = new EventSource(
+            `https://doctors-distribuidor-sse.cgalnz.easypanel.host/stream-fila?unidadeId=${unidadeId}`
+        );
 
-        // 3. Recebe o comando de atualização do servidor
-        eventSource.onmessage = (event) => {
-            const parsed = JSON.parse(event.data);
-            if (parsed.atualiza) {
-                fetchFila(); // Executa o fetch focado
+        eventSource.onmessage = () => {
+
+            if (debounceRef.current) {
+                clearTimeout(debounceRef.current);
             }
+
+            debounceRef.current = setTimeout(() => {
+                fetchFila();
+            }, 500);
+
         };
 
-        // 4. Se a internet oscilar, o fallback de 3 minutos garante a segurança
         const fallbackInterval = setInterval(() => {
             fetchFila();
         }, 180000);
 
-        // Cleanup perfeito
         return () => {
+
+            if (debounceRef.current) {
+                clearTimeout(debounceRef.current);
+            }
+
             eventSource.close();
             clearInterval(fallbackInterval);
+
         };
+
     }, [id, unidadeId]);
 
     useEffect(() => {
@@ -765,20 +747,6 @@ export default function FilaPage() {
         setLoadingAction(null);
     }
 
-    useEffect(() => {
-        dadosProcessados.forEach((item: any) => {
-            const fim = finalizandoIds[item.id];
-
-            if (!fim) return;
-
-            const agora = Date.now();
-
-            if (agora >= fim) {
-                finalizarAutomaticamente(item);
-            }
-        });
-    }, [now]);
-
     const dadosProcessados = useMemo(() => {
         let lista = [...data];
 
@@ -846,6 +814,45 @@ export default function FilaPage() {
         });
     }, [data, ordenacao, filtroPesquisa, filtroTipo, session]);
 
+    useEffect(() => {
+
+        dadosProcessados.forEach(item => {
+
+            const fim = finalizandoIds[item.id];
+
+            if (!fim) return;
+
+            if (
+                Date.now() >= fim &&
+                !finalizandoEmAndamento.current.has(item.id)
+            ) {
+
+                finalizandoEmAndamento.current.add(item.id);
+
+                executarAcao(
+                    "finalizar_especialidade",
+                    {
+                        p_atendimento_id: item.atendimento_id,
+                        p_atendimento_exame_id: item.id,
+                        p_sala: item.sala || especialidadeNome,
+                        p_num_sala: session?.sala,
+                    }
+                ).finally(() => {
+
+                    setFinalizandoIds(prev => {
+                        const novo = { ...prev };
+                        delete novo[item.id];
+                        return novo;
+                    });
+
+                    finalizandoEmAndamento.current.delete(item.id);
+                });
+            }
+
+        });
+
+    }, [now, finalizandoIds, dadosProcessados]);
+
     const ThOrdenavel = ({ label, coluna }: { label: string, coluna: keyof ItemFila | 'tempo_espera' }) => {
         const isAtivo = ordenacao.coluna === coluna;
 
@@ -878,20 +885,22 @@ export default function FilaPage() {
         toast.success("Empresa copiada: " + (item.empresa_razao || "--"))
     };
 
-    const timersRef = useRef<{ [key: string]: ReturnType<typeof setInterval> }>({});
-
     const cancelarFinalizacao = async (id: string) => {
-        // limpa banco
-        await supabase
-            .from("atendimento_exames")
-            .update({ finaliza_em: null })
-            .eq("id", id);
+
+        canceladosRef.current.add(id);
 
         setFinalizandoIds(prev => {
             const novo = { ...prev };
             delete novo[id];
             return novo;
         });
+
+        await supabase
+            .from("atendimento_exames")
+            .update({
+                finaliza_em: null
+            })
+            .eq("id", id);
 
         toast.warning("Finalização cancelada");
     };
@@ -900,20 +909,24 @@ export default function FilaPage() {
     // Verifica se o profissional atual já está atendendo alguém
 
     const iniciarFinalizacao = async (item: ItemFila) => {
+        canceladosRef.current.delete(item.id);
         const tempo = await obterTempoExecucao();
 
         const fimDate = new Date(Date.now() + tempo * 1000);
-        const fimISO = fimDate.toISOString();
 
-        await supabase
-            .from('atendimento_exames')
-            .update({ finaliza_em: fimISO })
-            .eq('id', item.id);
-
+        // atualiza a tela imediatamente
         setFinalizandoIds(prev => ({
             ...prev,
             [item.id]: fimDate.getTime()
         }));
+
+        // persiste em segundo plano
+        await supabase
+            .from('atendimento_exames')
+            .update({
+                finaliza_em: fimDate.toISOString()
+            })
+            .eq('id', item.id);
     };
 
     const profissionalOcupado = useMemo(() => {
@@ -1651,12 +1664,12 @@ export default function FilaPage() {
                                     value={form.profissional}
                                     onValueChange={(val) => val === "OUTRO" ? (setIsOutroProfissional(true), setForm({ ...form, profissional: "" })) : setForm({ ...form, profissional: val })}
                                 >
-                                    <SelectTrigger className="h-12 bg-slate-50 dark:bg-gray-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white font-bold uppercase">
+                                    <SelectTrigger className="h-12 bg-slate-50 dark:bg-gray-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white font-bold">
                                         <SelectValue placeholder="QUEM ATENDE?" />
                                     </SelectTrigger>
                                     <SelectContent className="bg-white dark:bg-gray-900 border-slate-200 dark:border-slate-800">
                                         {profissionaisFiltrados.map(p => (
-                                            <SelectItem key={p.id} value={p.nome} className="font-bold uppercase text-slate-900 dark:text-slate-100">{p.nome}</SelectItem>
+                                            <SelectItem key={p.id} value={p.nome} className="font-bold text-slate-900 dark:text-slate-100">{p.nome}</SelectItem>
                                         ))}
                                         <SelectItem value="OUTRO" className="font-black text-emerald-600 dark:text-emerald-400">-- OUTRO --</SelectItem>
                                     </SelectContent>
@@ -1665,9 +1678,9 @@ export default function FilaPage() {
                                 <div className="relative">
                                     <Input
                                         autoFocus
-                                        className="h-12 bg-slate-50 dark:bg-gray-900 border-emerald-500/50 text-slate-900 dark:text-white font-bold uppercase"
+                                        className="h-12 bg-slate-50 dark:bg-gray-900 border-emerald-500/50 text-slate-900 dark:text-white font-bold"
                                         value={form.profissional}
-                                        onChange={(e) => setForm({ ...form, profissional: e.target.value.toUpperCase() })}
+                                        onChange={(e) => setForm({ ...form, profissional: e.target.value })}
                                     />
                                     <X className="absolute right-3 top-4 w-4 h-4 text-slate-400 cursor-pointer" onClick={() => setIsOutroProfissional(false)} />
                                 </div>

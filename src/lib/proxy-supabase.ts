@@ -6,7 +6,7 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   "/sistema-filas/kanban": ["admin"],
   "/painel-senhas": ["admin", "painel"],
   "/sistema-filas/senhas-recepcao": ["admin", "recepcao", "especialista", "painel"],
-  "/sistema-filas/relatorios": ["admin", "painel", "recepcao"],
+  "/sistema-filas/relatorios/geral": ["admin", "painel", "recepcao"],
   "/sistema-filas/filas": ["admin", "especialista", "recepcao", "painel"],
   "/configuracoes/salas-profissionais": ["admin"],
   "/configuracoes/users": ["admin"],
@@ -16,7 +16,7 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
 
 // Define pra onde cada role vai
 function getRedirectByRole(role?: string, especialidade_id?: string) {
-  if (role === "admin") return "/sistema-filas/kanban"
+  if (role === "admin") return "/dashboards/atendimento"
   if (role === "recepcao") return "/sistema-filas/senhas-recepcao"
   if (role === "painel") return "/painel-senhas"
   if (role === "especialista") {
@@ -25,7 +25,7 @@ function getRedirectByRole(role?: string, especialidade_id?: string) {
       : "/sistema-filas/filas"
   }
 
-  return "/" // fallback seguro
+  return "/"
 }
 
 export async function updateSession(request: NextRequest) {

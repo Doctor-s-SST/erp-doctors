@@ -67,6 +67,8 @@ export default function RecepcaoPage() {
     const [isDetailsOpen, setIsDetailsOpen] = useState(false)
     const [unidadeId, setUnidadeId] = useState<string | null>(null);
     const [unidadeNome, setUnidadeNome] = useState<string>("");
+    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
 
     // Este estado serve apenas para forçar o componente a atualizar a cada minuto
     const [tick, setTick] = useState(0);
@@ -433,33 +435,42 @@ export default function RecepcaoPage() {
     // }, [unidadeId]);
 
     useEffect(() => {
-    if (!unidadeId) return;
+        if (!unidadeId) return;
 
-    // 1. Busca inicial ao carregar a página
-    fetchData(); // ou fetchData() no painel da recepção
-
-    // 2. Conecta no seu microsserviço SSE local rodando na VPS
-    const eventSource = new EventSource(`https://doctors-distribuidor-sse.cgalnz.easypanel.host/stream-fila?unidadeId=${unidadeId}`);
-
-    // 3. Recebe o comando de atualização do servidor
-    eventSource.onmessage = (event) => {
-        const parsed = JSON.parse(event.data);
-        if (parsed.atualiza) {
-            fetchData(); // Executa o fetch focado
-        }
-    };
-
-    // 4. Se a internet oscilar, o fallback de 3 minutos garante a segurança
-    const fallbackInterval = setInterval(() => {
         fetchData();
-    }, 180000);
 
-    // Cleanup perfeito
-    return () => {
-        eventSource.close();
-        clearInterval(fallbackInterval);
-    };
-}, [unidadeId]);
+        const eventSource = new EventSource(
+            `https://doctors-distribuidor-sse.cgalnz.easypanel.host/stream-fila?unidadeId=${unidadeId}`
+        );
+
+        eventSource.onmessage = () => {
+
+            if (debounceRef.current) {
+                clearTimeout(debounceRef.current);
+            }
+
+            debounceRef.current = setTimeout(() => {
+                fetchData();
+            }, 500);
+
+        };
+
+        const fallbackInterval = setInterval(() => {
+            fetchData();
+        }, 180000);
+
+        return () => {
+
+            if (debounceRef.current) {
+                clearTimeout(debounceRef.current);
+            }
+
+            eventSource.close();
+            clearInterval(fallbackInterval);
+
+        };
+
+    }, [unidadeId]);
 
     async function salvarSessao() {
         if (!session?.guiche || !session?.nome) return toast.warning("Preencha todos os campos")
@@ -924,7 +935,7 @@ export default function RecepcaoPage() {
 
             toast.success("Ficha carregada com sucesso!", {
                 id: toastId
-                
+
             });
         } catch (error) {
             toast.error("Falha ao buscar ficha", {
