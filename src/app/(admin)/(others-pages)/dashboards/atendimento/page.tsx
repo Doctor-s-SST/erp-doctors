@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/lib/supabase"
 import { format, startOfMonth, endOfMonth } from "date-fns"
@@ -44,10 +44,12 @@ type ViewType = "geral" | "diario" | "mensal"
 export default function DashboardPage() {
     const [view, setView] = useState<ViewType>("diario")
     const [unidadeId, setUnidadeId] = useState("")
+    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Estados de Filtro
     const [dataInicio, setDataInicio] = useState<Date>(new Date())
     const [dataFim, setDataFim] = useState<Date>(new Date())
+
 
     useEffect(() => {
         const fetchUserContext = async () => {
@@ -134,33 +136,51 @@ export default function DashboardPage() {
     const queryClient = useQueryClient();
 
     useEffect(() => {
-        // Só abre o canal SSE se a unidade estiver carregada e se o filtro for para "hoje"
+
         if (!unidadeId || !pollingActive) return;
 
-        // Conecta no seu distribuidor Node.js na VPS
         const eventSource = new EventSource(
             `https://doctors-distribuidor-sse.cgalnz.easypanel.host/stream-fila?unidadeId=${unidadeId}`
         );
 
         eventSource.onmessage = (event) => {
+
             const parsed = JSON.parse(event.data);
 
-            if (parsed.atualiza) {
-                // Força o TanStack Query a atualizar as queries que começam com o prefixo ['dashboard']
-                queryClient.invalidateQueries({
-                    queryKey: ['dashboard']
-                });
+            if (!parsed.atualiza) return;
+
+            if (debounceRef.current) {
+                clearTimeout(debounceRef.current);
             }
+
+            debounceRef.current = setTimeout(() => {
+
+                queryClient.invalidateQueries({
+                    queryKey: ['dashboard'],
+                    refetchType: 'active'
+                });
+
+            }, 500);
+
         };
 
         eventSource.onerror = (err) => {
-            console.error("Erro ou desconexão no SSE do Dashboard:", err);
+            console.error(
+                "Erro ou desconexão no SSE do Dashboard:",
+                err
+            );
         };
 
-        // Cleanup: Fecha a conexão SSE se trocar de unidade, mudar a data para o passado, ou sair da tela
         return () => {
+
+            if (debounceRef.current) {
+                clearTimeout(debounceRef.current);
+            }
+
             eventSource.close();
+
         };
+
     }, [unidadeId, pollingActive, queryClient]);
 
     // if (isLoading) return <LoadingScreen />
