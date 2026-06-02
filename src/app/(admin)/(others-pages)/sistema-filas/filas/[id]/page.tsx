@@ -39,6 +39,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { StatusSenhaFilas } from "@/components/atendimento/status-senha-filas/StatusSenhaFilas"
 
 type ItemFila = {
+    finaliza_em: any
     tipo_senha: string
     id: string
     atendimento_id: string
@@ -410,28 +411,6 @@ export default function FilaPage() {
             console.log("teste sse: ", payload)
 
             setData(payload.dados);
-
-            // Atualiza timers
-            const novosTimers: Record<string, number> = {};
-            const agora = Date.now();
-
-            payload.dados.forEach((item: any) => {
-
-                if (!item.finaliza_em) return;
-
-                const fim = new Date(item.finaliza_em).getTime();
-
-                if (fim > agora) {
-                    novosTimers[item.id] = fim;
-                }
-
-            });
-
-            setFinalizandoIds(prev => ({
-                ...prev,
-                ...novosTimers
-            }));
-
         };
 
         return () => {
@@ -439,6 +418,41 @@ export default function FilaPage() {
         };
 
     }, [unidadeId, especialidadeNome]);
+
+    // 🔄 Mantém o finalizandoIds 100% sincronizado com a coluna finaliza_em do banco (Evita zerar no F5)
+    useEffect(() => {
+        if (!data || data.length === 0) return;
+
+        const novosTimers: Record<string, number> = {};
+        const agora = Date.now();
+
+        data.forEach((item: any) => {
+            if (item.finaliza_em) {
+                // Converte o TIMESTAMP do PostgreSQL para milissegundos do JS
+                const fim = new Date(item.finaliza_em).getTime();
+
+                // Se o tempo finalizado ainda for maior que o momento atual, reconstrói o timer
+                if (fim > agora) {
+                    novosTimers[item.id] = fim;
+                }
+            }
+        });
+
+        // Mescla com o estado anterior mantendo os timers ativos do banco de dados
+        setFinalizandoIds(prev => {
+            const atualizado = { ...prev, ...novosTimers };
+
+            // Limpa registros do estado local que o banco de dados já não aponta mais como ativos/finaliza_em
+            Object.keys(atualizado).forEach(id => {
+                const correspondente = data.find(i => i.id === id);
+                if (!correspondente || !correspondente.finaliza_em) {
+                    delete atualizado[id];
+                }
+            });
+
+            return atualizado;
+        });
+    }, [data]);
 
     useEffect(() => {
         const initialize = async () => {
@@ -513,7 +527,7 @@ export default function FilaPage() {
             // ou garanta que ela continue lá:
             setProfissionais(p || []);
             setLoading(false);
-            
+
         }
         fetchConfig();
         console.log("SSalas", salasFiltradas);
@@ -828,18 +842,15 @@ export default function FilaPage() {
     }, [data, ordenacao, filtroPesquisa, filtroTipo, session]);
 
     useEffect(() => {
-
-        dadosProcessados.forEach(item => {
-
+        // Percorre a lista crua de dados para garantir que ninguém filtrado seja ignorado
+        data.forEach(item => {
             const fim = finalizandoIds[item.id];
-
             if (!fim) return;
 
-            if (
-                Date.now() >= fim &&
-                !finalizandoEmAndamento.current.has(item.id)
-            ) {
+            // Se o horário atual atingiu ou passou o estipulado pelo finaliza_em
+            if (Date.now() >= fim && !finalizandoEmAndamento.current.has(item.id)) {
 
+                // Trava concorrência local
                 finalizandoEmAndamento.current.add(item.id);
 
                 executarAcao(
@@ -851,20 +862,18 @@ export default function FilaPage() {
                         p_num_sala: session?.sala,
                     }
                 ).finally(() => {
-
+                    // Remove dos estados locais após a conclusão da RPC
                     setFinalizandoIds(prev => {
                         const novo = { ...prev };
                         delete novo[item.id];
                         return novo;
                     });
-
                     finalizandoEmAndamento.current.delete(item.id);
                 });
             }
-
         });
-
-    }, [now, finalizandoIds, dadosProcessados]);
+        // Executa a cada atualização do tique do relógio (now) ou do array original de dados
+    }, [now, finalizandoIds, data, especialidadeNome, session]);
 
     const ThOrdenavel = ({ label, coluna }: { label: string, coluna: keyof ItemFila | 'tempo_espera' }) => {
         const isAtivo = ordenacao.coluna === coluna;
