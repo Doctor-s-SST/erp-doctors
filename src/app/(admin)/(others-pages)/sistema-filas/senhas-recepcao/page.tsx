@@ -414,7 +414,7 @@ export default function RecepcaoPage() {
         // Se não tiver ID e não for forçado, não faz nada
         if (!idParaBuscar) return;
 
-        const { data: result, error } = await supabase.rpc("get_painel_recepcao", {
+        const { data: result, error } = await supabase.rpc("get_painel_recepcao_novo", {
             p_unidade_id: idParaBuscar
         });
 
@@ -429,7 +429,7 @@ export default function RecepcaoPage() {
         // fetchData();
 
         const eventSource = new EventSource(
-            `https://doctors-distribuidor-teste.cgalnz.easypanel.host/stream-fila` +
+            `https://doctors-distribuidor-sse.cgalnz.easypanel.host/stream-fila` +
             `?tipo=recepcao` +
             `&unidadeId=${unidadeId}`
         );
@@ -439,7 +439,7 @@ export default function RecepcaoPage() {
             try {
 
                 const payload = JSON.parse(event.data);
-                console.log("sse recep teste", payload)
+                console.log("sse recep", payload)
                 if (payload.tipo === 'recepcao') {
                     setData(payload.dados);
                 }
@@ -638,7 +638,7 @@ export default function RecepcaoPage() {
         setLoadingAction(tipo);
 
         try {
-            const { data: senhaGerada, error } = await supabase.rpc("gerar_senha", {
+            const { data: senhaGerada, error } = await supabase.rpc("gerar_senha_novo", {
                 tipo_param: tipo,
                 guiche_param: session?.guiche || "0",
                 atendente_param: session?.nome || "",
@@ -703,7 +703,7 @@ export default function RecepcaoPage() {
                     clearInterval(interval);
                     delete timersRef.current[id];
 
-                    executarAcao("finalizar_recepcao", {
+                    executarAcao("finalizar_recepcao_novo", {
                         p_atendimento_id: id,
                         p_especialidades_ids: idsParaFinalizar
                     });
@@ -1236,7 +1236,7 @@ export default function RecepcaoPage() {
                                                                             size="sm"
                                                                             variant="outline"
                                                                             className="h-8 text-[11px] border-amber-600 text-amber-600 hover:bg-amber-50"
-                                                                            onClick={() => executarAcao("gerenciar_chamada_recepcao", {
+                                                                            onClick={() => executarAcao("gerenciar_chamada_recepcao_novo", {
                                                                                 p_atendimento_id: item.id,
                                                                                 p_status: 'EM_FILA',
                                                                                 p_guiche: session?.guiche,
@@ -1285,7 +1285,7 @@ export default function RecepcaoPage() {
                                                                                             onClick={() => {
                                                                                                 cancelarFinalizacao(item.id);
 
-                                                                                                executarAcao("finalizar_recepcao", {
+                                                                                                executarAcao("finalizar_recepcao_novo", {
                                                                                                     p_atendimento_id: item.id,
                                                                                                     p_especialidades_ids: obterIdsConsolidados()
                                                                                                 });
@@ -1317,7 +1317,7 @@ export default function RecepcaoPage() {
                                                                                         size="sm"
                                                                                         variant="outline"
                                                                                         className="h-8 text-[11px] border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-muted dark:hover:text-white dark:hover:bg-blue-600 transition-colors"
-                                                                                        onClick={() => executarAcao("gerenciar_chamada_recepcao", {
+                                                                                        onClick={() => executarAcao("gerenciar_chamada_recepcao_novo", {
                                                                                             p_atendimento_id: item.id,
                                                                                             p_status: 'EM_FILA',
                                                                                             p_guiche: session?.guiche,
@@ -1332,8 +1332,10 @@ export default function RecepcaoPage() {
                                                                                         size="sm"
                                                                                         variant="ghost"
                                                                                         className="h-8 text-[11px] bg-orange-500/80 text-white hover:text-orange-500 border-orange-500/50 transition-colors dark:text-white/80"
-                                                                                        onClick={() => executarAcao("gerenciar_chamada_recepcao", {
+                                                                                        onClick={() => executarAcao("gerenciar_chamada_recepcao_novo", {
+                                                                                            p_atendente: session?.nome,
                                                                                             p_atendimento_id: item.id,
+                                                                                            p_guiche: session?.guiche,
                                                                                             p_status: 'NAO_ATENDIDO'
                                                                                         })}
                                                                                     >
@@ -1350,7 +1352,7 @@ export default function RecepcaoPage() {
                                                                                 size="sm"
                                                                                 variant="outline"
                                                                                 className="h-8 text-[11px] border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-muted dark:hover:text-white dark:hover:bg-blue-600 transition-colors"
-                                                                                onClick={() => executarAcao("gerenciar_chamada_recepcao", {
+                                                                                onClick={() => executarAcao("gerenciar_chamada_recepcao_novo", {
                                                                                     p_atendimento_id: item.id,
                                                                                     p_status: 'EM_FILA',
                                                                                     p_guiche: session?.guiche,
@@ -1415,7 +1417,7 @@ export default function RecepcaoPage() {
                                                                                     className="h-8 w-8 p-0 text-white hover:text-red-600 hover:border-red-500 bg-red-500"
                                                                                     onClick={() => {
                                                                                         if (confirm("Cancelar este atendimento?")) {
-                                                                                            executarAcao("cancelar_atendimento", {
+                                                                                            executarAcao("cancelar_atendimento_novo", {
                                                                                                 p_atendimento_id: item.id,
                                                                                             })
                                                                                         }

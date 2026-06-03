@@ -226,16 +226,20 @@ export default function PaginaRelatorio() {
 
     const exportToExcel = () => {
         const dataToExport = dadosFiltradosOrdenados.map(item => ({
-            Paciente: item.cabecalho.nome,
-            Empresa: item.cabecalho.empresa,
-            Senha: item.cabecalho.senha,
-            Acionamento: item.cabecalho.acionamento,
-            Tempo_Total: item.tempo_total_dispensado.split('(')[1]?.replace(')', '') || '',
+            "Empresa": item.cabecalho.empresa,
+            "Funcionário": item.cabecalho.nome,
+            "Sequencial Ficha": item.cabecalho.sequencial_ficha,
+            "Tipo Exame": item.cabecalho.tipo_exame,
+            "Acionamento": item.cabecalho.acionamento,
+            "Exames": item.exames_atendimento.map((ex: any) => `${ex.exame} ${ex.realizado ? '✔️' : '❌'}`).join(', '),
+            "Tempo Total": item.tempo_total_dispensado.split('(')[1]?.replace(')', '') || '',
         }));
         const ws = XLSX.utils.json_to_sheet(dataToExport);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Relatorio");
         XLSX.writeFile(wb, `Relatorio_${filtros.dataInicio}.xlsx`);
+
+        console.log("dados processados", dadosFiltradosOrdenados);
     };
 
     return (
@@ -248,12 +252,12 @@ export default function PaginaRelatorio() {
                             <Monitor className="w-6 h-6" />
                         </div>
                         <div>
-                            <h1 className="text-xl font-black text-white uppercase">Gestão de Atendimentos</h1>
+                            <h1 className="text-xl font-black text-white uppercase">Relatório Geral de Atendimentos</h1>
                             <p className="text-gray-500 text-[10px] font-bold uppercase tracking-widest italic">Análise de Fluxo e Tempo</p>
                         </div>
                     </div>
                     <div>
-                        {/* <Button variant="outline" onClick={exportToExcel} className="border-gray-600 text-gray-300 hover:bg-gray-800"><TableIcon className="w-4 h-4 mr-2" /> Exportar Excel</Button> */}
+                        <Button variant="outline" onClick={exportToExcel} className="border-gray-600 text-gray-300 hover:bg-gray-800"><TableIcon className="w-4 h-4 mr-2" /> Exportar Excel</Button>
                         <BotaoImprimirRelatorio item={dadosFiltradosOrdenados} text="Relatório Geral" />
                     </div>
                 </div>

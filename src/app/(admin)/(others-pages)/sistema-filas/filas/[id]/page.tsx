@@ -234,7 +234,7 @@ export default function FilaPage() {
             isMinhaSala = true
         }
 
-        if ((item.status_atendimento.startsWith('EM_') && item.status === "EM_FILA")) {
+        if ((item.status_atendimento.startsWith('EM ') && item.status === "EM_FILA")) {
             return {
                 color: isMinhaSala ? "text-emerald-600" : "text-red-600",
                 bg: isMinhaSala ? "bg-emerald-500/10" : "bg-red-500/10",
@@ -244,7 +244,7 @@ export default function FilaPage() {
             }
         }
 
-        if (item.bloqueado || item.status_atendimento.startsWith('EM_') && item.status === "EM_ATENDIMENTO") {
+        if (item.bloqueado || item.status_atendimento.startsWith('EM ') && item.status === "EM_ATENDIMENTO") {
             return {
                 color: isMinhaSala ? "text-orange-600" : "text-red-600",
                 bg: isMinhaSala ? "bg-orange-500/10" : "bg-red-500/10",
@@ -284,7 +284,7 @@ export default function FilaPage() {
             setEspecialidadeNome(esp.nome);
 
             // Adicionando o p_unidade_id na chamada RPC
-            const { data: result } = await supabase.rpc("get_fila_especialidade", {
+            const { data: result } = await supabase.rpc("get_fila_especialidade_novo", {
                 p_sala: esp.nome,
                 p_unidade_id: unidadeId // <--- Filtro por unidade
             });
@@ -336,7 +336,7 @@ export default function FilaPage() {
             setEspecialidadeNome(esp.nome);
 
             const { data: result } = await supabase.rpc(
-                "get_fila_especialidade",
+                "get_fila_especialidade_novo",
                 {
                     p_sala: esp.nome,
                     p_unidade_id: unidadeId
@@ -400,7 +400,7 @@ export default function FilaPage() {
         if (!unidadeId || !especialidadeNome) return;
 
         const eventSource = new EventSource(
-            `https://doctors-distribuidor-teste.cgalnz.easypanel.host/stream-fila` +
+            `https://doctors-distribuidor-sse.cgalnz.easypanel.host/stream-fila` +
             `?tipo=especialidade` +
             `&unidadeId=${unidadeId}` +
             `&sala=${encodeURIComponent(especialidadeNome)}`
@@ -408,7 +408,7 @@ export default function FilaPage() {
 
         eventSource.onmessage = (event) => {
             const payload = JSON.parse(event.data);
-            console.log("teste sse: ", payload)
+            console.log("sse: ", payload)
 
             setData(payload.dados);
         };
@@ -763,10 +763,10 @@ export default function FilaPage() {
             toast.error("Erro na operação: " + error.message);
         } else {
             toast.success("Sucesso!");
-            if (rpcName === "nao_atendido_especialidade") {
+            if (rpcName === "nao_atendido_especialidade_novo") {
                 setNaoAtendidosRecentes(prev => [...prev, params.p_atendimento_exame_id]);
             }
-            if (rpcName === "chamar_paciente_bloqueado") {
+            if (rpcName === "chamar_paciente_bloqueado_novo") {
                 setNaoAtendidosRecentes(prev => prev.filter(id => id !== params.p_atendimento_exame_id));
             }
             // fetchFila();
@@ -854,7 +854,7 @@ export default function FilaPage() {
                 finalizandoEmAndamento.current.add(item.id);
 
                 executarAcao(
-                    "finalizar_especialidade",
+                    "finalizar_especialidade_novo",
                     {
                         p_atendimento_id: item.atendimento_id,
                         p_atendimento_exame_id: item.id,
@@ -1441,7 +1441,7 @@ export default function FilaPage() {
                                                                             loadingAction === item.atendimento_id ||
                                                                             item.status !== "AGUARDANDO"
                                                                         }
-                                                                        onClick={() => executarAcao("chamar_paciente_bloqueado", {
+                                                                        onClick={() => executarAcao("chamar_paciente_bloqueado_novo", {
                                                                             p_atendimento_id: item.atendimento_id,
                                                                             p_atendimento_exame_id: item.id,
                                                                             p_sala: item.sala || especialidadeNome,
@@ -1526,7 +1526,7 @@ export default function FilaPage() {
                                                                                     size="sm"
                                                                                     variant="outline"
                                                                                     className="h-8 text-[11px] border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white"
-                                                                                    onClick={() => executarAcao("chamar_paciente", {
+                                                                                    onClick={() => executarAcao("chamar_paciente_novo", {
                                                                                         p_atendimento_id: item.atendimento_id,
                                                                                         p_atendimento_exame_id: item.id,
                                                                                         p_sala: item.sala || especialidadeNome,
@@ -1548,7 +1548,7 @@ export default function FilaPage() {
                                                                         size="sm"
                                                                         variant="ghost"
                                                                         className="h-8 text-[11px] bg-orange-600 font-bold text-white hover:text-orange-500 border-orange-500/50 transition-colors dark:text-white/80"
-                                                                        onClick={() => executarAcao("nao_atendido_especialidade", {
+                                                                        onClick={() => executarAcao("nao_atendido_especialidade_novo", {
                                                                             p_atendimento_id: item.atendimento_id,
                                                                             p_atendimento_exame_id: item.id
                                                                         })}

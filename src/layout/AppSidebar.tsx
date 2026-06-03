@@ -46,7 +46,6 @@ const navItems: NavItem[] = [
       { name: "Chamada de Senhas", path: "/sistema-filas/senhas-recepcao", roles: ["admin", "recepcao", "painel", "especialista"] },
       { name: "Filas", path: "/sistema-filas/filas", roles: ["admin", "recepcao", "especialista", "painel"] },
       { name: "Painel TV", path: "/painel-senhas", roles: ["admin", "painel"] },
-      { name: "Relatórios", path: "/sistema-filas/relatorios", roles: ["admin", "painel", "recepcao"] },
       { name: "Kanban", path: "/sistema-filas/kanban", roles: ["admin"] },
     ],
   },
@@ -56,8 +55,9 @@ const navItems: NavItem[] = [
     roles: ["admin", "painel", "recepcao"],
     subItems: [
       { name: "Geral", path: "/sistema-filas/relatorios/geral", roles: ["admin", "painel", "recepcao"] },
-      { name: "Pendências de Exames", path: "/sistema-filas/relatorios/geral", roles: ["admin", "painel", "recepcao"] },
-      { name: "Especialidades", path: "/sistema-filas/relatorios/geral", roles: ["admin", "painel", "recepcao"] },
+      { name: "ASO", path: "/sistema-filas/relatorios/aso", roles: ["admin", "painel", "recepcao"] },
+      { name: "Pendências de Exames", path: "/sistema-filas/relatorios/pendencias", roles: ["admin", "painel", "recepcao"] },
+      { name: "Especialidades", path: "/sistema-filas/relatorios/especialidades", roles: ["admin", "painel", "recepcao"] },
     ],
   },
   {

@@ -222,7 +222,8 @@ export default function KanbanExames() {
                     tempo_finalizacao_segundos: Number(form.tempo_finalizacao_segundos),
                     obrigar_check_exames:
                         form.obrigar_check_exames ?? false,
-                    unidade_id: unidadeId
+                    unidade_id: unidadeId,
+                    status: `EM ${form.nome.toUpperCase()}`
                 }
 
                 if (editandoEspecialidade) {
