@@ -438,7 +438,7 @@ export default function PaginaRelatorio() {
 
                                     {expandedRow === item.cabecalho.atendimento_id && (
                                         <tr>
-                                            <td colSpan={4} className="p-0 bg-blue-50/40 dark:bg-blue-900/10">
+                                            <td colSpan={6} className="p-0 bg-blue-50/40 dark:bg-blue-900/10">
                                                 <div className="p-8 grid grid-cols-1 lg:grid-cols-3 gap-8 border-b border-gray-200">
                                                     <div className="lg:col-span-2 space-y-4">
                                                         <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">

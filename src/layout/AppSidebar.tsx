@@ -54,7 +54,7 @@ const navItems: NavItem[] = [
     icon: <FileText className="w-5 h-5" />,
     roles: ["admin", "painel", "recepcao"],
     subItems: [
-      { name: "Geral", path: "/sistema-filas/relatorios/geral", roles: ["admin", "painel", "recepcao"] },
+      { name: "Atendimento", path: "/sistema-filas/relatorios/geral", roles: ["admin", "painel", "recepcao"] },
       { name: "ASO", path: "/sistema-filas/relatorios/aso", roles: ["admin", "painel", "recepcao"] },
       { name: "Pendências de Exames", path: "/sistema-filas/relatorios/pendencias", roles: ["admin", "painel", "recepcao"] },
       { name: "Especialidades", path: "/sistema-filas/relatorios/especialidades", roles: ["admin", "painel", "recepcao"] },

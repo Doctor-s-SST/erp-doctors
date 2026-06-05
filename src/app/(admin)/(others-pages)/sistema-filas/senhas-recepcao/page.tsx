@@ -90,7 +90,7 @@ export default function RecepcaoPage() {
         sequencial: "",
         arquivo: null as File | null,
         empresa: { razao_social: "", cnpj: "", codigo_empresa: "" },
-        funcionario: { nome: "", rg: "", nascimento: "", cargo: "", setor: "", cpf: "" },
+        funcionario: { nome: "", rg: "", nascimento: "", cargo: "", setor: "", cpf: "", codigo_funcionario: "" },
         exame: { tipo: "" },
         exames: [] as Array<{ exame: string }>,
         especialidadesSelecionadas: [] as number[],
@@ -497,7 +497,7 @@ export default function RecepcaoPage() {
             ? Array.from(new Set([idTriagem, ...formFicha.especialidadesSelecionadas]))
             : formFicha.especialidadesSelecionadas;
 
-        const { error } = await supabase.rpc("registrar_dados_ficha", {
+        const { error } = await supabase.rpc("registrar_dados_ficha_novo", {
             p_atendimento_id: importModal.item.id,
             p_sequencial: formFicha.sequencial,
             p_paciente_nome: formFicha.funcionario.nome,
@@ -514,7 +514,9 @@ export default function RecepcaoPage() {
             p_observacao: formFicha.observacao,
             p_unidade_id: unidadeId,
             p_encaixe: formFicha.encaixe,
-            p_tipo_exame: formFicha.exame.tipo
+            p_tipo_exame: formFicha.exame.tipo,
+            p_codigo_funcionario: formFicha.funcionario.codigo_funcionario,
+
         });
 
         if (error) {
@@ -610,7 +612,8 @@ export default function RecepcaoPage() {
                     nascimento: detalhes.pacientes?.data_nascimento || "",
                     cargo: detalhes.pacientes?.cargo || "",
                     setor: detalhes.pacientes?.setor || "",
-                    cpf: detalhes.pacientes?.cpf || ""
+                    cpf: detalhes.pacientes?.cpf || "",
+                    codigo_funcionario: detalhes.pacientes?.codigo_funcionario || ""
                 },
                 exame: { tipo: detalhes.tipo_exame || "" },
                 exames: detalhes.exames_list || [],
@@ -790,7 +793,8 @@ export default function RecepcaoPage() {
                     nascimento: data.funcionario?.nascimento || "",
                     cargo: data.funcionario?.cargo || "",
                     setor: data.funcionario?.setor || "",
-                    cpf: data.funcionario?.cpf || ""
+                    cpf: data.funcionario?.cpf || "",
+                    codigo_funcionario: data.funcionario?.codigo_funcionario || ""
                 },
                 exame: {
                     tipo: data.exame?.tipo || ""
@@ -914,7 +918,10 @@ export default function RecepcaoPage() {
                         dados.setor || "",
 
                     cpf:
-                        dados.cpf || ""
+                        dados.cpf || "",
+
+                    codigo_funcionario:
+                        dados.codigo_funcionario || ""
                 },
 
                 exame: {

@@ -5,7 +5,7 @@ import {
     Monitor, Search, Clock, ChevronDown, ChevronUp,
     Table as TableIcon, LogIn, ArrowUpDown, Calendar1,
     ArrowRightCircle,
-    Loader2
+    Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
@@ -14,6 +14,8 @@ import { BotaoImprimirDeclaracao } from '@/components/atendimento/relatorios/Imp
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { supabase } from '@/lib/supabase';
+import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 
 export default function PaginaRelatorio() {
     const [loading, setLoading] = useState(false);
@@ -117,11 +119,11 @@ export default function PaginaRelatorio() {
     }, [periodo, dias]);
 
     // Converte data "DD/MM/YYYY HH:mm:ss" para Date objeto
-    const parseAcionamentoToDate = (str: string) => {
-        const [d, t] = str.split(' ');
-        const [day, month, year] = d.split('/');
-        return new Date(`${year}-${month}-${day}T${t}`);
-    };
+    // const parseAcionamentoToDate = (str: string) => {
+    //     const [d, t] = str.split(' ');
+    //     const [day, month, year] = d.split('/');
+    //     return new Date(`${year}-${month}-${day}T${t}`);
+    // };
 
     const parseTempoToSegundos = (tempoStr: string) => {
         if (!tempoStr || tempoStr === '---') return 0;
@@ -170,12 +172,7 @@ export default function PaginaRelatorio() {
         // 1. FILTRAGEM
         items = items.filter(item => {
             const nome = item?.cabecalho?.nome || "";
-            // const senha = item?.cabecalho?.senha || "";
-            // const acionamentoStr = item?.cabecalho?.acionamento || "";
             const busca = filtros.buscaNome.toLowerCase();
-
-            // const horaAtendimento = acionamentoStr.split(' ')[1]?.substring(0, 5);
-            // if (horaAtendimento && (horaAtendimento < filtros.horaInicio || horaAtendimento > filtros.horaFim)) return false;
 
             const atendeBusca =
                 nome.toLowerCase().includes(busca) ||
@@ -185,56 +182,43 @@ export default function PaginaRelatorio() {
             return /*atendeTipo() &&*/ atendeBusca;
         });
 
-        // 2. ORDENAÇÃO
-        if (sortConfig) {
-            items.sort((a, b) => {
-                let valA: any, valB: any;
-
-                if (sortConfig.key === 'tempo') {
-                    valA = parseTempoToSegundos(a.tempo_total_dispensado.split('(')[1]?.replace(')', '') || '');
-                    valB = parseTempoToSegundos(b.tempo_total_dispensado.split('(')[1]?.replace(')', '') || '');
-                } else if (sortConfig.key === 'acionamento') {
-                    valA = parseAcionamentoToDate(a.cabecalho.acionamento).getTime();
-                    valB = parseAcionamentoToDate(b.cabecalho.acionamento).getTime();
-                } else {
-                    valA = a.cabecalho[sortConfig.key as keyof typeof a.cabecalho] || '';
-                    valB = b.cabecalho[sortConfig.key as keyof typeof b.cabecalho] || '';
-                }
-
-                if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
-                if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
-                return 0;
-            });
-        } else {
-            // ORDENAÇÃO PADRÃO: Acionamento (Cronológico)
-            // ORDENAÇÃO FIXA (SEMPRE CRONOLÓGICA)
-            items.sort((a, b) => {
-                const dateA = parseAcionamentoToDate(a.cabecalho.acionamento);
-                const dateB = parseAcionamentoToDate(b.cabecalho.acionamento);
-
-                return dateA.getTime() - dateB.getTime();
-            });
-        }
-
         return items;
     }, [dadosRelatorio, filtros, sortConfig]);
 
-    const exportToExcel = dadosFiltradosOrdenados.map(item => ({
-        "Empresa": item.dados_gerais.razao_social,
-        "Funcionário": item.dados_gerais.nome,
-        "CPF": item.dados_gerais.cpf,
-        "Cargo": item.dados_gerais.cargo,
-        "Setor": item.dados_gerais.setor,
-        "Tipo ASO": item.dados_gerais.tipo_aso,
-        "Data ASO": item.dados_gerais.data_aso,
-        "Ficha": item.dados_gerais.sequencial_ficha,
-        "Exames": item.exames
-            .map((e: any) => e.nome_exame)
-            .join(", "),
-        "Riscos": item.riscos
-            .map((r: any) => r.descricao_risco)
-            .join(", ")
-    }));
+    // const exportToExcel = dadosFiltradosOrdenados.map(item => ({
+    //     "Empresa": item.dados_gerais.razao_social,
+    //     "Funcionário": item.dados_gerais.nome,
+    //     "CPF": item.dados_gerais.cpf,
+    //     "Cargo": item.dados_gerais.cargo,
+    //     "Setor": item.dados_gerais.setor,
+    //     "Tipo ASO": item.dados_gerais.tipo_aso,
+    //     "Data ASO": item.dados_gerais.data_aso,
+    //     "Ficha": item.dados_gerais.sequencial_ficha,
+    //     "Exames": item.exames
+    //         .map((e: any) => e.nome_exame)
+    //         .join(", "),
+    //     "Riscos": item.riscos
+    //         .map((r: any) => r.descricao_risco)
+    //         .join(", ")
+    // }));
+
+    const estatisticas = useMemo(() => ({
+        total: dadosFiltradosOrdenados.length,
+        periodicos: dadosFiltradosOrdenados.filter(i => i.dados_gerais.tipo_aso === 'Periódico').length,
+        admissionais: dadosFiltradosOrdenados.filter(i => i.dados_gerais.tipo_aso === 'Admissional').length,
+        demissionais: dadosFiltradosOrdenados.filter(i => i.dados_gerais.tipo_aso === 'Demissional').length,
+        empresas: new Set(
+            dadosFiltradosOrdenados.map(i => i.dados_gerais.razao_social)
+        ).size
+    }), [dadosFiltradosOrdenados]);
+
+    const corAso = {
+        "Admissional": "bg-emerald-100 text-emerald-700",
+        "Periódico": "bg-blue-100 text-blue-700",
+        "Demissional": "bg-red-100 text-red-700",
+        "Mudança de Função": "bg-orange-100 text-orange-700",
+        "Retorno ao Trabalho": "bg-violet-100 text-violet-700"
+    };
 
     return (
         <div className="min-h-screen bg-gray-50 dark:bg-black/40 p-4">
@@ -252,7 +236,7 @@ export default function PaginaRelatorio() {
                     </div>
                     <div>
                         {/* <Button variant="outline" onClick={exportToExcel} className="border-gray-600 text-gray-300 hover:bg-gray-800"><TableIcon className="w-4 h-4 mr-2" /> Exportar Excel</Button> */}
-                        <BotaoImprimirRelatorio item={dadosFiltradosOrdenados} text="Relatório Geral" />
+                        {/* <BotaoImprimirRelatorio item={dadosFiltradosOrdenados} text="Relatório Geral" /> */}
                     </div>
                 </div>
 
@@ -366,27 +350,77 @@ export default function PaginaRelatorio() {
                     </div>
                 </div>
 
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+
+                    <div className="rounded-2xl border bg-background p-5">
+                        <div className="text-xs uppercase text-muted-foreground">
+                            Total de ASOs
+                        </div>
+                        <div className="text-3xl font-black mt-2">
+                            {estatisticas.total}
+                        </div>
+                    </div>
+
+
+                    <div className="rounded-2xl border bg-background p-5">
+                        <div className="text-xs uppercase text-muted-foreground">
+                            Admissionais
+                        </div>
+                        <div className="text-3xl font-black mt-2">
+                            {estatisticas.admissionais}
+                        </div>
+                    </div>
+
+                    <div className="rounded-2xl border bg-background p-5">
+                        <div className="text-xs uppercase text-muted-foreground">
+                            Periódicos
+                        </div>
+                        <div className="text-3xl font-black mt-2">
+                            {estatisticas.periodicos}
+                        </div>
+                    </div>
+
+                    <div className="rounded-2xl border bg-background p-5">
+                        <div className="text-xs uppercase text-muted-foreground">
+                            Demissionais
+                        </div>
+                        <div className="text-3xl font-black mt-2">
+                            {estatisticas.demissionais}
+                        </div>
+                    </div>
+
+                    <div className="rounded-2xl border bg-background p-5">
+                        <div className="text-xs uppercase text-muted-foreground">
+                            Empresas
+                        </div>
+                        <div className="text-3xl font-black mt-2">
+                            {estatisticas.empresas}
+                        </div>
+                    </div>
+
+                </div>
+
                 {/* TABELA */}
                 <div className="bg-background rounded-2xl shadow-sm border border-border overflow-hidden">
                     <table className="w-full text-left">
                         <thead>
-                            <tr className="bg-gray-50 border-b">
-                                <th className="px-6 py-4 text-[10px] font-black uppercase cursor-pointer hover:bg-gray-100" onClick={() => handleSort('senha')}>
+                            <tr className="bg-muted/30 border-b backdrop-blur">
+                                <th className="px-6 py-4 text-[11px] font-bold tracking-wider uppercase text-muted-foreground" onClick={() => handleSort('senha')}>
                                     <div className='flex items-center gap-2'>Funcionário <ArrowUpDown className="w-3 h-3" /></div>
                                 </th>
-                                <th className="py-4 text-[10px] font-black uppercase cursor-pointer hover:bg-gray-100" onClick={() => handleSort('nome')}>
+                                <th className="py-4 text-[11px] font-bold tracking-wider uppercase text-muted-foreground" onClick={() => handleSort('nome')}>
                                     <div className='flex items-center gap-2'>Empresa <ArrowUpDown className="w-3 h-3" /></div>
                                 </th>
-                                <th className="px-6 py-4 text-[10px] font-black uppercase cursor-pointer hover:bg-gray-100" onClick={() => handleSort('acionamento')}>
+                                <th className="px-6 py-4 text-[11px] font-bold tracking-wider uppercase text-muted-foreground" onClick={() => handleSort('acionamento')}>
                                     <div className='flex items-center gap-2'>Tipo ASO <ArrowUpDown className="w-3 h-3" /></div>
                                 </th>
-                                <th className="px-6 py-4 text-[10px] font-black uppercase cursor-pointer hover:bg-gray-100" onClick={() => handleSort('tempo')}>
+                                <th className="px-6 py-4 text-[11px] font-bold tracking-wider uppercase text-muted-foreground" onClick={() => handleSort('tempo')}>
                                     <div className='flex items-center gap-2'>Data ASO <ArrowUpDown className="w-3 h-3" /></div>
                                 </th>
-                                <th className="px-6 py-4 text-[10px] font-black uppercase cursor-pointer hover:bg-gray-100" onClick={() => handleSort('tempo')}>
+                                <th className="px-6 py-4 text-[11px] font-bold tracking-wider uppercase text-muted-foreground" onClick={() => handleSort('tempo')}>
                                     <div className='flex items-center gap-2'>Cargo <ArrowUpDown className="w-3 h-3" /></div>
                                 </th>
-                                <th className="px-6 py-4 text-[10px] font-black uppercase cursor-pointer hover:bg-gray-100" onClick={() => handleSort('tempo')}>
+                                <th className="px-6 py-4 text-[11px] font-bold tracking-wider uppercase text-muted-foreground" onClick={() => handleSort('tempo')}>
                                     <div className='flex items-center gap-2'></div>
                                 </th>
                             </tr>
@@ -394,102 +428,297 @@ export default function PaginaRelatorio() {
                         <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                             {dadosFiltradosOrdenados.map((item) => (
                                 <React.Fragment key={`${item.dados_gerais.sequencial_ficha}-${item.dados_gerais.cpf}`}>
-                                    <tr className={`transition-colors ${expandedRow === `${item.dados_gerais.sequencial_ficha}-${item.dados_gerais.cpf}` ? 'bg-blue-50/40' : ''}`}>
-                                        <td className={`px-6 py-5 ${item.dados_gerais.encaixe == true ? "flex flex-col text-left" : ""} `}>
-                                            <span className="text-[14px] font-black text-blue-600">{item.dados_gerais.senha}</span>
-                                            {item.dados_gerais.encaixe && <span className="w-fit text-xs font-bold text-emerald-600 rounded italic">Encaixe</span>}
+                                    <tr
+                                        className={`
+                                        group
+                                        transition-all
+                                        duration-200
+                                        hover:bg-blue-50/50
+                                        dark:hover:bg-blue-950/20
+                                        ${expandedRow === `${item.dados_gerais.sequencial_ficha}-${item.dados_gerais.cpf}` ? 'bg-blue-50 dark:bg-blue-950/20' : ''
+                                            }
+                                    `}>
+                                        <td className="px-6 py-5">
+                                            <div className="flex items-center gap-3">
+
+                                                <div className="
+                                                    h-10
+                                                    w-10
+                                                    rounded-full
+                                                    bg-blue-100
+                                                    text-blue-700
+                                                    flex
+                                                    items-center
+                                                    justify-center
+                                                    font-black
+                                                    text-sm
+                                                    ">
+                                                    {item.dados_gerais.nome
+                                                        ?.split(' ')
+                                                        .slice(0, 2)
+                                                        .map((n: string) => n[0])
+                                                        .join('')
+                                                    }
+                                                </div>
+
+                                                <div>
+                                                    <div className="font-semibold text-sm">
+                                                        {item.dados_gerais.nome || item.dados_gerais.msg}
+                                                    </div>
+
+                                                    <div className="text-xs text-muted-foreground">
+                                                        Sequencial de Ficha: {item.dados_gerais.sequencial_ficha}
+                                                    </div>
+                                                </div>
+
+                                            </div>
                                         </td>
                                         <td>
                                             <div>
-                                                <div className="font-bold text-sm">{item.dados_gerais.nome}</div>
-                                                <div className="text-[11px] text-gray-500 uppercase">{item.dados_gerais.empresa}</div>
+                                                <div className="font-medium text-sm">
+                                                    {item.dados_gerais.razao_social}
+                                                </div>
+
+                                                <div className="text-xs text-muted-foreground">
+                                                    {item.dados_gerais.cnpj}
+                                                </div>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 flex flex-col items-center"><span className="text-xs font-black">{item.dados_gerais.acionamento.split(' ')[1]}</span>
-                                            <span className="text-xs font-sm">{item.dados_gerais.acionamento.split(' ')[0]}</span></td>
-                                        <td className="px-6 py-4">
-                                            <span className="text-xs font-black bg-blue-50 px-2 py-1 rounded text-blue-700">
-                                                {item.tempo_total_dispensado.split('(')[1]?.replace(')', '') || '---'}
+                                        <td>
+                                            <Badge
+                                                className={
+                                                    corAso[item.dados_gerais.tipo_aso as keyof typeof corAso] ??
+                                                    "bg-slate-100 text-slate-700"
+                                                }
+                                            >
+                                                {item.dados_gerais.tipo_aso}
+                                            </Badge>
+                                        </td>
+
+                                        <td>
+                                            <div className="flex items-center gap-2 text-sm">
+
+                                                <Calendar1 className="h-4 w-4 text-muted-foreground" />
+
+                                                {item.dados_gerais.data_aso}
+
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <span className="
+                                                inline-flex
+                                                rounded-full
+                                                px-3
+                                                py-1
+                                                text-xs
+                                                font-medium
+                                                bg-muted
+                                            ">
+                                                {item.dados_gerais.cargo}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
-                                            <BotaoImprimirDeclaracao item={item} />
-                                            <BotaoImprimirRelatorio item={[item]} text="Relatório" />
-                                            <button onClick={() => setExpandedRow(expandedRow === `${item.dados_gerais.sequencial_ficha}-${item.dados_gerais.cpf}` ? null : `${item.dados_gerais.sequencial_ficha}-${item.dados_gerais.cpf}`)} className="p-2 rounded-lg bg-blue-600 text-white shadow-lg">
-                                                {expandedRow === `${item.dados_gerais.sequencial_ficha}-${item.dados_gerais.cpf}` ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                                            {/* <BotaoImprimirRelatorio item={[item]} text="Relatório" /> */}
+                                            <button onClick={() => setExpandedRow(expandedRow === `${item.dados_gerais.sequencial_ficha}-${item.dados_gerais.cpf}` ? null : `${item.dados_gerais.sequencial_ficha}-${item.dados_gerais.cpf}`)} className="
+                                                h-9
+                                                w-9
+                                                flex
+                                                items-center
+                                                justify-center
+                                                rounded-xl
+                                                border
+                                                bg-background
+                                                hover:bg-blue-50
+                                                hover:border-blue-300
+                                                transition-all
+                                                ">
+                                                {expandedRow === `${item.dados_gerais.sequencial_ficha}-${item.dados_gerais.cpf}` ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="h-4 w-4 text-blue-600" />}
                                             </button>
                                         </td>
                                     </tr>
 
                                     {expandedRow === `${item.dados_gerais.sequencial_ficha}-${item.dados_gerais.cpf}` && (
-                                        <tr>
-                                            <td colSpan={4} className="p-0 bg-blue-50/40 dark:bg-blue-900/10">
-                                                <div className="p-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
+                                        <tr className=''>
+                                            <td colSpan={6} className="p-0 bg-blue-50/40 dark:bg-blue-90/10">
+                                                <div className="p-4 flex flex-col md:flex-row gap-4">
 
-                                                    {/* DADOS GERAIS */}
-                                                    <div className="bg-background rounded-xl border p-5">
-                                                        <h4 className="font-black text-sm mb-4">
-                                                            Dados Gerais
-                                                        </h4>
+                                                    <div className='flex flex-col gap-4'>
+                                                        {/* DADOS GERAIS */}
+                                                        <div className="
+                                                            bg-background
+                                                            rounded-2xl
+                                                            border
+                                                            shadow-sm
+                                                            p-6
+                                                            h-fit
+                                                            w-100
+                                                        ">
+                                                            <h4 className="
+                                                            text-xs
+                                                            uppercase
+                                                            tracking-widest
+                                                            text-muted-foreground
+                                                            font-black
+                                                            mb-5
+                                                        ">
+                                                                Dados Gerais
+                                                            </h4>
 
-                                                        <div className="space-y-2 text-sm">
+                                                            <div className="space-y-2 text-sm">
 
-                                                            <div><b>CPF:</b> {item.dados_gerais.cpf}</div>
+                                                                <div className="grid grid-cols-2 gap-4 text-sm">
 
-                                                            <div><b>RG:</b> {item.dados_gerais.rg}</div>
+                                                                    <div>
+                                                                        <span className="text-muted-foreground">
+                                                                            CPF
+                                                                        </span>
 
-                                                            <div><b>Nascimento:</b> {item.dados_gerais.data_nascimento}</div>
+                                                                        <div className="font-semibold">
+                                                                            {item.dados_gerais.cpf}
+                                                                        </div>
+                                                                    </div>
 
-                                                            <div><b>Setor:</b> {item.dados_gerais.setor}</div>
+                                                                    <div>
+                                                                        <span className="text-muted-foreground">
+                                                                            RG
+                                                                        </span>
 
-                                                            <div><b>Cargo:</b> {item.dados_gerais.cargo}</div>
+                                                                        <div className="font-semibold">
+                                                                            {item.dados_gerais.rg}
+                                                                        </div>
+                                                                    </div>
 
-                                                            <div><b>Ficha:</b> {item.dados_gerais.sequencial_ficha}</div>
+                                                                    <div>
+                                                                        <span className="text-muted-foreground">
+                                                                            Nascimento
+                                                                        </span>
 
-                                                            <div><b>Unidade:</b> {item.dados_gerais.unidade}</div>
+                                                                        <div className="font-semibold">
+                                                                            {item.dados_gerais.data_nascimento}
+                                                                        </div>
+                                                                    </div>
 
+                                                                    <div>
+                                                                        <span className="text-muted-foreground">
+                                                                            Setor
+                                                                        </span>
+
+                                                                        <div className="font-semibold">
+                                                                            {item.dados_gerais.setor}
+                                                                        </div>
+                                                                    </div>
+
+                                                                    <div>
+                                                                        <span className="text-muted-foreground">
+                                                                            Cargo
+                                                                        </span>
+
+                                                                        <div className="font-semibold">
+                                                                            {item.dados_gerais.cargo}
+                                                                        </div>
+                                                                    </div>
+
+                                                                    <div>
+                                                                        <span className="text-muted-foreground">
+                                                                            Unidade
+                                                                        </span>
+
+                                                                        <div className="font-semibold">
+                                                                            {item.dados_gerais.unidade}
+                                                                        </div>
+                                                                    </div>
+
+                                                                    <div>
+                                                                        <span className="text-muted-foreground">
+                                                                            Parecer
+                                                                        </span>
+
+                                                                        <div className="font-semibold">
+                                                                            {item.dados_gerais.aptidao}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+
+
+                                                            </div>
+                                                        </div>
+
+                                                        {/* EXAMES */}
+                                                        <div className="bg-background
+                                                            rounded-2xl
+                                                            border
+                                                            shadow-sm
+                                                            p-6
+                                                            h-fit
+                                                            w-100">
+                                                            <h4 className="text-xs
+                                                            uppercase
+                                                            tracking-widest
+                                                            text-muted-foreground
+                                                            font-black
+                                                            mb-5">
+                                                                Exames
+                                                            </h4>
+
+                                                            <div className="flex flex-wrap gap-2">
+
+                                                                {item.exames.map((exame: any, idx: number) => (
+
+                                                                    <Badge
+                                                                        key={idx}
+                                                                        variant="secondary"
+                                                                        className="rounded-full text-sm"
+                                                                    >
+                                                                        {exame.nome_exame}
+                                                                    </Badge>
+
+                                                                ))}
+
+                                                            </div>
                                                         </div>
                                                     </div>
 
                                                     {/* RISCOS */}
-                                                    <div className="bg-background rounded-xl border p-5">
-                                                        <h4 className="font-black text-sm mb-4">
+                                                    <div className="bg-background
+                                                            rounded-2xl
+                                                            border
+                                                            shadow-sm
+                                                            p-6
+                                                            h-fit
+                                                            w-fit">
+                                                        <h4 className="text-xs
+                                                            uppercase
+                                                            tracking-widest
+                                                            text-muted-foreground
+                                                            font-black
+                                                            mb-5">
                                                             Riscos Ocupacionais
                                                         </h4>
 
-                                                        <div className="space-y-2">
+                                                        <div className='grid grid-cols-1 md:grid-cols-2 gap-3'>
                                                             {item.riscos.map((risco: any, idx: number) => (
-                                                                <div key={idx}>
-                                                                    <div className="font-bold text-xs text-blue-600">
-                                                                        {risco.agente || "Outros"}
-                                                                    </div>
-
-                                                                    <div className="text-xs">
-                                                                        {risco.descricao_risco}
-                                                                    </div>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-
-                                                    {/* EXAMES */}
-                                                    <div className="bg-background rounded-xl border p-5">
-                                                        <h4 className="font-black text-sm mb-4">
-                                                            Exames Realizados
-                                                        </h4>
-
-                                                        <div className="space-y-2">
-                                                            {item.exames.map((exame: any, idx: number) => (
                                                                 <div
                                                                     key={idx}
-                                                                    className="text-xs bg-blue-50 dark:bg-blue-900/20 rounded-lg p-2"
+                                                                    className="
+                                                                border
+                                                                rounded-xl
+                                                                p-3
+                                                                bg-muted/20
+                                                                "
                                                                 >
-                                                                    {exame.nome_exame}
+
+                                                                    <Badge className="mb-1">
+                                                                        {risco.agente || "Outros"}
+                                                                    </Badge>
+
+                                                                    <p className="text-xs leading-relaxed">
+                                                                        {risco.descricao_risco}
+                                                                    </p>
+
                                                                 </div>
                                                             ))}
                                                         </div>
                                                     </div>
-
                                                 </div>
                                             </td>
                                         </tr>
