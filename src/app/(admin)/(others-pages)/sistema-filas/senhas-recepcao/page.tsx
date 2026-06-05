@@ -1121,7 +1121,7 @@ export default function RecepcaoPage() {
                                             const isFinalizado = item.status === "FINALIZADO";
                                             const isNaoAtendido = item.status === "NAO_ATENDIDO";
                                             const isCancelado = item.status === "CANCELADO";
-                                            const isAguardandoExames = item.status === "AGUARDANDO_EXAMES" || (item.status.startsWith("EM_") && item.status !== "EM_FILA" && item.status !== "EM_RECEPCAO");
+                                            const isAguardandoExames = item.status === "AGUARDANDO_EXAMES" || (item.status.startsWith("EM ") && item.status !== "EM_FILA" && item.status !== "EM_RECEPCAO");
                                             const isAguardandoRecepcao = item.status === "AGUARDANDO_RECEPCAO";
                                             const isEncerrado = isFinalizado || isCancelado;
 
