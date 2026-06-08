@@ -29,13 +29,16 @@ const ROLE_COLORS: any = {
   recepcao: { bg: "bg-orange-500", light: "bg-orange-500/10", text: "text-orange-500", border: "hover:border-orange-500/30" },
   especialista: { bg: "bg-emerald-500", light: "bg-emerald-500/10", text: "text-emerald-500", border: "hover:border-emerald-500/30" },
   painel: { bg: "bg-yellow-500", light: "bg-yellow-500/10", text: "text-yellow-500", border: "hover:border-yellow-500/30" },
+  operador: { bg: "bg-red-500", light: "bg-red-500/10", text: "text-red-500", border: "hover:border-red-500/30" },
   all: { bg: "bg-gray-900", light: "bg-slate-100", text: "text-slate-600" }
 };
 
 const ROLE_ORDER: any = {
   admin: 1,
   recepcao: 2,
-  especialista: 3
+  especialista: 3,
+  operador: 4,
+  painel: 5,
 };
 
 export default function UsersManagementPage() {
@@ -103,12 +106,6 @@ export default function UsersManagementPage() {
 
         if (profile) {
           let idFinal = profile.unidade_id;
-
-          // Se for admin, verifica se há uma troca de unidade no Header
-          // if (profile.role === 'admin') {
-          //   const salvaLocal = localStorage.getItem('unidade_ativa_id');
-          //   if (salvaLocal) idFinal = salvaLocal;
-          // }
 
           setUnidadeId(idFinal);
           fetchUsers(idFinal);
@@ -182,6 +179,7 @@ export default function UsersManagementPage() {
                 { id: "recepcao", label: "RECEPÇÃO", icon: User },
                 { id: "especialista", label: "ESPECIALISTAS", icon: Stethoscope },
                 { id: "painel", label: "PAINEL", icon: Monitor },
+                { id: "operador", label: "OPERADOR", icon: User },
               ].map((role) => (
                 <Button
                   key={role.id}
@@ -263,7 +261,7 @@ export default function UsersManagementPage() {
                         )}
 
                         <Badge className={`${colorScheme.bg} text-white text-[9px] font-black border-none uppercase tracking-widest py-1`}>
-                          {user.role === 'recepcao' ? 'RECEPÇÃO' : user.role === 'admin' ? 'ADMIN' : user.role === 'especialista' ? 'ESPECIALISTA' : 'PAINEL'}
+                          {user.role === 'recepcao' ? 'RECEPÇÃO' : user.role === 'admin' ? 'ADMIN' : user.role === 'especialista' ? 'ESPECIALISTA' : user.role === 'painel' ? 'PAINEL' : 'OPERADOR'}
                         </Badge>
                       </div>
                     </div>

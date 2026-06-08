@@ -39,7 +39,7 @@ export default function UserFormDialog({ open, onOpenChange, user, unidadeAtiva,
             first_name: "",
             last_name: "",
             password: "",
-            role: "especialista",
+            role: "operador",
             especialidade_id: "none",
         },
     });
@@ -58,7 +58,7 @@ export default function UserFormDialog({ open, onOpenChange, user, unidadeAtiva,
                 email: user.email,
                 first_name: user.first_name || "",
                 last_name: user.last_name || "",
-                role: user.role || "especialista",
+                role: user.role || "operador",
                 especialidade_id: user.especialidade_id || "none",
             });
         }
@@ -229,6 +229,7 @@ export default function UserFormDialog({ open, onOpenChange, user, unidadeAtiva,
                                                 <SelectItem value="admin">Administrador</SelectItem>
                                                 <SelectItem value="recepcao">Recepção</SelectItem>
                                                 <SelectItem value="especialista">Especialista</SelectItem>
+                                                <SelectItem value="operador">Operador</SelectItem>
                                                 <SelectItem value="painel">Painel</SelectItem>
                                             </SelectContent>
                                         </Select>
