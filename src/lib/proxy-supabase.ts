@@ -10,6 +10,7 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   "/sistema-filas/filas": ["admin", "especialista", "recepcao", "painel"],
   "/configuracoes/salas-profissionais": ["admin"],
   "/configuracoes/users": ["admin"],
+  "/configuracoes/grupos-especialidades": ["admin"],
   "/configuracoes/unidade": ["admin"],
   "/dashboards/atendimento": ["admin",]
 }
