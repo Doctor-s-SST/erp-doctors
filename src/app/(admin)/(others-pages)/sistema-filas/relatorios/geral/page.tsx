@@ -8,7 +8,7 @@ import {
     Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 import { BotaoImprimirRelatorio } from '@/components/atendimento/relatorios/ImprimirRelatorioGeral';
 import { BotaoImprimirDeclaracao } from '@/components/atendimento/relatorios/ImprimirDelcaracao';
 import { Calendar } from "@/components/ui/calendar"
@@ -110,22 +110,44 @@ export default function PaginaRelatorio() {
         }
         if (dias === 'semana') {
             const hoje = new Date();
-            const primeiroDia = new Date(hoje.setDate(hoje.getDate() - hoje.getDay()));
-            const ultimoDia = new Date(hoje.setDate(primeiroDia.getDate() + 6));
-            setFiltros(prev => ({ ...prev, dataInicio: primeiroDia.toISOString().split('T')[0], dataFim: ultimoDia.toISOString().split('T')[0] }));
+
+            const dataFim = new Date(hoje);
+            const dataInicio = new Date(hoje);
+            dataInicio.setDate(dataInicio.getDate() - 6);
+
+            setFiltros(prev => ({
+                ...prev,
+                dataInicio: dataInicio.toISOString().split('T')[0],
+                dataFim: dataFim.toISOString().split('T')[0]
+            }));
         }
+
         if (dias === 'quinzena') {
             const hoje = new Date();
-            const primeiroDia = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-            const meioDia = new Date(hoje.getFullYear(), hoje.getMonth(), 15);
-            const ultimoDia = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
-            setFiltros(prev => ({ ...prev, dataInicio: primeiroDia.toISOString().split('T')[0], dataFim: meioDia.toISOString().split('T')[0] }));
+
+            const dataFim = new Date(hoje);
+            const dataInicio = new Date(hoje);
+            dataInicio.setDate(dataInicio.getDate() - 14);
+
+            setFiltros(prev => ({
+                ...prev,
+                dataInicio: dataInicio.toISOString().split('T')[0],
+                dataFim: dataFim.toISOString().split('T')[0]
+            }));
         }
+
         if (dias === 'mes') {
             const hoje = new Date();
-            const primeiroDia = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-            const ultimoDia = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
-            setFiltros(prev => ({ ...prev, dataInicio: primeiroDia.toISOString().split('T')[0], dataFim: ultimoDia.toISOString().split('T')[0] }));
+
+            const dataFim = new Date(hoje);
+            const dataInicio = new Date(hoje);
+            dataInicio.setDate(dataInicio.getDate() - 29);
+
+            setFiltros(prev => ({
+                ...prev,
+                dataInicio: dataInicio.toISOString().split('T')[0],
+                dataFim: dataFim.toISOString().split('T')[0]
+            }));
         }
     }, [periodo, dias]);
 
@@ -182,32 +204,6 @@ export default function PaginaRelatorio() {
         if (grupoSelecionado === 'todos') return null;
         return grupos.find(g => String(g.id) === String(grupoSelecionado)) || null;
     }, [grupos, grupoSelecionado]);
-
-    const carregarGrupos = async () => {
-        try {
-            const { data, error } = await supabase
-                .from('grupos_especialidades')
-                .select(`
-                            *,
-                            grupo_especialidade_itens(
-                            especialidade_id,
-                            especialidades(
-                                id,
-                                nome
-                            )
-                            )
-                        `)
-                .eq('unidade_id', filtros.unidadeId)
-                .order('nome');
-
-            if (error) throw error;
-
-            setGrupos(data || []);
-        } catch (error) {
-            console.error(error);
-            toast.error('Erro ao carregar grupos');
-        }
-    };
 
     const dadosFiltradosOrdenados = useMemo(() => {
         let items = [...dadosRelatorio];
@@ -310,24 +306,217 @@ export default function PaginaRelatorio() {
         }
 
         return items;
-    }, [dadosRelatorio, filtros, sortConfig]);
+    }, [dadosRelatorio, filtros, sortConfig, grupoSelecionado, grupoAtual]);
+
+    const carregarGrupos = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('grupos_especialidades')
+                .select(`
+                            *,
+                            grupo_especialidade_itens(
+                            especialidade_id,
+                            especialidades(
+                                id,
+                                nome
+                            )
+                            )
+                        `)
+                .eq('unidade_id', filtros.unidadeId)
+                .order('nome');
+
+            if (error) throw error;
+
+            setGrupos(data || []);
+        } catch (error) {
+            console.error(error);
+            toast.error('Erro ao carregar grupos');
+        }
+    };
 
     const exportToExcel = () => {
-        const dataToExport = dadosFiltradosOrdenados.map(item => ({
-            "Empresa": item.cabecalho.empresa,
-            "Funcionário": item.cabecalho.nome,
-            "Sequencial Ficha": item.cabecalho.sequencial_ficha,
-            "Tipo Exame": item.cabecalho.tipo_exame,
-            "Acionamento": item.cabecalho.acionamento,
-            "Exames": item.exames_atendimento.map((ex: any) => `${ex.exame} ${ex.realizado ? '✔️' : '❌'}`).join(', '),
-            "Tempo Total": item.tempo_total_dispensado.split('(')[1]?.replace(')', '') || '',
-        }));
-        const ws = XLSX.utils.json_to_sheet(dataToExport);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Relatorio");
-        XLSX.writeFile(wb, `Relatorio_${filtros.dataInicio}.xlsx`);
+        try {
+            const rows = dadosFiltradosOrdenados.map(item => ({
+                "Empresa": item.cabecalho.empresa,
+                "Funcionário": item.cabecalho.nome,
+                "Sequencial Ficha": item.cabecalho.sequencial_ficha,
+                "Tipo Exame": item.cabecalho.tipo_exame,
+                "Acionamento": item.cabecalho.acionamento,
+                "Exames": item.exames_atendimento.map((ex: any) => `${ex.exame} ${ex.realizado ? '✔️' : '❌'}`).join(', '),
+                "Tempo Total": item.tempo_total_dispensado.split('(')[1]?.replace(')', '') || '',
+            }));
 
-        console.log("dados processados", dadosFiltradosOrdenados);
+            const dataInicioStr = filtros.dataInicio
+                ? filtros.dataInicio
+                    .split("-")
+                    .reverse()
+                    .join("/")
+                : "";
+
+            const dataFimStr = filtros.dataFim
+                ? filtros.dataFim
+                    .split("-")
+                    .reverse()
+                    .join("/")
+                : "";
+
+            const titulo =
+                `RELATÓRIO DE ATENDIMENTOS - ${dataInicioStr} ${dataFimStr ? `até ${dataFimStr}` : ''}`;
+
+            const ws = XLSX.utils.aoa_to_sheet([]);
+
+            // TÍTULO
+            XLSX.utils.sheet_add_aoa(
+                ws,
+                [[titulo]],
+                { origin: "A1" }
+            );
+
+            // DADOS
+            XLSX.utils.sheet_add_json(
+                ws,
+                rows,
+                {
+                    origin: "A2",
+                    skipHeader: false
+                }
+            );
+
+            // MESCLA A1:K1
+            ws["!merges"] = [
+                {
+                    s: { r: 0, c: 0 },
+                    e: { r: 0, c: 6 }
+                }
+            ];
+
+            // ALTURA DAS LINHAS
+            ws["!rows"] = [
+                { hpt: 30 },
+                { hpt: 22 }
+            ];
+
+            // LARGURA DAS COLUNAS
+            ws["!cols"] = [
+                { wch: 40 }, // Empresa
+                { wch: 35 }, // Funcionário
+                { wch: 12 }, // Ficha
+                { wch: 15 }, // Tipo Exame
+                { wch: 15 }, // Acionamento
+                { wch: 60 }, // Exames
+                { wch: 15 }, // Tempo Total
+            ];
+
+            // FILTRO AUTOMÁTICO NO CABEÇALHO
+            ws["!autofilter"] = {
+                ref: "A2:G2"
+            };
+
+            // ===== ESTILOS (somente com xlsx-js-style) =====
+
+            // TÍTULO
+            if (ws["A1"]) {
+                ws["A1"].s = {
+                    font: {
+                        bold: true,
+                        sz: 16,
+                        color: { rgb: "FFFFFF" }
+                    },
+                    fill: {
+                        fgColor: { rgb: "009688" }
+                    },
+                    alignment: {
+                        horizontal: "center",
+                        vertical: "center"
+                    }
+                };
+            }
+
+            // CABEÇALHO (linha 2)
+            for (let col = 0; col <= 6; col++) {
+
+                const cellAddress =
+                    XLSX.utils.encode_cell({
+                        r: 1,
+                        c: col
+                    });
+
+                if (!ws[cellAddress]) continue;
+
+                ws[cellAddress].s = {
+                    font: {
+                        bold: true,
+                        color: { rgb: "FFFFFF" }
+                    },
+                    fill: {
+                        fgColor: { rgb: "009688" }
+                    },
+                    alignment: {
+                        horizontal: "center",
+                        vertical: "center"
+                    }
+                };
+            }
+
+            const wb = XLSX.utils.book_new();
+
+            XLSX.utils.book_append_sheet(
+                wb,
+                ws,
+                "ASOs"
+            );
+
+            const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+
+            for (let row = range.s.r; row <= range.e.r; row++) {
+                for (let col = range.s.c; col <= range.e.c; col++) {
+
+                    const cellAddress = XLSX.utils.encode_cell({
+                        r: row,
+                        c: col
+                    });
+
+                    if (!ws[cellAddress]) continue;
+
+                    ws[cellAddress].s = {
+                        ...(ws[cellAddress].s || {}),
+                        border: {
+                            top: {
+                                style: "thin",
+                                color: { rgb: "D1D5DB" }
+                            },
+                            bottom: {
+                                style: "thin",
+                                color: { rgb: "D1D5DB" }
+                            },
+                            left: {
+                                style: "thin",
+                                color: { rgb: "D1D5DB" }
+                            },
+                            right: {
+                                style: "thin",
+                                color: { rgb: "D1D5DB" }
+                            }
+                        }
+                    };
+                }
+            }
+
+            XLSX.writeFile(
+                wb,
+                `relatorio_atendimentos_${filtros.dataInicio}.xlsx`
+            );
+
+            toast.success("Exportado para Excel.");
+
+        } catch (error) {
+
+            console.error(error);
+
+            toast.error(
+                "Erro ao exportar para Excel."
+            );
+        }
     };
 
     return (
@@ -345,14 +534,14 @@ export default function PaginaRelatorio() {
                                 <p className="text-gray-500 text-[10px] font-bold uppercase tracking-widest italic">Análise de Fluxo e Tempo</p>
                             </div>
                         </div>
-                        <div>
+                        <div className='flex items-center gap-1'>
                             <Button
                                 onClick={() => setOpenGrupo(true)}
-                                className='bg-emerald-600'
+                                className='bg-blue-600 hover:bg-blue-800'
                             >
                                 Criar Grupo de Filtro
                             </Button>
-                            <Button variant="outline" onClick={exportToExcel} className="border-gray-600 text-gray-300 hover:bg-gray-800"><TableIcon className="w-4 h-4 mr-2" /> Exportar Excel</Button>
+                            <Button onClick={exportToExcel} className="bg-emerald-600 hover:bg-emerald-800"><TableIcon className="w-4 h-4 mr-2" /> Exportar Excel</Button>
                             <BotaoImprimirRelatorio item={dadosFiltradosOrdenados} text="Relatório Geral" />
                         </div>
                     </div>

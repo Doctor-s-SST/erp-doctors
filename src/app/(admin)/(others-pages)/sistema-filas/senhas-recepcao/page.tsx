@@ -932,6 +932,10 @@ export default function RecepcaoPage() {
                 exames: examesFiltrados
             }));
 
+            if(dados.medico_coordeador == "") {
+                alert("Atenção: Esta ficha não possui médico coordenador definido. Por favor, revise os dados antes de finalizar.")
+            }
+
             toast.success("Ficha carregada com sucesso!", {
                 id: toastId
 

@@ -8,9 +8,8 @@ import {
     Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 import { BotaoImprimirRelatorio } from '@/components/atendimento/relatorios/ImprimirRelatorioGeral';
-import { BotaoImprimirDeclaracao } from '@/components/atendimento/relatorios/ImprimirDelcaracao';
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { supabase } from '@/lib/supabase';
@@ -24,8 +23,7 @@ export default function PaginaRelatorio() {
     const [dadosRelatorio, setDadosRelatorio] = useState<any[]>([]);
     const [expandedRow, setExpandedRow] = useState<string | null>(null);
     const [range, setRange] = useState<any>();
-    const [periodo, setPeriodo] = useState<'manha' | 'tarde' | 'personalizado' | 'todos'>('todos');
-    const [dias, setDias] = useState<'hoje' | 'ontem' | 'semana' | 'quinzena' | 'mes' | 'personalizado'>('hoje');
+    const [dias, setDias] = useState<'hoje' | 'ontem' | 'personalizado'>('hoje');
     const [openGrupo, setOpenGrupo] = useState(false);
     const [grupoSelecionado, setGrupoSelecionado] = useState('todos');
     const [grupos, setGrupos] = useState<any[]>([]);
@@ -40,7 +38,6 @@ export default function PaginaRelatorio() {
         horaFim: '23:59',
         unidadeId: '',
         buscaNome: '',
-        tipoSenha: 'todos'
     });
 
     useEffect(() => {
@@ -81,16 +78,6 @@ export default function PaginaRelatorio() {
     }, [filtros.dataInicio, filtros.dataFim, filtros.horaInicio, filtros.horaFim, filtros.unidadeId]);
 
     useEffect(() => {
-        if (periodo === 'todos') {
-            setFiltros(prev => ({ ...prev, horaInicio: '07:00', horaFim: '17:59' }));
-        }
-        if (periodo === 'manha') {
-            setFiltros(prev => ({ ...prev, horaInicio: '07:00', horaFim: '13:00' }));
-        }
-        if (periodo === 'tarde') {
-            setFiltros(prev => ({ ...prev, horaInicio: '13:01', horaFim: '17:59' }));
-        }
-
         if (dias === 'hoje') {
             const hoje = new Date();
             const dataStr = hoje.toISOString().split('T')[0];
@@ -102,47 +89,13 @@ export default function PaginaRelatorio() {
             const dataStr = ontem.toISOString().split('T')[0];
             setFiltros(prev => ({ ...prev, dataInicio: dataStr, dataFim: dataStr }));
         }
-        if (dias === 'semana') {
-            const hoje = new Date();
-            const primeiroDia = new Date(hoje.setDate(hoje.getDate() - hoje.getDay()));
-            const ultimoDia = new Date(hoje.setDate(primeiroDia.getDate() + 6));
-            setFiltros(prev => ({ ...prev, dataInicio: primeiroDia.toISOString().split('T')[0], dataFim: ultimoDia.toISOString().split('T')[0] }));
-        }
-        if (dias === 'quinzena') {
-            const hoje = new Date();
-            const primeiroDia = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-            const meioDia = new Date(hoje.getFullYear(), hoje.getMonth(), 15);
-            const ultimoDia = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
-            setFiltros(prev => ({ ...prev, dataInicio: primeiroDia.toISOString().split('T')[0], dataFim: meioDia.toISOString().split('T')[0] }));
-        }
-        if (dias === 'mes') {
-            const hoje = new Date();
-            const primeiroDia = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-            const ultimoDia = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
-            setFiltros(prev => ({ ...prev, dataInicio: primeiroDia.toISOString().split('T')[0], dataFim: ultimoDia.toISOString().split('T')[0] }));
-        }
-    }, [periodo, dias]);
-
-    // Converte data "DD/MM/YYYY HH:mm:ss" para Date objeto
-    // const parseAcionamentoToDate = (str: string) => {
-    //     const [d, t] = str.split(' ');
-    //     const [day, month, year] = d.split('/');
-    //     return new Date(`${year}-${month}-${day}T${t}`);
-    // };
+    }, [dias]);
 
     useEffect(() => {
         if (filtros.unidadeId) {
             carregarGrupos();
         }
     }, [filtros.unidadeId]);
-
-    const parseTempoToSegundos = (tempoStr: string) => {
-        if (!tempoStr || tempoStr === '---') return 0;
-        const h = parseInt(tempoStr.match(/(\d+)h/)?.[1] || '0');
-        const m = parseInt(tempoStr.match(/(\d+)m/)?.[1] || '0');
-        const s = parseInt(tempoStr.match(/(\d+)s/)?.[1] || '0');
-        return h * 3600 + m * 60 + s;
-    };
 
     const handleSort = (key: string) => {
         let direction: 'asc' | 'desc' = 'asc';
@@ -257,19 +210,181 @@ export default function PaginaRelatorio() {
                 "Tipo ASO": item.dados_gerais.tipo_aso,
                 "Data ASO": item.dados_gerais.data_aso,
                 "Ficha": item.dados_gerais.sequencial_ficha,
-                "Exames": (item.exames || []).map((e: any) => e.nome_exame).join(", "),
-                "Riscos": (item.riscos || []).map((r: any) => r.descricao_risco).join(", ")
+                "Exames": (item.exames || [])
+                    .map((e: any) => e.nome_exame)
+                    .join(", "),
+                "Riscos": (item.riscos || [])
+                    .map((r: any) => r.descricao_risco)
+                    .join(", ")
             }));
 
-            const ws = XLSX.utils.json_to_sheet(rows);
+            const dataInicioStr = filtros.dataInicio
+                ? filtros.dataInicio
+                    .split("-")
+                    .reverse()
+                    .join("/")
+                : "";
+
+            const titulo =
+                `RELATÓRIO DE ASO's - ${dataInicioStr}`;
+
+            const ws = XLSX.utils.aoa_to_sheet([]);
+
+            // TÍTULO
+            XLSX.utils.sheet_add_aoa(
+                ws,
+                [[titulo]],
+                { origin: "A1" }
+            );
+
+            // DADOS
+            XLSX.utils.sheet_add_json(
+                ws,
+                rows,
+                {
+                    origin: "A2",
+                    skipHeader: false
+                }
+            );
+
+            // MESCLA A1:K1
+            ws["!merges"] = [
+                {
+                    s: { r: 0, c: 0 },
+                    e: { r: 0, c: 10 }
+                }
+            ];
+
+            // ALTURA DAS LINHAS
+            ws["!rows"] = [
+                { hpt: 30 },
+                { hpt: 22 }
+            ];
+
+            // LARGURA DAS COLUNAS
+            ws["!cols"] = [
+                { wch: 40 }, // Empresa
+                { wch: 18 }, // CNPJ
+                { wch: 35 }, // Funcionário
+                { wch: 15 }, // CPF
+                { wch: 20 }, // Setor
+                { wch: 25 }, // Cargo
+                { wch: 15 }, // Tipo ASO
+                { wch: 15 }, // Data
+                { wch: 12 }, // Ficha
+                { wch: 60 }, // Exames
+                { wch: 80 }  // Riscos
+            ];
+
+            // FILTRO AUTOMÁTICO NO CABEÇALHO
+            ws["!autofilter"] = {
+                ref: "A2:K2"
+            };
+
+            // ===== ESTILOS (somente com xlsx-js-style) =====
+
+            // TÍTULO
+            if (ws["A1"]) {
+                ws["A1"].s = {
+                    font: {
+                        bold: true,
+                        sz: 16,
+                        color: { rgb: "FFFFFF" }
+                    },
+                    fill: {
+                        fgColor: { rgb: "009688" }
+                    },
+                    alignment: {
+                        horizontal: "center",
+                        vertical: "center"
+                    }
+                };
+            }
+
+            // CABEÇALHO (linha 2)
+            for (let col = 0; col <= 10; col++) {
+
+                const cellAddress =
+                    XLSX.utils.encode_cell({
+                        r: 1,
+                        c: col
+                    });
+
+                if (!ws[cellAddress]) continue;
+
+                ws[cellAddress].s = {
+                    font: {
+                        bold: true,
+                        color: { rgb: "FFFFFF" }
+                    },
+                    fill: {
+                        fgColor: { rgb: "009688" }
+                    },
+                    alignment: {
+                        horizontal: "center",
+                        vertical: "center"
+                    }
+                };
+            }
+
             const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, 'ASOs');
-            const fileName = `relatorio_asos_${new Date().toISOString().split('T')[0]}.xlsx`;
-            XLSX.writeFile(wb, fileName);
-            toast.success('Exportado para Excel.');
+
+            XLSX.utils.book_append_sheet(
+                wb,
+                ws,
+                "ASOs"
+            );
+
+            const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+
+            for (let row = range.s.r; row <= range.e.r; row++) {
+                for (let col = range.s.c; col <= range.e.c; col++) {
+
+                    const cellAddress = XLSX.utils.encode_cell({
+                        r: row,
+                        c: col
+                    });
+
+                    if (!ws[cellAddress]) continue;
+
+                    ws[cellAddress].s = {
+                        ...(ws[cellAddress].s || {}),
+                        border: {
+                            top: {
+                                style: "thin",
+                                color: { rgb: "D1D5DB" }
+                            },
+                            bottom: {
+                                style: "thin",
+                                color: { rgb: "D1D5DB" }
+                            },
+                            left: {
+                                style: "thin",
+                                color: { rgb: "D1D5DB" }
+                            },
+                            right: {
+                                style: "thin",
+                                color: { rgb: "D1D5DB" }
+                            }
+                        }
+                    };
+                }
+            }
+
+            XLSX.writeFile(
+                wb,
+                `relatorio_asos_${filtros.dataInicio}.xlsx`
+            );
+
+            toast.success("Exportado para Excel.");
+
         } catch (error) {
-            console.error('Erro exportando excel', error);
-            toast.error('Erro ao exportar para Excel.');
+
+            console.error(error);
+
+            toast.error(
+                "Erro ao exportar para Excel."
+            );
         }
     };
 
@@ -357,16 +472,19 @@ export default function PaginaRelatorio() {
                                 </div>
                             </div>
                             {/* Ação */}
-                            <div className="flex items-end">
+                            <div className="flex items-end gap-2">
                                 <Button onClick={handleGerarRelatorio} disabled={loading} className="w-fit bg-blue-600 hover:bg-blue-700 h-[42px] rounded-xl font-bold uppercase">
                                     {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Carregar Dados"}
                                 </Button>
+                                {loading && (
+                                    <Badge className='mb-3 bg-blue-400 animate-pulse'>Puxando dados do SOC, isso pode demorar um pouco</Badge>
+                                )}
                             </div>
                         </div>
 
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-gray-100 dark:border-gray-800">
                             <div className="space-y-1">
-                                <label className="text-[10px] font-black text-gray-400 uppercase">Período de atendimento</label>
+                                <label className="text-[10px] font-black text-gray-400 uppercase">Dia de atendimento</label>
                                 <select
                                     value={dias}
                                     onChange={(e) => setDias(e.target.value as any)}
@@ -374,9 +492,6 @@ export default function PaginaRelatorio() {
                                 >
                                     <option value="hoje">Hoje</option>
                                     <option value="ontem">Ontem</option>
-                                    <option value="semana">Últimos 7 dias</option>
-                                    <option value="quinzena">Últimos 15 dias</option>
-                                    <option value="mes">Últimos 30 dias</option>
                                     <option value="personalizado">Personalizado</option>
                                 </select>
                                 {dias === 'personalizado' && (
@@ -387,24 +502,24 @@ export default function PaginaRelatorio() {
                                                 {range?.from ? (
                                                     range.to ? `${range.from.toLocaleDateString()} - ${range.to.toLocaleDateString()}`
                                                         : range.from.toLocaleDateString()
-                                                ) : "Selecionar período"}
+                                                ) : "Selecionar dia"}
                                             </Button>
                                         </PopoverTrigger>
 
                                         <PopoverContent className="w-auto p-0">
                                             <Calendar
-                                                mode="range"
+                                                mode="single"
                                                 selected={range}
-                                                onSelect={(val) => {
-                                                    setRange(val);
+                                                onSelect={(date) => {
+                                                    if (!date) return;
 
-                                                    if (val?.from) {
-                                                        setFiltros(prev => ({
-                                                            ...prev,
-                                                            dataInicio: val.from ? val.from.toISOString().split('T')[0] : '',
-                                                            dataFim: val.to ? val.to.toISOString().split('T')[0] : (val.from ? val.from.toISOString().split('T')[0] : '')
-                                                        }));
-                                                    }
+                                                    const data = date.toISOString().split('T')[0];
+
+                                                    setFiltros(prev => ({
+                                                        ...prev,
+                                                        dataInicio: data,
+                                                        dataFim: data
+                                                    }));
                                                 }}
                                                 numberOfMonths={2}
                                             />
@@ -446,30 +561,6 @@ export default function PaginaRelatorio() {
                                     </SelectContent>
                                 </Select>
                             </div>
-
-                            {periodo === 'personalizado' && (
-                                <>
-                                    <div className="space-y-1">
-                                        <label className="text-[10px] font-black text-muted-foreground uppercase">Hora Início</label>
-                                        <input
-                                            type="time"
-                                            className="w-full p-2 bg-background border border-border rounded-xl text-sm"
-                                            value={filtros.horaInicio}
-                                            onChange={(e) => setFiltros({ ...filtros, horaInicio: e.target.value })}
-                                        />
-                                    </div>
-
-                                    <div className="space-y-1">
-                                        <label className="text-[10px] font-black text-muted-foreground uppercase">Hora Fim</label>
-                                        <input
-                                            type="time"
-                                            className="w-full p-2 bg-background border border-border rounded-xl text-sm"
-                                            value={filtros.horaFim}
-                                            onChange={(e) => setFiltros({ ...filtros, horaFim: e.target.value })}
-                                        />
-                                    </div>
-                                </>
-                            )}
                         </div>
                     </div>
 

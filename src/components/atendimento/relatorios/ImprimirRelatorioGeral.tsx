@@ -16,7 +16,7 @@ export const BotaoImprimirRelatorio = ({ item, text }: { item: any[], text: stri
     <>
       <Button 
         onClick={handlePrint}
-        className="bg-blue-600 hover:bg-blue-700 text-white gap-2 py-4 disabled:opacity-70 text-[12px]"
+        className="bg-orange-600 hover:bg-orange-700 text-white gap-2 py-4 disabled:opacity-70 text-[12px]"
       >
         <Printer className="w-4 h-4" /> {text}
       </Button>

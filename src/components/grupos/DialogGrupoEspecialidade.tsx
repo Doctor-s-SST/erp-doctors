@@ -122,23 +122,62 @@ export function DialogGrupoEspecialidade({
 
             setLoading(true);
 
-            const { data: grupo, error } = await supabase
-                .from('grupos_especialidades')
-                .insert({
+            let grupoId: number;
+
+            // ==========================
+            // EDIÇÃO
+            // ==========================
+            if (grupo?.id) {
+
+                const { error } = await supabase
+                    .from('grupos_especialidades')
+                    .update({
+                        nome,
+                        tipo_filtro: tipoFiltro
+                    })
+                    .eq('id', grupo.id);
+
+                if (error) throw error;
+
+                grupoId = grupo.id;
+
+                // Remove vínculos antigos
+                const { error: deleteError } = await supabase
+                    .from('grupo_especialidade_itens')
+                    .delete()
+                    .eq('grupo_id', grupoId);
+
+                if (deleteError) throw deleteError;
+
+            }
+            // ==========================
+            // NOVO
+            // ==========================
+            else {
+
+                const { data, error } = await supabase
+                    .from('grupos_especialidades')
+                    .insert({
+                        unidade_id: unidadeId,
+                        nome,
+                        tipo_filtro: tipoFiltro
+                    })
+                    .select()
+                    .single();
+
+                if (error) throw error;
+
+                grupoId = data.id;
+            }
+
+            // Insere as especialidades selecionadas
+            const itens = selecionadas.map(
+                especialidade_id => ({
                     unidade_id: unidadeId,
-                    nome,
-                    tipo_filtro: tipoFiltro
+                    grupo_id: grupoId,
+                    especialidade_id
                 })
-                .select()
-                .single();
-
-            if (error) throw error;
-
-            const itens = selecionadas.map(especialidade_id => ({
-                unidade_id: unidadeId,
-                grupo_id: grupo.id,
-                especialidade_id
-            }));
+            );
 
             const { error: erroItens } = await supabase
                 .from('grupo_especialidade_itens')
@@ -146,7 +185,11 @@ export function DialogGrupoEspecialidade({
 
             if (erroItens) throw erroItens;
 
-            toast.success('Grupo criado com sucesso');
+            toast.success(
+                grupo?.id
+                    ? 'Grupo atualizado com sucesso'
+                    : 'Grupo criado com sucesso'
+            );
 
             setNome('');
             setDescricao('');
@@ -160,7 +203,11 @@ export function DialogGrupoEspecialidade({
 
             console.error(err);
 
-            toast.error('Erro ao criar grupo');
+            toast.error(
+                grupo?.id
+                    ? 'Erro ao atualizar grupo'
+                    : 'Erro ao criar grupo'
+            );
 
         } finally {
 
@@ -179,7 +226,7 @@ export function DialogGrupoEspecialidade({
                 <DialogHeader>
 
                     <DialogTitle>
-                        Novo Grupo de Especialidades
+                        {grupo ? 'Editar Grupo de Especialidades' : 'Novo Grupo de Especialidades'}
                     </DialogTitle>
 
                     <DialogDescription>
@@ -277,12 +324,16 @@ export function DialogGrupoEspecialidade({
                         <Button
                             onClick={salvarGrupo}
                             disabled={loading}
-                            className='bg-emerald-600'
+                            className="bg-emerald-600"
                         >
                             {loading ? (
                                 <>
                                     <Loader2 className="h-4 w-4 animate-spin" />
                                     Salvando...
+                                </>
+                            ) : grupo ? (
+                                <>
+                                    Salvar Alterações
                                 </>
                             ) : (
                                 <>
