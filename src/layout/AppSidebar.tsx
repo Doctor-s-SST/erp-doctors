@@ -56,7 +56,7 @@ const navItems: NavItem[] = [
     subItems: [
       { name: "Atendimento", path: "/sistema-filas/relatorios/geral", roles: ["admin", "painel", "recepcao", "operador", "especialista"] },
       { name: "ASO", path: "/sistema-filas/relatorios/aso", roles: ["admin", "painel", "recepcao", "operador"] },
-      { name: "Pendências de Exames", path: "/sistema-filas/relatorios/pendencias", roles: ["admin", "painel", "recepcao", "operador", "especialista"] },
+      { name: "Pendências de Exames", path: "/sistema-filas/relatorios/exames-pendentes", roles: ["admin", "painel", "recepcao", "operador", "especialista"] },
     ],
   },
   {

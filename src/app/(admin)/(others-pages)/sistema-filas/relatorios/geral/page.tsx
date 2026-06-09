@@ -308,6 +308,79 @@ export default function PaginaRelatorio() {
         return items;
     }, [dadosRelatorio, filtros, sortConfig, grupoSelecionado, grupoAtual]);
 
+    const indicadores = useMemo(() => {
+
+        const total = dadosFiltradosOrdenados.length;
+
+        const normais = dadosFiltradosOrdenados.filter(
+            item => item.cabecalho?.senha?.startsWith('N')
+        ).length;
+
+        const preferenciais = dadosFiltradosOrdenados.filter(
+            item => item.cabecalho?.senha?.startsWith('P')
+        ).length;
+
+        const encaixes = dadosFiltradosOrdenados.filter(
+            item => item.cabecalho?.encaixe === true
+        ).length;
+
+        const tempos = dadosFiltradosOrdenados.map(item => {
+
+            const tempo =
+                item.tempo_total_dispensado
+                    ?.split('(')[1]
+                    ?.replace(')', '');
+
+            return parseTempoToSegundos(tempo);
+
+        });
+
+        const temposValidos = tempos.filter(t => t > 0);
+
+        const mediaSegundos =
+            temposValidos.length > 0
+                ? temposValidos.reduce((a, b) => a + b, 0) / temposValidos.length
+                : 0;
+
+        const maiorTempo =
+            temposValidos.length > 0
+                ? Math.max(...temposValidos)
+                : 0;
+
+        const menorTempo =
+            temposValidos.length > 0
+                ? Math.min(...temposValidos)
+                : 0;
+
+        const formatarSegundos = (segundos: number) => {
+
+            const h = Math.floor(segundos / 3600);
+            const m = Math.floor((segundos % 3600) / 60);
+            const s = Math.floor(segundos % 60);
+
+            if (h > 0) {
+                return `${h}h ${m}m`;
+            }
+
+            if (m > 0) {
+                return `${m}m ${s}s`;
+            }
+
+            return `${s}s`;
+        };
+
+        return {
+            total,
+            normais,
+            preferenciais,
+            encaixes,
+            mediaTempo: formatarSegundos(mediaSegundos),
+            maiorTempo: formatarSegundos(maiorTempo),
+            menorTempo: formatarSegundos(menorTempo)
+        };
+
+    }, [dadosFiltradosOrdenados]);
+
     const carregarGrupos = async () => {
         try {
             const { data, error } = await supabase
@@ -699,6 +772,79 @@ export default function PaginaRelatorio() {
                                 </>
                             )}
                         </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+
+                        <div className="bg-background border border-border rounded-2xl p-5">
+                            <p className="text-[10px] uppercase font-black text-muted-foreground">
+                                Total de Atendimentos
+                            </p>
+
+                            <div className="mt-3">
+                                <div className="text-3xl font-black">
+                                    {indicadores.total}
+                                </div>
+
+                                <div className="mt-2 text-xs space-y-1">
+                                    <div>
+                                        Normal:
+                                        <span className="font-bold ml-1 text-blue-600">
+                                            {indicadores.normais}
+                                        </span>
+                                    </div>
+
+                                    <div>
+                                        Preferencial:
+                                        <span className="font-bold ml-1 text-amber-600">
+                                            {indicadores.preferenciais}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-background border border-border rounded-2xl p-5">
+                            <p className="text-[10px] uppercase font-black text-muted-foreground">
+                                Tempo Médio
+                            </p>
+
+                            <div className="mt-3 text-3xl font-black">
+                                {indicadores.mediaTempo}
+                            </div>
+                        </div>
+
+                        <div className="bg-background border border-border rounded-2xl p-5">
+                            <p className="text-[10px] uppercase font-black text-muted-foreground">
+                                Menor Permanência
+                            </p>
+
+                            <div className="mt-3 text-3xl font-black text-emerald-500">
+                                {indicadores.menorTempo}
+                            </div>
+                        </div>
+
+
+                        <div className="bg-background border border-border rounded-2xl p-5">
+                            <p className="text-[10px] uppercase font-black text-muted-foreground">
+                                Maior Permanência
+                            </p>
+
+                            <div className="mt-3 text-3xl font-black text-red-500">
+                                {indicadores.maiorTempo}
+                            </div>
+                        </div>
+
+                        <div className="bg-background border border-border rounded-2xl p-5">
+                            <p className="text-[10px] uppercase font-black text-muted-foreground">
+                                Encaixes
+                            </p>
+
+                            <div className="mt-3 text-3xl font-black">
+                                {indicadores.encaixes}
+                            </div>
+                        </div>
+
                     </div>
 
                     {/* TABELA */}
