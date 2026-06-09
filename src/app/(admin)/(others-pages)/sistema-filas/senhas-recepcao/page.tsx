@@ -933,7 +933,7 @@ export default function RecepcaoPage() {
             }));
 
             if(dados.medico_coordenador == "") {
-                alert("Atenção: Esta ficha não possui médico coordenador definido. Por favor, revise os dados antes de finalizar.")
+                alert("Atenção: Esta ficha não possui médico responsável pelo PCMSO definido. Por favor, revise os dados antes de finalizar.")
             }
 
             toast.success("Ficha carregada com sucesso!", {
