@@ -31,6 +31,15 @@ export default function UnidadeConfigPage() {
     const [form, setForm] = useState({
         nome: "",
         flag: "",
+        cnpj: "",
+        razao_social: "",
+        endereco: "",
+        numero: "",
+        complemento: "",
+        bairro: "",
+        cidade: "",
+        estado: "",
+        cep: "",
         logo_url: "",
         logo_icone_url: "",
     });
@@ -73,6 +82,17 @@ export default function UnidadeConfigPage() {
             setForm({
                 nome: unidadeData.nome || "",
                 flag: unidadeData.flag || "",
+
+                cnpj: unidadeData.cnpj || "",
+                razao_social: unidadeData.razao_social || "",
+                endereco: unidadeData.endereco || "",
+                numero: unidadeData.numero || "",
+                complemento: unidadeData.complemento || "",
+                bairro: unidadeData.bairro || "",
+                cidade: unidadeData.cidade || "",
+                estado: unidadeData.estado || "",
+                cep: unidadeData.cep || "",
+
                 logo_url: unidadeData.logo_url || "",
                 logo_icone_url: unidadeData.logo_icone_url || "",
             });
@@ -208,11 +228,25 @@ export default function UnidadeConfigPage() {
         try {
             setSaving(true);
 
+            const somenteNumeros = (valor: string) =>
+                valor.replace(/\D/g, "");
+
             const { error } = await supabase
                 .from("unidades")
                 .update({
                     nome: form.nome,
                     flag: form.flag,
+
+                    cnpj: somenteNumeros(form.cnpj),
+                    razao_social: form.razao_social,
+                    endereco: form.endereco,
+                    numero: form.numero,
+                    complemento: form.complemento,
+                    bairro: form.bairro,
+                    cidade: form.cidade,
+                    estado: form.estado,
+                    cep: somenteNumeros(form.cep),
+
                     logo_url: form.logo_url,
                     logo_icone_url: form.logo_icone_url,
                 })
@@ -227,6 +261,23 @@ export default function UnidadeConfigPage() {
         } finally {
             setSaving(false);
         }
+    };
+
+    const formatarCNPJ = (value: string) => {
+        return value
+            .replace(/\D/g, "")
+            .replace(/^(\d{2})(\d)/, "$1.$2")
+            .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
+            .replace(/\.(\d{3})(\d)/, ".$1/$2")
+            .replace(/(\d{4})(\d)/, "$1-$2")
+            .slice(0, 18);
+    };
+
+    const formatarCEP = (value: string) => {
+        return value
+            .replace(/\D/g, "")
+            .replace(/^(\d{5})(\d)/, "$1-$2")
+            .slice(0, 9);
     };
 
     // =========================================
@@ -404,16 +455,17 @@ export default function UnidadeConfigPage() {
                                     <ShieldCheck className="w-4 h-4 text-blue-500" />
 
                                     <h2 className="text-[11px] font-black uppercase tracking-widest text-slate-500">
-                                        Informações da Unidade
+                                        Dados da Empresa
                                     </h2>
                                 </div>
 
+
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-                                    {/* NOME */}
+                                    {/* NOME FANTASIA */}
                                     <div className="space-y-2">
                                         <label className="text-[10px] font-black uppercase text-slate-500">
-                                            Nome da Clínica
+                                            Nome Fantasia (exibido no sistema)
                                         </label>
 
                                         <Input
@@ -427,6 +479,43 @@ export default function UnidadeConfigPage() {
                                             className="h-12 text-[11px] font-black border-gray-300 dark:border-gray-700"
                                         />
                                     </div>
+
+                                    {/* RAZÃO SOCIAL  */}
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black uppercase text-slate-500">
+                                            Razão Social (usado na ficha de atendimento e declarações)
+                                        </label>
+
+                                        <Input
+                                            value={form.razao_social}
+                                            onChange={(e) =>
+                                                setForm({
+                                                    ...form,
+                                                    razao_social: e.target.value,
+                                                })
+                                            }
+                                            className="h-12 text-[11px] font-black border-gray-300 dark:border-gray-700"
+                                        />
+                                    </div>
+
+                                    {/* CNPJ */}
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black uppercase text-slate-500">
+                                            CNPJ (usado em declarações)
+                                        </label>
+
+                                        <Input
+                                            value={form.cnpj}
+                                            onChange={(e) =>
+                                                setForm({
+                                                    ...form,
+                                                    cnpj: formatarCNPJ(e.target.value),
+                                                })
+                                            }
+                                            className="h-12"
+                                        />
+                                    </div>
+
 
                                     {/* FLAG */}
                                     <div className="space-y-2">
@@ -446,30 +535,169 @@ export default function UnidadeConfigPage() {
                                         />
                                     </div>
                                 </div>
+
                             </div>
 
-                            {/* FOOTER */}
-                            <div className="pt-4 border-t border-gray-200 dark:border-gray-800 flex justify-end">
-                                <Button
-                                    onClick={handleSalvar}
-                                    disabled={saving}
-                                    className="bg-emerald-600 hover:bg-emerald-700 text-white h-12 px-6 text-[10px] font-black uppercase tracking-widest"
-                                >
-                                    {saving ? (
-                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                    ) : (
-                                        <>
-                                            <Save className="w-4 h-4 mr-2" />
-                                            Salvar Alterações
-                                        </>
-                                    )}
-                                </Button>
+                            {/* ENDERECO */}
+                            <div className="space-y-5">
+                                <div className="flex items-center gap-2">
+                                    <ShieldCheck className="w-4 h-4 text-orange-500" />
+                                    <h2 className="text-[11px] font-black uppercase tracking-widest text-slate-500">
+                                        Endereço
+                                    </h2>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                                    {/* CEP */}
+                                    <div className="">
+                                        <label className="text-[10px] font-black uppercase text-slate-500">
+                                            CEP
+                                        </label>
+
+                                        <Input
+                                            value={form.cep}
+                                            onChange={(e) =>
+                                                setForm({
+                                                    ...form,
+                                                    cep: formatarCEP(e.target.value),
+                                                })
+                                            }
+                                            className="h-12"
+                                        />
+                                    </div>
+
+                                    {/* Endereço */}
+                                    <div className="md:col-span-3">
+                                        <label className="text-[10px] font-black uppercase text-slate-500">
+                                            Endereço
+                                        </label>
+
+                                        <Input
+                                            value={form.endereco}
+                                            onChange={(e) =>
+                                                setForm({
+                                                    ...form,
+                                                    endereco: e.target.value,
+                                                })
+                                            }
+                                            className="h-12"
+                                        />
+                                    </div>
+
+                                    {/* Número */}
+                                    <div className="">
+                                        <label className="text-[10px] font-black uppercase text-slate-500">
+                                            Número
+                                        </label>
+
+                                        <Input
+                                            value={form.numero}
+                                            onChange={(e) =>
+                                                setForm({
+                                                    ...form,
+                                                    numero: e.target.value,
+                                                })
+                                            }
+                                            className="h-12"
+                                        />
+                                    </div>
+
+                                    {/* Complemento */}
+                                    <div className="">
+                                        <label className="text-[10px] font-black uppercase text-slate-500">
+                                            Complemento
+                                        </label>
+
+                                        <Input
+                                            value={form.complemento}
+                                            onChange={(e) =>
+                                                setForm({
+                                                    ...form,
+                                                    complemento: e.target.value,
+                                                })
+                                            }
+                                            className="h-12"
+                                        />
+                                    </div>
+
+                                    {/* Bairro */}
+                                    <div className="">
+                                        <label className="text-[10px] font-black uppercase text-slate-500">
+                                            Bairro
+                                        </label>
+
+                                        <Input
+                                            value={form.bairro}
+                                            onChange={(e) =>
+                                                setForm({
+                                                    ...form,
+                                                    bairro: e.target.value,
+                                                })
+                                            }
+                                            className="h-12"
+                                        />
+                                    </div>
+
+                                    {/* Cidade */}
+                                    <div className="">
+                                        <label className="text-[10px] font-black uppercase text-slate-500">
+                                            Cidade
+                                        </label>
+
+                                        <Input
+                                            value={form.cidade}
+                                            onChange={(e) =>
+                                                setForm({
+                                                    ...form,
+                                                    cidade: e.target.value,
+                                                })
+                                            }
+                                            className="h-12"
+                                        />
+                                    </div>
+
+                                    {/* Estado */}
+                                    <div className="">
+                                        <label className="text-[10px] font-black uppercase text-slate-500">
+                                            Estado
+                                        </label>
+
+                                        <Input
+                                            value={form.estado}
+                                            onChange={(e) =>
+                                                setForm({
+                                                    ...form,
+                                                    estado: e.target.value.toUpperCase(),
+                                                })
+                                            }
+                                            maxLength={2}
+                                            className="h-12"
+                                        />
+                                    </div>
+                                </div>
                             </div>
 
                         </div>
+
+                        {/* FOOTER */}
+                        <div className="pt-4 border-t border-gray-200 dark:border-gray-800 flex justify-end">
+                            <Button
+                                onClick={handleSalvar}
+                                disabled={saving}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white h-12 px-6 text-[10px] font-black uppercase tracking-widest"
+                            >
+                                {saving ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                    <>
+                                        <Save className="w-4 h-4 mr-2" />
+                                        Salvar Alterações
+                                    </>
+                                )}
+                            </Button>
+                        </div>
                     </CardContent>
-                </Card>
-            </div>
-        </div>
+                </Card >
+            </div >
+        </div >
     );
 }

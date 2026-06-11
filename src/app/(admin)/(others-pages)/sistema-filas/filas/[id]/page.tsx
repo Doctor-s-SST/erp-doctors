@@ -290,6 +290,9 @@ export default function FilaPage() {
             });
 
             if (result) {
+                console.log(
+                    result.filter((x: any) => x.finaliza_em)
+                );
                 setData(result);
 
                 const novosTimers: Record<string, number> = {};
@@ -408,8 +411,6 @@ export default function FilaPage() {
 
         eventSource.onmessage = (event) => {
             const payload = JSON.parse(event.data);
-            console.log("sse: ", payload)
-
             setData(payload.dados);
         };
 
@@ -420,39 +421,98 @@ export default function FilaPage() {
     }, [unidadeId, especialidadeNome]);
 
     // 🔄 Mantém o finalizandoIds 100% sincronizado com a coluna finaliza_em do banco (Evita zerar no F5)
-    useEffect(() => {
-        if (!data || data.length === 0) return;
+    // useEffect(() => {
+    //     if (!data || data.length === 0) return;
 
-        const novosTimers: Record<string, number> = {};
+    //     const novosTimers: Record<string, number> = {};
+    //     const agora = Date.now();
+
+    //     data.forEach((item: any) => {
+
+    //         if (
+    //             item.status === "EM_ATENDIMENTO" &&
+    //             item.finaliza_em
+    //         ) {
+    //             const fim = new Date(item.finaliza_em).getTime();
+
+    //             if (fim > agora) {
+    //                 novosTimers[item.id] = fim;
+    //             }
+    //         }
+    //     });
+    //     // Mescla com o estado anterior mantendo os timers ativos do banco de dados
+    //     setFinalizandoIds(prev => {
+    //         const atualizado = { ...prev, ...novosTimers };
+
+    //         // Limpa registros do estado local que o banco de dados já não aponta mais como ativos/finaliza_em
+    //         Object.keys(atualizado).forEach(id => {
+    //             const correspondente = data.find(i => i.id === id);
+    //             if (!correspondente || !correspondente.finaliza_em) {
+    //                 delete atualizado[id];
+    //             }
+    //         });
+
+    //         return atualizado;
+    //     });
+    // }, [data]);
+    useEffect(() => {
+        if (!data?.length) return;
+
         const agora = Date.now();
 
-        data.forEach((item: any) => {
-            if (item.finaliza_em) {
-                // Converte o TIMESTAMP do PostgreSQL para milissegundos do JS
-                const fim = new Date(item.finaliza_em).getTime();
+        const timers = Object.fromEntries(
+            data
+                .filter(item =>
+                    item.status === "EM_ATENDIMENTO" &&
+                    item.finaliza_em &&
+                    new Date(item.finaliza_em).getTime() > agora
+                )
+                .map(item => [
+                    item.id,
+                    new Date(item.finaliza_em).getTime()
+                ])
+        );
 
-                // Se o tempo finalizado ainda for maior que o momento atual, reconstrói o timer
-                if (fim > agora) {
-                    novosTimers[item.id] = fim;
-                }
+        setFinalizandoIds(timers);
+
+    }, [data]);
+
+    useEffect(() => {
+        data.forEach(item => {
+
+            const fim = finalizandoIds[item.id];
+
+            if (!fim) return;
+
+            if (
+                Date.now() >= fim &&
+                !finalizandoEmAndamento.current.has(item.id)
+            ) {
+
+                finalizandoEmAndamento.current.add(item.id);
+
+                executarAcao(
+                    "finalizar_especialidade_novo",
+                    {
+                        p_atendimento_id: item.atendimento_id,
+                        p_atendimento_exame_id: item.id,
+                        p_sala: item.sala || especialidadeNome,
+                        p_num_sala: session?.sala,
+                    }
+                ).finally(() => {
+
+                    setFinalizandoIds(prev => {
+                        const novo = { ...prev };
+                        delete novo[item.id];
+                        return novo;
+                    });
+
+                    finalizandoEmAndamento.current.delete(item.id);
+                });
             }
         });
 
-        // Mescla com o estado anterior mantendo os timers ativos do banco de dados
-        setFinalizandoIds(prev => {
-            const atualizado = { ...prev, ...novosTimers };
-
-            // Limpa registros do estado local que o banco de dados já não aponta mais como ativos/finaliza_em
-            Object.keys(atualizado).forEach(id => {
-                const correspondente = data.find(i => i.id === id);
-                if (!correspondente || !correspondente.finaliza_em) {
-                    delete atualizado[id];
-                }
-            });
-
-            return atualizado;
-        });
-    }, [data]);
+    }, [now, finalizandoIds, data]);
 
     useEffect(() => {
         const initialize = async () => {
@@ -530,7 +590,6 @@ export default function FilaPage() {
 
         }
         fetchConfig();
-        console.log("SSalas", salasFiltradas);
     }, [unidadeId]); // Adicione id como dependência
 
     useEffect(() => {
@@ -1054,6 +1113,11 @@ export default function FilaPage() {
                                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                                     {dadosProcessados.map((item: any) => {
 
+                                        const podeFinalizar =
+                                            item.status === "EM_ATENDIMENTO" &&
+                                            item.num_sala === session?.sala &&
+                                            item.profissional === session?.profissional;
+
                                         const styles = getStatusStyles(item);
                                         const tempoRestante = getTempoRestante(item.id);
 
@@ -1498,30 +1562,32 @@ export default function FilaPage() {
                                                                                         Última especialidade!
                                                                                     </Badge>
                                                                                 )}
-                                                                                <Button
-                                                                                    size="sm"
-                                                                                    disabled={!examesOk}
-                                                                                    className={`
+                                                                                {podeFinalizar && (
+                                                                                    <Button
+                                                                                        size="sm"
+                                                                                        disabled={!examesOk}
+                                                                                        className={`
                                                                                             h-8
                                                                                             text-[11px]
                                                                                             font-bold
                                                                                             transition-all
                                                                                             ${examesOk
-                                                                                            ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-                                                                                            : "bg-slate-400 hover:bg-slate-400 text-white cursor-not-allowed opacity-70"
-                                                                                        }
+                                                                                                ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                                                                                                : "bg-slate-400 hover:bg-slate-400 text-white cursor-not-allowed opacity-70"
+                                                                                            }
     `}
-                                                                                    onClick={async () => {
-                                                                                        const sucesso = await salvarRealizacaoExames(
-                                                                                            item.atendimento_id,
-                                                                                            examesList
-                                                                                        );
+                                                                                        onClick={async () => {
+                                                                                            const sucesso = await salvarRealizacaoExames(
+                                                                                                item.atendimento_id,
+                                                                                                examesList
+                                                                                            );
 
-                                                                                        if (!sucesso) return;
-                                                                                        iniciarFinalizacao(item)
-                                                                                    }}
-                                                                                >Finalizar
-                                                                                </Button>
+                                                                                            if (!sucesso) return;
+                                                                                            iniciarFinalizacao(item)
+                                                                                        }}
+                                                                                    >Finalizar
+                                                                                    </Button>
+                                                                                )}
                                                                                 <Button
                                                                                     size="sm"
                                                                                     variant="outline"

@@ -140,14 +140,10 @@ export default function DashboardPage() {
         if (!unidadeId || !pollingActive) return;
 
         const eventSource = new EventSource(
-            `https://doctors-distribuidor-teste.cgalnz.easypanel.host/stream-fila?unidadeId=${unidadeId}?tipo=recepcao`
+            `https://doctors-distribuidor-sse.cgalnz.easypanel.host/stream-fila?unidadeId=${unidadeId}&tipo=recepcao`
         );
 
-        eventSource.onmessage = (event) => {
-
-            const parsed = JSON.parse(event.data);
-
-            if (!parsed.atualiza) return;
+        eventSource.onmessage = () => {
 
             if (debounceRef.current) {
                 clearTimeout(debounceRef.current);

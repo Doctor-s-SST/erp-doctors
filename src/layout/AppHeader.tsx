@@ -59,15 +59,10 @@ const AppHeader: React.FC = () => {
             role: profile.role
           });
 
-          // 1. Se for admin, busca TODAS as unidades (independente de ter salvo no local)
-          if (profile.role === 'admin') {
-            const { data: unidades } = await supabase.from('unidades').select('id, nome');
-            setUnidadeNome((profile.unidades as any)?.nome || "");
-          } else {
-            // Se não for admin, segue o fluxo normal
-            setUnidadeId(profile.unidade_id);
-            setUnidadeNome((profile.unidades as any)?.nome || "");
-          }
+
+          setUnidadeId(profile.unidade_id);
+          setUnidadeNome((profile.unidades as any)?.nome || "");
+
         }
       }
     };

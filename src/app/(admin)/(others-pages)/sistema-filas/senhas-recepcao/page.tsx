@@ -439,7 +439,6 @@ export default function RecepcaoPage() {
             try {
 
                 const payload = JSON.parse(event.data);
-                console.log("sse recep", payload)
                 if (payload.tipo === 'recepcao') {
                     setData(payload.dados);
                 }

@@ -1,0 +1,336 @@
+"use client";
+import React, { useEffect, useState } from "react";
+import { useModal } from "../../../hooks/useModal";
+import { Modal } from "../../ui/modal";
+import Button from "../../ui/button/Button";
+import { Input } from "@/components/ui/input"
+
+import Label from "../../form/Label";
+import Image from "next/image";
+import { toast } from "sonner";
+import { supabase } from "@/lib/supabase";
+import { Loader2, Save, ShieldCheck } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+
+type ProfileType = {
+  email: string;
+  first_name: string;
+  last_name: string;
+  role: string;
+  especialidade: { nome: string }
+};
+
+export default function UserMetaCard({ profile }: { profile: ProfileType }) {
+  const { isOpen, openModal, closeModal } = useModal();
+  const [logoCompacta, setLogoCompacta] = useState("");
+  const [senhaAtual, setSenhaAtual] = useState("");
+  const [novaSenha, setNovaSenha] = useState("");
+  const [confirmarSenha, setConfirmarSenha] = useState("");
+  const [savingPassword, setSavingPassword] = useState(false);
+
+  const alterarSenha = async () => {
+    try {
+      if (!novaSenha) {
+        return toast.error("Informe a nova senha");
+      }
+
+      if (novaSenha.length < 6) {
+        return toast.error("A senha deve possuir pelo menos 6 caracteres");
+      }
+
+      if (novaSenha !== confirmarSenha) {
+        return toast.error("As senhas não coincidem");
+      }
+
+      setSavingPassword(true);
+
+      const {
+        data: { user }
+      } = await supabase.auth.getUser();
+
+      const { error: loginError } =
+        await supabase.auth.signInWithPassword({
+          email: user?.email!,
+          password: senhaAtual,
+        });
+
+      if (loginError) {
+        return toast.error("Senha atual incorreta");
+      }
+
+      const { error } = await supabase.auth.updateUser({
+        password: novaSenha,
+      });
+
+      if (error) throw error;
+
+      setSenhaAtual("");
+      setNovaSenha("");
+      setConfirmarSenha("");
+
+      toast.success("Senha alterada com sucesso!");
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      setSavingPassword(false);
+    }
+  };
+
+  useEffect(() => {
+    carregarLogo();
+  }, []);
+
+  const carregarLogo = async () => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) return;
+
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("unidade_id")
+        .eq("id", user.id)
+        .single();
+
+      if (!profileData?.unidade_id) return;
+
+      const { data: unidade } = await supabase
+        .from("unidades")
+        .select("logo_icone_url")
+        .eq("id", profileData.unidade_id)
+        .single();
+
+      if (unidade?.logo_icone_url) {
+        setLogoCompacta(unidade.logo_icone_url);
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  return (
+    <div className="min-h-fit mt-2 space-y-8 bg-gray-500/20 rounded-xl p-2">
+      <div className="w-full mx-auto space-y-5">
+
+        {/* HEADER */}
+        <div className="bg-gray-900 rounded-2xl shadow-2xl p-4 flex flex-col md:flex-row justify-between items-center gap-6 border border-gray-600">
+
+          <div className="flex items-center gap-4">
+            <div className="bg-emerald-500/20 p-3 rounded-xl">
+              <ShieldCheck className="w-5 h-5 text-emerald-400" />
+            </div>
+
+            <div>
+              <h1 className="text-xl md:text-2xl font-black text-white uppercase tracking-tight">
+                Minha Conta
+              </h1>
+
+              <p className="text-xs text-gray-400 uppercase font-bold">
+                Configurações do Usuário
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* CARD PRINCIPAL */}
+        <Card className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-hidden shadow-sm">
+          <CardContent className="p-0">
+
+            <div className="h-1.5 bg-emerald-500" />
+
+            <div className="p-6 space-y-10">
+
+              {/* PERFIL */}
+              <div className="space-y-6">
+
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-500" />
+
+                  <h2 className="text-[11px] font-black uppercase tracking-widest text-slate-500">
+                    Perfil do Usuário
+                  </h2>
+                </div>
+
+                <div className="bg-slate-50 dark:bg-slate-800 rounded-2xl p-6 border border-gray-200 dark:border-gray-700">
+
+                  <div className="flex flex-col md:flex-row items-center gap-6">
+
+                    <div className="w-28 h-28 rounded-2xl border border-gray-300 dark:border-gray-700 flex items-center justify-center bg-slate-50 dark:bg-slate-800">
+                      {logoCompacta ? (
+                        <img
+                          src={logoCompacta}
+                          alt="Logo"
+                          className="w-20 h-20 object-contain"
+                        />
+                      ) : (
+                        <Image
+                          src="/images/logo/doctors-svg.svg"
+                          alt="Logo"
+                          width={80}
+                          height={80}
+                        />
+                      )}
+                    </div>
+
+                    <div className="flex-1">
+
+                      <h2 className="text-2xl font-black text-slate-900 dark:text-white">
+                        {profile.first_name} {profile.last_name}
+                      </h2>
+
+                      <p className="text-slate-500 mt-1">
+                        {profile.especialidade?.nome}
+                      </p>
+
+                      <div className="mt-4 inline-flex items-center px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-black uppercase tracking-wider">
+                        {profile.role}
+                      </div>
+
+                    </div>
+
+                  </div>
+
+                </div>
+              </div>
+
+              {/* DADOS PESSOAIS */}
+              <div className="space-y-5">
+
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-blue-500" />
+
+                  <h2 className="text-[11px] font-black uppercase tracking-widest text-slate-500">
+                    Dados Pessoais
+                  </h2>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-4">
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase text-slate-500">
+                      Nome
+                    </label>
+
+                    <Input
+                      value={profile.first_name}
+                      disabled
+                      className="h-12"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase text-slate-500">
+                      Sobrenome
+                    </label>
+
+                    <Input
+                      value={profile.last_name}
+                      disabled
+                      className="h-12"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2 space-y-2">
+                    <label className="text-[10px] font-black uppercase text-slate-500">
+                      E-mail
+                    </label>
+
+                    <Input
+                      value={profile.email}
+                      disabled
+                      className="h-12"
+                    />
+                  </div>
+
+                </div>
+              </div>
+
+              {/* ALTERAÇÃO DE SENHA */}
+              <div className="space-y-5">
+
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-red-500" />
+
+                  <h2 className="text-[11px] font-black uppercase tracking-widest text-slate-500">
+                    Segurança
+                  </h2>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-4">
+
+                  <div className="md:col-span-2 space-y-2">
+                    <label className="text-[10px] font-black uppercase text-slate-500">
+                      Senha Atual
+                    </label>
+
+                    <Input
+                      type="password"
+                      value={senhaAtual}
+                      onChange={(e) => setSenhaAtual(e.target.value)}
+                      className="h-12"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase text-slate-500">
+                      Nova Senha
+                    </label>
+
+                    <Input
+                      type="password"
+                      value={novaSenha}
+                      onChange={(e) => setNovaSenha(e.target.value)}
+                      className="h-12"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase text-slate-500">
+                      Confirmar Senha
+                    </label>
+
+                    <Input
+                      type="password"
+                      value={confirmarSenha}
+                      onChange={(e) => setConfirmarSenha(e.target.value)}
+                      className="h-12"
+                    />
+                  </div>
+
+                </div>
+              </div>
+
+              {/* FOOTER */}
+              <div className="pt-4 border-t border-gray-200 dark:border-gray-800 flex justify-end">
+
+                <Button
+                  onClick={alterarSenha}
+                  disabled={savingPassword}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white h-12 px-6 text-[10px] font-black uppercase tracking-widest"
+                >
+                  {savingPassword ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      Salvando...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4 mr-2" />
+                      Alterar Senha
+                    </>
+                  )}
+                </Button>
+
+              </div>
+
+            </div>
+
+          </CardContent>
+        </Card>
+
+      </div>
+    </div>
+  );
+}
