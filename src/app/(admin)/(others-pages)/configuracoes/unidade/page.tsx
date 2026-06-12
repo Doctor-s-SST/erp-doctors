@@ -147,12 +147,12 @@ export default function UnidadeConfigPage() {
         if (error) throw error;
 
         const {
-            data: { publicUrl },
+            data: { publicUrl: url },
         } = supabase.storage
             .from("logos")
             .getPublicUrl(caminho);
 
-        return publicUrl;
+        return `${url}?v=${Date.now()}`;
     };
 
     // =========================================
@@ -237,7 +237,7 @@ export default function UnidadeConfigPage() {
                     nome: form.nome,
                     flag: form.flag,
 
-                    cnpj: somenteNumeros(form.cnpj),
+                    cnpj: form.cnpj,
                     razao_social: form.razao_social,
                     endereco: form.endereco,
                     numero: form.numero,
@@ -278,6 +278,36 @@ export default function UnidadeConfigPage() {
             .replace(/\D/g, "")
             .replace(/^(\d{5})(\d)/, "$1-$2")
             .slice(0, 9);
+    };
+
+    const buscarCep = async (cep: string) => {
+        const cepLimpo = cep.replace(/\D/g, '');
+
+        if (cepLimpo.length !== 8) return;
+
+        try {
+            const response = await fetch(
+                `https://viacep.com.br/ws/${cepLimpo}/json/`
+            );
+
+            const data = await response.json();
+
+            if (data.erro) {
+                toast.error("CEP não encontrado");
+                return;
+            }
+
+            setForm(prev => ({
+                ...prev,
+                endereco: data.logradouro,
+                bairro: data.bairro,
+                cidade: data.localidade,
+                estado: data.estado
+            }));
+
+        } catch {
+            toast.error("Erro ao consultar CEP");
+        }
     };
 
     // =========================================
@@ -384,7 +414,7 @@ export default function UnidadeConfigPage() {
                                             />
 
                                             <p className="text-[10px] text-slate-400 font-bold uppercase">
-                                                Logo horizontal da clínica (recomendado: 400px x 120px • PNG transparente ou SVG)
+                                                Logo horizontal da clínica (recomendado: 150 x 150px • PNG transparente ou SVG)
                                             </p>
                                         </div>
                                     </div>
@@ -505,7 +535,7 @@ export default function UnidadeConfigPage() {
                                         </label>
 
                                         <Input
-                                            value={form.cnpj}
+                                            value={formatarCNPJ(form.cnpj)}
                                             onChange={(e) =>
                                                 setForm({
                                                     ...form,
@@ -554,12 +584,16 @@ export default function UnidadeConfigPage() {
                                         </label>
 
                                         <Input
-                                            value={form.cep}
-                                            onChange={(e) =>
+                                            value={formatarCEP(form.cep)}
+                                            onChange={(e) => {
                                                 setForm({
                                                     ...form,
                                                     cep: formatarCEP(e.target.value),
                                                 })
+
+                                                buscarCep(e.target.value)
+
+                                            }
                                             }
                                             className="h-12"
                                         />
@@ -666,10 +700,9 @@ export default function UnidadeConfigPage() {
                                             onChange={(e) =>
                                                 setForm({
                                                     ...form,
-                                                    estado: e.target.value.toUpperCase(),
+                                                    estado: e.target.value,
                                                 })
                                             }
-                                            maxLength={2}
                                             className="h-12"
                                         />
                                     </div>

@@ -1,6 +1,59 @@
-import React, { forwardRef } from "react";
+import { supabase } from "@/lib/supabase";
+import React, { forwardRef, useEffect, useState } from "react";
 
 export const TemplateFicha = forwardRef<any, any>(({ dados }, ref) => {
+  const [form, setForm] = useState({
+    razao_social: "",
+    endereco: "",
+    numero: "",
+    bairro: "",
+    cidade: "",
+    estado: "",
+    logo_url: "",
+  });
+
+  useEffect(() => {
+    carregarUnidade();
+  }, []);
+
+  const carregarUnidade = async () => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) return;
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("unidade_id")
+        .eq("id", user.id)
+        .single();
+
+      if (!profile?.unidade_id) return;
+
+      const { data: unidadeData, error } = await supabase
+        .from("unidades")
+        .select("*")
+        .eq("id", profile.unidade_id)
+        .single();
+
+      if (error) throw error;
+
+      setForm({
+        razao_social: unidadeData.razao_social || "",
+        endereco: unidadeData.endereco || "",
+        numero: unidadeData.numero || "",
+        bairro: unidadeData.bairro || "",
+        cidade: unidadeData.cidade || "",
+        estado: unidadeData.estado || "",
+        logo_url: unidadeData.logo_url || ""
+      });
+    } catch (error: any) {
+      console.error(error.message);
+    }
+  };
+
   return (
     <div ref={ref} className="sheet text-[12px] flex flex-col h-full">
 
@@ -280,18 +333,17 @@ export const TemplateFicha = forwardRef<any, any>(({ dados }, ref) => {
       <footer className="text-center text-[10px] mt-auto">
         <div className="mb-2">
           <img
-            src="/images/logo/doctors-svg.svg"
+            src={form.logo_url}
             className="max-h-[90px] mx-auto"
           />
         </div>
 
-        <div className="font-bold text-[11px]">
-          DOCTOR'S SAÚDE E SEGURANÇA NO TRABALHO LTDA
+        <div className="font-bold text-[11px] uppercase">
+          {form.razao_social}
         </div>
 
-        <div className="text-[9px]">
-          <b>PRAIA GRANDE/SP</b>: Av São Paulo, 707, Guilhermina | <b>ITANHAÉM/SP</b>: Av. Condessa de
-          Vimieiros, 587, Centro
+        <div className="text-[10px]">
+          {`${form.endereco}, ${form.numero}, ${form.bairro}, ${form.cidade}, ${form.estado}`}
         </div>
       </footer>
 

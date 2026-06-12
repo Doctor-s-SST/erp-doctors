@@ -6,7 +6,7 @@ const isProd = process.env.NODE_ENV === "production" || !!process.env.NETLIFY;
 
 export async function POST(req: Request) {
   try {
-    const { item } = await req.json()
+    const { item, unidade } = await req.json()
 
     const nomePaciente =
       item.cabecalho?.nome || "________________________________________";
@@ -16,9 +16,11 @@ export async function POST(req: Request) {
       item.cabecalho?.acionamento?.split(" ")[1] || "______";
     const horarioSaida =
       item.cabecalho?.horario_saida?.split(" ")[1] || "______";
-    const cidade = item.cabecalho?.cidade || "________________________";
-    const cnpj = item.cabecalho?.cnpj || "________________________";
     const cpf = item.cabecalho?.cpf || "________________________";
+    
+    const cnpj = unidade.cnpj || "________________________";
+    const razao_social = unidade.razao_social.toUpperCase() || "______________________________"
+    const cidade = unidade.cidade || "______________________________"
 
     const html = `
     <html>
@@ -145,7 +147,7 @@ export async function POST(req: Request) {
 
             <div class="content">
               <p>
-                A empresa <strong>DOCTOR'S SAÚDE E SEGURANÇA NO TRABALHO</strong>, inscrita no CNPJ n° 01.586.822/0001-69, declara para os devidos fins que o(a)
+                A empresa <b>${razao_social}</b>, inscrita no CNPJ n° ${cnpj}, declara para os devidos fins que o(a)
                 Sr.(a) <strong>${nomePaciente.toUpperCase()}</strong>, portador(a) do CPF n° ${cpf},
                 compareceu a nossa unidade no dia <strong>${dataAtendimento}</strong>,
                 no horário das <strong>${horarioEntrada}</strong> às <strong>${horarioSaida}</strong> para a realização de exames ocupacionais.
@@ -171,8 +173,8 @@ export async function POST(req: Request) {
               <br />
 
               Documento emitido eletronicamente<br />
-              DOCTOR'S SAÚDE E SEGURANÇA NO TRABALHO<br />
-              CNPJ: ${cnpj} | Unidade: ${cidade}<br />
+              ${razao_social}<br />
+              CNPJ: ${cnpj} | Cidade: ${cidade}<br />
               ${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}
             </div>
             </div>

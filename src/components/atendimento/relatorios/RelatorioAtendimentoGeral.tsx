@@ -1,6 +1,6 @@
 import React from 'react';
 
-export const RelatorioAtendimentoGeral = React.forwardRef<HTMLDivElement, { item: any }>(({ item }, ref) => {
+export const RelatorioAtendimentoGeral = React.forwardRef<HTMLDivElement, { item: any; logo?: any }>(( { item, logo }, ref) => {
   if (!item) return null;
 
   return (
@@ -14,7 +14,7 @@ export const RelatorioAtendimentoGeral = React.forwardRef<HTMLDivElement, { item
       {/* Cabeçalho */}
       <header className="border-b border-blue-600 pb-4 mb-5 flex justify-between items-end shrink-0">
         <div className="flex flex-col">
-          <img src="/images/logo/doctors-svg.svg" alt="Logo" className="w-20 h-20 object-contain" />
+          <img src={logo || undefined} alt="Logo" className="w-20 h-20 object-contain" />
         </div>
         <div className="text-right text-xs font-medium">
           <p className="font-bold text-sm uppercase">Relatório de Atendimento Individual</p>

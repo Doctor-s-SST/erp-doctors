@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { Printer, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-export function BotaoImprimirDeclaracao({ item }: { item: any }) {
+export function BotaoImprimirDeclaracao({ item, unidade }: { item: any, unidade: any }) {
   const [loading, setLoading] = useState(false);
 
   async function gerarPDF() {
@@ -16,9 +16,9 @@ export function BotaoImprimirDeclaracao({ item }: { item: any }) {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ item }),
+        body: JSON.stringify({ item, unidade }),
       });
-
+      
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
 

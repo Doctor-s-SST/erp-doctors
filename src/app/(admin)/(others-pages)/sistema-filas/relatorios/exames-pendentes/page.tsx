@@ -10,8 +10,6 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx-js-style';
-import { BotaoImprimirRelatorio } from '@/components/atendimento/relatorios/ImprimirRelatorioGeral';
-import { BotaoImprimirDeclaracao } from '@/components/atendimento/relatorios/ImprimirDelcaracao';
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { supabase } from '@/lib/supabase';
@@ -701,7 +699,6 @@ export default function PaginaRelatorio() {
                                 Criar Grupo de Filtro
                             </Button>
                             <Button onClick={exportToExcel} className="bg-emerald-600 hover:bg-emerald-800"><TableIcon className="w-4 h-4 mr-2" /> Exportar Excel</Button>
-                            <BotaoImprimirRelatorio item={dadosFiltradosOrdenados} text="Relatório Geral" />
                         </div>
                     </div>
 

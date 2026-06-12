@@ -43,6 +43,17 @@ export default function PaginaRelatorio() {
         tipoSenha: 'todos'
     });
 
+    const [formUnidade, setFormUnidade] = useState({
+        razao_social: "",
+        endereco: "",
+        numero: "",
+        bairro: "",
+        cidade: "",
+        estado: "",
+        cnpj: "",
+        logo_url: "",
+    });
+
     useEffect(() => {
         const carregarUnidade = async () => {
             try {
@@ -67,6 +78,27 @@ export default function PaginaRelatorio() {
                         unidadeId: data.unidade_id
                     }));
                 }
+
+                if (!data?.unidade_id) return;
+
+                const { data: unidadeData } = await supabase
+                    .from("unidades")
+                    .select("*")
+                    .eq("id", data.unidade_id)
+                    .single();
+
+                if (error) throw error;
+
+                setFormUnidade({
+                    razao_social: unidadeData.razao_social || "",
+                    endereco: unidadeData.endereco || "",
+                    numero: unidadeData.numero || "",
+                    bairro: unidadeData.bairro || "",
+                    cidade: unidadeData.cidade || "",
+                    estado: unidadeData.estado || "",
+                    cnpj: unidadeData.cnpj || "",
+                    logo_url: unidadeData.logo_url || ""
+                });
 
             } catch (error) {
                 console.error("Erro ao buscar unidade:", error);
@@ -615,7 +647,7 @@ export default function PaginaRelatorio() {
                                 Criar Grupo de Filtro
                             </Button>
                             <Button onClick={exportToExcel} className="bg-emerald-600 hover:bg-emerald-800"><TableIcon className="w-4 h-4 mr-2" /> Exportar Excel</Button>
-                            <BotaoImprimirRelatorio item={dadosFiltradosOrdenados} text="Relatório Geral" />
+                            <BotaoImprimirRelatorio item={dadosFiltradosOrdenados} unidade={formUnidade} text="Relatório Geral" />
                         </div>
                     </div>
 
@@ -891,8 +923,8 @@ export default function PaginaRelatorio() {
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
-                                                <BotaoImprimirDeclaracao item={item} />
-                                                <BotaoImprimirRelatorio item={[item]} text="Relatório" />
+                                                <BotaoImprimirDeclaracao item={item} unidade={formUnidade}/>
+                                                <BotaoImprimirRelatorio item={[item]} text="Relatório" unidade={formUnidade} />
                                                 <button onClick={() => setExpandedRow(expandedRow === item.cabecalho.atendimento_id ? null : item.cabecalho.atendimento_id)} className="p-2 rounded-lg bg-blue-600 text-white shadow-lg">
                                                     {expandedRow === item.cabecalho.atendimento_id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                                                 </button>
