@@ -67,7 +67,7 @@ export default function RecepcaoPage() {
     const [isDetailsOpen, setIsDetailsOpen] = useState(false)
     const [unidadeId, setUnidadeId] = useState<string | null>(null);
     const [unidadeNome, setUnidadeNome] = useState<string>("");
-    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [profile, setProfile] = useState<any>({});
 
 
     // Este estado serve apenas para forçar o componente a atualizar a cada minuto
@@ -135,6 +135,7 @@ export default function RecepcaoPage() {
                     .from("profissionais")
                     .select("id, nome")
                     .eq("recepcao", true)
+                    .eq("ativo", true)
                     .eq("unidade_id", unidadeId)
                     .order("nome");
 
@@ -212,8 +213,11 @@ export default function RecepcaoPage() {
                 const { data: profile } = await supabase
                     .from('profiles')
                     .select(`
+                    id,
                     role, 
                     unidade_id,
+                    first_name,
+                    last_name,
                     unidades (flag)
                 `)
                     .eq('id', user.id)
@@ -234,6 +238,7 @@ export default function RecepcaoPage() {
 
                     setUnidadeId(idFinal);
                     setUnidadeNome((profile.unidades as any)?.flag || "");
+                    setProfile(profile)
 
                     // 3. Gerenciamento da Sessão de Guichê
                     const userKey = `recepcao_session_${user.id}`;
@@ -1429,6 +1434,9 @@ export default function RecepcaoPage() {
                                                                                         if (confirm("Cancelar este atendimento?")) {
                                                                                             executarAcao("cancelar_atendimento_novo", {
                                                                                                 p_atendimento_id: item.id,
+                                                                                                p_usuario_id: profile.id,
+                                                                                                p_usuario_nome: `${profile.first_name} ${profile.last_name}`,
+                                                                                                p_unidade_id: profile.unidade_id,
                                                                                             })
                                                                                         }
                                                                                     }}

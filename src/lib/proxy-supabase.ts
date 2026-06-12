@@ -77,12 +77,23 @@ export async function updateSession(request: NextRequest) {
     if (precisaProfile) {
       const { data: profile } = await supabase
         .from("profiles")
-        .select("role, especialidade_id")
+        .select("role, especialidade_id, ativo")
         .eq("id", user.id)
         .maybeSingle()
 
       userRole = profile?.role
       userEspId = profile?.especialidade_id
+
+      if (profile && profile.ativo === false) {
+        const redirect = NextResponse.redirect(
+          new URL("/signin?error=inactive", request.url)
+        );
+
+        redirect.cookies.delete("sb-access-token");
+        redirect.cookies.delete("sb-refresh-token");
+
+        return redirect;
+      }
     }
 
     const redirectPath = getRedirectByRole(userRole, userEspId)

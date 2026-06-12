@@ -572,8 +572,10 @@ export default function FilaPage() {
             const { data: p } = await supabase.from("profissionais").select(`
                 id,
                 nome,
+                ativo,
                 profissional_especialidades (especialidade_id)
-            `).order("nome");
+            `).eq("ativo", true)
+                .order("nome");
 
             // Normaliza os dados retornados para o tipo Sala esperado pela aplicação
             setSalas(

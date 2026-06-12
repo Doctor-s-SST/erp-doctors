@@ -92,10 +92,12 @@ export default function SelecionarFila() {
         .select(`
         id,
         nome,
+        ativo,
         profissional_especialidades (
           especialidade_id
         )
       `)
+        .eq("ativo", true)
         .order("nome");
 
       setEspecialidades(esp || []);

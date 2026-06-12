@@ -49,12 +49,19 @@ export default function SignInForm() {
       // Busca o role do usuário na tabela profiles
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('role, especialidade_id')
+        .select('role, especialidade_id, ativo')
         .eq('id', authData.user.id)
         .single();
 
       if (profileError) {
         toast.error("Erro ao carregar perfil");
+        return;
+      }
+
+      if (!profile.ativo) {
+        await supabase.auth.signOut();
+
+        toast.error("Usuário inativo. Entre em contato com o administrador.");
         return;
       }
 
@@ -66,7 +73,7 @@ export default function SignInForm() {
       }
       else if (profile.role === 'recepcao') {
         router.push("/sistema-filas/senhas-recepcao");
-      }      
+      }
       else if (profile.role === 'painel') {
         router.push("/painel-senhas");
       }

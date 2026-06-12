@@ -37,6 +37,14 @@ export default function ConfiguracoesPage() {
 
   const ID_RECEPCAO = "recepcao-fixo";
 
+  const [filtroStatus, setFiltroStatus] = useState<
+    "ativos" | "todos"
+  >("ativos");
+
+  const [busca, setBusca] = useState("");
+  const [filtroEspecialidade, setFiltroEspecialidade] = useState("todas");
+  const [filtroJornada, setFiltroJornada] = useState("todas");
+
   async function fetchAll(idDaUnidade?: string) {
     const idAtivo = idDaUnidade || unidadeId;
     if (!idAtivo) return;
@@ -64,6 +72,7 @@ export default function ConfiguracoesPage() {
           id, 
           nome, 
           recepcao,
+          ativo,
           hora_inicio,
           hora_fim,
           profissional_especialidades (
@@ -286,6 +295,39 @@ export default function ConfiguracoesPage() {
     }
   }
 
+  async function alterarStatusProfissional(profissional: any) {
+    try {
+
+      if (
+        !confirm(
+          profissional.ativo
+            ? "Deseja inativar este profissional?"
+            : "Deseja ativar este profissional?"
+        )
+      ) return;
+
+      const { error } = await supabase
+        .from("profissionais")
+        .update({
+          ativo: !profissional.ativo
+        })
+        .eq("id", profissional.id);
+
+      if (error) throw error;
+
+      toast.success(
+        !profissional.ativo
+          ? "Profissional ativado!"
+          : "Profissional inativado!"
+      );
+
+      fetchAll();
+
+    } catch (error: any) {
+      toast.error(error.message);
+    }
+  }
+
   async function removerProfissional(id: string) {
     if (!confirm("Deseja excluir este profissional e todos os seus vínculos?")) return;
     const { error } = await supabase.from("profissionais").delete().eq('id', id);
@@ -297,6 +339,11 @@ export default function ConfiguracoesPage() {
     const esp = especialidades.find(e => e.id === id);
     return esp ? esp.nome : "RECEPÇÃO";
   };
+
+  const profissionaisFiltrados = profissionais.filter((p) => {
+    if (filtroStatus === "ativos") return p.ativo;
+    return true;
+  });
 
   if (loading) {
     return (
@@ -322,7 +369,253 @@ export default function ConfiguracoesPage() {
           </div>
         </div>
 
-        {/* SEÇÃO SALAS */}
+        {/* SEÇÃO PROFISSIONAIS */}
+        <section className="space-y-5 pt-6 mt-8 border-t border-gray-600">
+          <div className="flex items-center gap-2 border-l-4 border-emerald-500 pl-4">
+            <UserCog className="w-5 h-5 text-emerald-500" />
+            <h2 className="text-lg font-black uppercase text-slate-800 dark:text-slate-100">Profissionais</h2>
+          </div>
+
+          <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-400 dark:border-gray-600 flex flex-col sm:flex-col gap-3 shadow-sm items-center">
+            <div className="flex items-center gap-2">
+              <Input
+                placeholder="Buscar profissional..."
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+              />
+              <span className="text-[10px] font-black uppercase text-slate-500">
+                Exibir:
+              </span>
+
+              <Button
+                size="sm"
+                variant={filtroStatus === "ativos" ? "default" : "outline"}
+                onClick={() => setFiltroStatus("ativos")}
+                className={`text-[10px] font-black ${filtroStatus === "ativos" ? "bg-emerald-600" : "outline"}`}
+              >
+                Ativos
+              </Button>
+
+              <Button
+                size="sm"
+                variant={filtroStatus === "todos" ? "default" : "outline"}
+                onClick={() => setFiltroStatus("todos")}
+                className="text-[10px] font-black"
+              >
+                Todos
+              </Button>
+            </div>
+            <div className="w-full flex justify-between">
+              <div className="rounded-xl flex flex-col sm:flex-row gap-3 items-center">
+                <Input placeholder="NOME DO PROFISSIONAL" className="h-10 text-[10px] font-black tracking-widest border border-gray-400 dark:border-gray-600" value={novoProfissional.nome} onChange={e => setNovoProfissional({ ...novoProfissional, nome: e.target.value })} />
+                <Select onValueChange={(val) => setNovoProfissional({ ...novoProfissional, especialidade_id: val })}>
+                  <SelectTrigger className="h-10 w-full sm:w-[300px] text-[10px] font-black uppercase border border-gray-400 dark:border-gray-600"><SelectValue placeholder="ESPECIALIDADE INICIAL" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ID_RECEPCAO} className="text-[10px] font-black uppercase text-emerald-500">RECEPÇÃO</SelectItem>
+                    {especialidades.map(e => (<SelectItem key={e.id} value={e.id} className="text-[10px] font-black uppercase">{e.nome}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+                <Button onClick={criarProfissional} className="bg-emerald-600 font-black uppercase text-[10px] px-8"><Plus className="w-4 h-4 mr-2" />Cadastrar</Button>
+              </div>
+              <div>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <Card>
+                    <CardContent>
+                      <p>Total Profissionais</p>
+                      <h2>{profissionais.length}</h2>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent>
+                      <p>Ativos</p>
+                      <h2>{profissionais.filter(p => p.ativo).length}</h2>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent>
+                      <p>Salas</p>
+                      <h2>{salas.length}</h2>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent>
+                      <p>Sem Jornada</p>
+                      <h2>
+                        {profissionais.filter(
+                          p => !p.hora_inicio || !p.hora_fim
+                        ).length}
+                      </h2>
+                    </CardContent>
+                  </Card>
+                </div></div>
+            </div>
+          </div>
+          <div className="flex flex-col sm:flex-row flex-wrap gap-4">
+
+            {profissionais
+              .filter((p) => {
+                if (filtroStatus === "ativos") return p.ativo;
+                return true;
+              })
+              .map((p) => (
+                <Card
+                  key={p.id}
+                  className={`
+                  group border border-gray-400 dark:border-gray-600
+                  bg-white dark:bg-gray-900 shadow-sm
+                  transition-all
+                  ${!p.ativo ? "opacity-50 grayscale" : ""}
+                `}
+                >
+                  <CardContent className="p-0">
+                    <div className="h-1 bg-emerald-500" />
+                    <div className="p-5 space-y-4">
+                      <div className="flex justify-between items-start">
+                        <div className="bg-emerald-500/10 p-2 rounded-lg text-emerald-500"><UserRound className="w-5 h-5" /></div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => alterarStatusProfissional(p)}
+                          className="h-7 w-7"
+                        >
+                          {p.ativo ? (
+                            <Badge className="bg-red-500 text-[11px]">
+                              Inativar
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-emerald-500 text-[11px]">
+                              Ativar
+                            </Badge>
+                          )}
+                        </Button>
+                      </div>
+
+                      {editandoProfissional?.id === p.id ? (
+                        <div className="space-y-2">
+                          <Input
+                            className="h-8 text-[11px] font-black"
+                            value={editandoProfissional.nome}
+                            onChange={e =>
+                              setEditandoProfissional({
+                                ...editandoProfissional,
+                                nome: e.target.value
+                              })
+                            }
+                          />
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <Input
+                              type="time"
+                              className="h-8 text-[10px] font-black"
+                              value={editandoProfissional.hora_inicio || ""}
+                              onChange={e =>
+                                setEditandoProfissional({
+                                  ...editandoProfissional,
+                                  hora_inicio: e.target.value
+                                })
+                              }
+                            />
+
+                            <Input
+                              type="time"
+                              className="h-8 text-[10px] font-black"
+                              value={editandoProfissional.hora_fim || ""}
+                              onChange={e =>
+                                setEditandoProfissional({
+                                  ...editandoProfissional,
+                                  hora_fim: e.target.value
+                                })
+                              }
+                            />
+                          </div>
+                          <div className="flex gap-2">
+                            <Button size="sm" className="bg-green-600 h-7 text-[9px] font-black" onClick={salvarEdicaoNomeProfissional}><Check className="w-3 h-3" /></Button>
+                            <Button size="sm" variant="ghost" className="h-7 text-[9px] font-black" onClick={() => setEditandoProfissional(null)}><X className="w-3 h-3" /></Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-2">
+                          <div className="w-full flex items-center gap-2">
+                            <h3 className="font-black text-slate-800 dark:text-slate-100 text-[14px] truncate">
+                              {p.nome}
+                            </h3>
+
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setEditandoProfissional(p)}
+                              className="h-4 w-4 ml-auto"
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </Button>
+                          </div>
+
+                          {(!p.hora_inicio || !p.hora_fim) ? (
+                            <Badge className="w-fit bg-amber-500/15 text-amber-400 border border-amber-500/30 text-[9px] font-black uppercase tracking-wider">
+                              definir jornada
+                            </Badge>
+                          ) : (
+                            <div className="flex items-center gap-2 w-fit px-2.5 py-1 rounded-lg border border-emerald-500/20 bg-emerald-500/10">
+                              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                              <span className="text-[10px] text-slate-400 font-bold">
+                                {p.hora_inicio.slice(0, 5)} → {p.hora_fim.slice(0, 5)}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="space-y-2">
+                        <p className="text-[9px] font-black text-slate-400 uppercase">Especialidades</p>
+                        <div className="flex flex-col gap-1">
+                          {p.recepcao ? (
+                            <Badge className="bg-blue-600 text-white text-[9px] font-black uppercase border-none">
+                              RECEPÇÃO
+                            </Badge>
+                          ) : null}
+
+                          {p.profissional_especialidades?.map((v: any) => (
+                            <Badge key={v.id} className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[9px] font-black uppercase border-none py-1 group/badge flex items-center gap-1">
+                              {getEspecialidadeNome(v.especialidade_id)}
+                              <button
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  removerVínculoEspecialidade(v.id);
+                                }}
+                                className="hover:bg-red-100 p-0.5 rounded-full transition-colors ml-1"
+                              >
+                                <X className="w-2.5 h-2.5 text-red-400" />
+                              </button>
+                            </Badge>
+                          ))}
+
+                          {!p.recepcao && (!p.profissional_especialidades || p.profissional_especialidades.length === 0) && (
+                            <Badge variant="outline" className="text-[9px] font-black uppercase text-slate-400">
+                              SEM ESPECIALIDADE
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="mt-4 pt-4 border-t border-gray-400 dark:border-gray-600">
+                          <Select onValueChange={(val) => adicionarEspecialidadeAoProfissional(p.id, val)}>
+                            <SelectTrigger className="border border-gray-400 dark:border-gray-600 h-8 text-[9px] font-black uppercase"><SelectValue placeholder="+ Adicionar Especialidade" /></SelectTrigger>
+                            <SelectContent>
+                              {especialidades.map(e => (<SelectItem key={e.id} value={e.id} className="text-[10px] font-black uppercase">{e.nome}</SelectItem>))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+          </div>
+        </section>
+      </div>
+      
+       {/* SEÇÃO SALAS */}
         <section className="space-y-5 mt-8">
           <div className="flex items-center gap-2 border-l-4 border-blue-500 pl-4">
             <DoorOpen className="w-5 h-5 text-blue-500" />
@@ -496,158 +789,6 @@ export default function ConfiguracoesPage() {
             ))}
           </div>
         </section>
-
-        {/* SEÇÃO PROFISSIONAIS */}
-        <section className="space-y-5 pt-6 mt-8 border-t border-gray-600">
-          <div className="flex items-center gap-2 border-l-4 border-emerald-500 pl-4">
-            <UserCog className="w-5 h-5 text-emerald-500" />
-            <h2 className="text-lg font-black uppercase text-slate-800 dark:text-slate-100">Profissionais</h2>
-          </div>
-
-          <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-400 dark:border-gray-600 flex flex-col sm:flex-row gap-3 shadow-sm">
-            <Input placeholder="NOME DO PROFISSIONAL" className="h-10 text-[10px] font-black tracking-widest border border-gray-400 dark:border-gray-600" value={novoProfissional.nome} onChange={e => setNovoProfissional({ ...novoProfissional, nome: e.target.value })} />
-            <Select onValueChange={(val) => setNovoProfissional({ ...novoProfissional, especialidade_id: val })}>
-              <SelectTrigger className="h-10 w-full sm:w-[300px] text-[10px] font-black uppercase border border-gray-400 dark:border-gray-600"><SelectValue placeholder="ESPECIALIDADE INICIAL" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ID_RECEPCAO} className="text-[10px] font-black uppercase text-emerald-500">RECEPÇÃO</SelectItem>
-                {especialidades.map(e => (<SelectItem key={e.id} value={e.id} className="text-[10px] font-black uppercase">{e.nome}</SelectItem>))}
-              </SelectContent>
-            </Select>
-            <Button onClick={criarProfissional} className="bg-emerald-600 font-black uppercase text-[10px] px-8"><Plus className="w-4 h-4 mr-2" /> Cadastrar</Button>
-          </div>
-
-          <div className="flex flex-col sm:flex-row flex-wrap gap-4">
-            {profissionais.map((p) => (
-              <Card key={p.id} className="group border border-gray-400 dark:border-gray-600 bg-white dark:bg-gray-900 shadow-sm hover:border-emerald-500/30 transition-all border">
-                <CardContent className="p-0">
-                  <div className="h-1 bg-emerald-500" />
-                  <div className="p-5 space-y-4">
-                    <div className="flex justify-between items-start">
-                      <div className="bg-emerald-500/10 p-2 rounded-lg text-emerald-500"><UserRound className="w-5 h-5" /></div>
-                      <Button variant="ghost" size="icon" onClick={() => removerProfissional(p.id)} className="h-7 w-7"><Trash2 className="h-3 w-3 text-red-400" /></Button>
-                    </div>
-
-                    {editandoProfissional?.id === p.id ? (
-                      <div className="space-y-2">
-                        <Input
-                          className="h-8 text-[11px] font-black"
-                          value={editandoProfissional.nome}
-                          onChange={e =>
-                            setEditandoProfissional({
-                              ...editandoProfissional,
-                              nome: e.target.value
-                            })
-                          }
-                        />
-
-                        <div className="grid grid-cols-2 gap-2">
-                          <Input
-                            type="time"
-                            className="h-8 text-[10px] font-black"
-                            value={editandoProfissional.hora_inicio || ""}
-                            onChange={e =>
-                              setEditandoProfissional({
-                                ...editandoProfissional,
-                                hora_inicio: e.target.value
-                              })
-                            }
-                          />
-
-                          <Input
-                            type="time"
-                            className="h-8 text-[10px] font-black"
-                            value={editandoProfissional.hora_fim || ""}
-                            onChange={e =>
-                              setEditandoProfissional({
-                                ...editandoProfissional,
-                                hora_fim: e.target.value
-                              })
-                            }
-                          />
-                        </div>
-                        <div className="flex gap-2">
-                          <Button size="sm" className="bg-green-600 h-7 text-[9px] font-black" onClick={salvarEdicaoNomeProfissional}><Check className="w-3 h-3" /></Button>
-                          <Button size="sm" variant="ghost" className="h-7 text-[9px] font-black" onClick={() => setEditandoProfissional(null)}><X className="w-3 h-3" /></Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col gap-2">
-                        <div className="w-full flex items-center gap-2">
-                          <h3 className="font-black text-slate-800 dark:text-slate-100 text-[14px] truncate">
-                            {p.nome}
-                          </h3>
-
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setEditandoProfissional(p)}
-                            className="h-4 w-4 ml-auto"
-                          >
-                            <Pencil className="h-3 w-3" />
-                          </Button>
-                        </div>
-
-                        {(!p.hora_inicio || !p.hora_fim) ? (
-                          <Badge className="w-fit bg-amber-500/15 text-amber-400 border border-amber-500/30 text-[9px] font-black uppercase tracking-wider">
-                            definir jornada
-                          </Badge>
-                        ) : (
-                          <div className="flex items-center gap-2 w-fit px-2.5 py-1 rounded-lg border border-emerald-500/20 bg-emerald-500/10">
-                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                            <span className="text-[10px] text-slate-400 font-bold">
-                              {p.hora_inicio.slice(0, 5)} → {p.hora_fim.slice(0, 5)}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    <div className="space-y-2">
-                      <p className="text-[9px] font-black text-slate-400 uppercase">Especialidades</p>
-                      <div className="flex flex-col gap-1">
-                        {p.recepcao ? (
-                          <Badge className="bg-blue-600 text-white text-[9px] font-black uppercase border-none">
-                            RECEPÇÃO
-                          </Badge>
-                        ) : null}
-
-                        {p.profissional_especialidades?.map((v: any) => (
-                          <Badge key={v.id} className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[9px] font-black uppercase border-none py-1 group/badge flex items-center gap-1">
-                            {getEspecialidadeNome(v.especialidade_id)}
-                            <button
-                              onClick={(e) => {
-                                e.preventDefault();
-                                removerVínculoEspecialidade(v.id);
-                              }}
-                              className="hover:bg-red-100 p-0.5 rounded-full transition-colors ml-1"
-                            >
-                              <X className="w-2.5 h-2.5 text-red-400" />
-                            </button>
-                          </Badge>
-                        ))}
-
-                        {!p.recepcao && (!p.profissional_especialidades || p.profissional_especialidades.length === 0) && (
-                          <Badge variant="outline" className="text-[9px] font-black uppercase text-slate-400">
-                            SEM ESPECIALIDADE
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="mt-4 pt-4 border-t border-gray-400 dark:border-gray-600">
-                        <Select onValueChange={(val) => adicionarEspecialidadeAoProfissional(p.id, val)}>
-                          <SelectTrigger className="border border-gray-400 dark:border-gray-600 h-8 text-[9px] font-black uppercase"><SelectValue placeholder="+ Adicionar Especialidade" /></SelectTrigger>
-                          <SelectContent>
-                            {especialidades.map(e => (<SelectItem key={e.id} value={e.id} className="text-[10px] font-black uppercase">{e.nome}</SelectItem>))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </section>
-      </div>
     </div>
   );
 }

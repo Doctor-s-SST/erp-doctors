@@ -13,7 +13,9 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
-import { User, Mail, Shield, Loader2, Trash2 } from "lucide-react";
+import { User, Mail, Shield, Loader2, Trash2, ShieldCheck } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+
 
 interface UserFormProps {
     open: boolean;
@@ -41,6 +43,7 @@ export default function UserFormDialog({ open, onOpenChange, user, unidadeAtiva,
             password: "",
             role: "operador",
             especialidade_id: "none",
+            ativo: true,
         },
     });
 
@@ -60,6 +63,7 @@ export default function UserFormDialog({ open, onOpenChange, user, unidadeAtiva,
                 last_name: user.last_name || "",
                 role: user.role || "operador",
                 especialidade_id: user.especialidade_id || "none",
+                ativo: user.ativo
             });
         }
     }, [user, open, reset]);
@@ -82,7 +86,8 @@ export default function UserFormDialog({ open, onOpenChange, user, unidadeAtiva,
                         especialidade_id:
                             values.especialidade_id === "none"
                                 ? null
-                                : values.especialidade_id
+                                : values.especialidade_id,
+                        ativo: values.ativo,
                     })
                     .eq("id", user.id);
 
@@ -128,27 +133,59 @@ export default function UserFormDialog({ open, onOpenChange, user, unidadeAtiva,
         }
     };
 
-    const handleDelete = async () => {
-        if (!confirm("Tem certeza que deseja excluir este perfil?")) return;
-
+    const alterarStatusUsuario = async (user: any) => {
         try {
+            if (!confirm("Tem certeza que deseja alterar a situação deste perfil?")) return;
+
+            const novoStatus = !user.ativo;
             setIsDeleting(true);
+
             const { error } = await supabase
                 .from("profiles")
-                .delete()
+                .update({
+                    ativo: novoStatus
+                })
                 .eq("id", user.id);
 
             if (error) throw error;
 
-            toast.success("Profissional removido!");
+            toast.success(
+                novoStatus
+                    ? "Usuário ativado"
+                    : "Usuário inativado"
+            );
             onSuccess();
             onOpenChange(false);
+
         } catch (error: any) {
-            toast.error("Erro ao excluir: " + error.message);
-        } finally {
+            toast.error(error.message);
+        }
+        finally {
             setIsDeleting(false);
         }
     };
+
+    // const handleDelete = async () => {
+    //     if (!confirm("Tem certeza que deseja excluir este perfil?")) return;
+
+    //     try {
+    //         setIsDeleting(true);
+    //         const { error } = await supabase
+    //             .from("profiles")
+    //             .delete()
+    //             .eq("id", user.id);
+
+    //         if (error) throw error;
+
+    //         toast.success("Profissional removido!");
+    //         onSuccess();
+    //         onOpenChange(false);
+    //     } catch (error: any) {
+    //         toast.error("Erro ao excluir: " + error.message);
+    //     } finally {
+    //         setIsDeleting(false);
+    //     }
+    // };
 
     // if (!user) return null;
 
@@ -158,9 +195,10 @@ export default function UserFormDialog({ open, onOpenChange, user, unidadeAtiva,
                 <DialogHeader className="bg-slate-900 p-6 text-white flex flex-row items-center justify-between">
                     <DialogTitle className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em]">
                         <User className="w-4 h-4 text-emerald-400" />
-                        Editar Profissional
+
+                        {user ? "Editar Usuário" : "Novo Usuário"}
                     </DialogTitle>
-                    <Button
+                    {/* <Button
                         type="button"
                         variant="ghost"
                         onClick={handleDelete}
@@ -168,7 +206,25 @@ export default function UserFormDialog({ open, onOpenChange, user, unidadeAtiva,
                         className="h-8 w-8 p-0 text-rose-500 hover:bg-rose-500/10 hover:text-rose-600"
                     >
                         {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                    </Button>
+                    </Button> */}
+                    {user && (
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => alterarStatusUsuario(user)}
+                            className="w-fit p-0 h-fit"
+                        >
+                            {user.ativo ? (
+                                <Badge className="bg-red-500 text-sm">
+                                    Inativar
+                                </Badge>
+                            ) : (
+                                <Badge className="bg-emerald-500 text-sm">
+                                    Ativar
+                                </Badge>
+                            )}
+                        </Button>
+                    )}
                 </DialogHeader>
 
                 <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-6">

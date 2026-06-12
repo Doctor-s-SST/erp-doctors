@@ -48,6 +48,7 @@ export default function UsersManagementPage() {
   const [activeRole, setActiveRole] = useState("all"); // Filtro de Role
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [activeStatus, setActiveStatus] = useState("ativos");
 
   const [unidadeId, setUnidadeId] = useState<string | null>(null);
 
@@ -122,11 +123,22 @@ export default function UsersManagementPage() {
   };
 
   // Lógica de Filtragem combinada (Search + Role)
-  const filteredUsers = users.filter(u => {
-    const matchesSearch = u.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+  const filteredUsers = users.filter((u) => {
+    const matchesSearch =
+      u.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       u.email?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesRole = activeRole === "all" || u.role === activeRole;
-    return matchesSearch && matchesRole;
+
+    const matchesRole =
+      activeRole === "all" || u.role === activeRole;
+
+    const matchesStatus =
+      activeStatus === "todos"
+        ? true
+        : activeStatus === "ativos"
+          ? u.ativo
+          : !u.ativo;
+
+    return matchesSearch && matchesRole && matchesStatus;
   });
 
   return (
@@ -195,6 +207,34 @@ export default function UsersManagementPage() {
                 </Button>
               ))}
             </div>
+
+            {/* Filtro de Ativos e Inativos*/}
+            <div className="flex gap-2 justify-center">
+
+              <Button
+                variant={activeStatus === "todos" ? "default" : "outline"}
+                onClick={() => setActiveStatus("todos")}
+                className="h-9 text-[10px] font-black"
+              >
+                Todos
+              </Button>
+
+              <Button
+                variant={activeStatus === "ativos" ? "default" : "outline"}
+                onClick={() => setActiveStatus("ativos")}
+                className={`h-9 text-[11px] font-black ${activeStatus === "ativos" ? "bg-emerald-600" : ""}`}
+              >
+                Ativos
+              </Button>
+
+              <Button
+                variant={activeStatus === "inativos" ? "default" : "outline"}
+                onClick={() => setActiveStatus("inativos")}
+                className={`h-9 text-[11px] font-black ${activeStatus === "inativos" ? "bg-red-500" : ""}`}
+              >
+                Inativos
+              </Button>
+            </div>
           </div>
 
           <div className="flex gap-3 items-center justify-end">
@@ -216,12 +256,21 @@ export default function UsersManagementPage() {
               const colorScheme = ROLE_COLORS[user.role] || ROLE_COLORS.especialista;
 
               return (
-                <Card key={user.id} className={`group border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 overflow-hidden shadow-sm hover:shadow-md transition-all ${colorScheme.border}`}>
+                <Card
+                  key={user.id}
+                  className={`
+                    group border border-gray-300 dark:border-gray-600
+                    bg-white dark:bg-gray-900 overflow-hidden shadow-sm
+                    hover:shadow-md transition-all
+                    ${colorScheme.border}
+                    ${!user.ativo ? "opacity-50 grayscale" : ""}
+                  `}
+                >
                   <CardContent className="p-0">
                     {/* Barra de cor topo */}
                     <div className={`h-1.5 ${colorScheme.bg}`} />
 
-                    <div className="p-5 space-y-4">
+                    <div className="p-5 mr-2 space-y-4">
                       <div className="flex justify-between items-start">
                         <div className={`p-2 rounded-lg ${colorScheme.light}`}>
                           {user.role === 'admin' ? (
@@ -232,14 +281,16 @@ export default function UsersManagementPage() {
                             <User className={`w-5 h-5 ${colorScheme.text}`} />
                           )}
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleEdit(user)}
-                          className="h-8 w-8 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800"
-                        >
-                          <Edit2 className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white transition-colors" />
-                        </Button>
+                        <div className="flex flex-row gap-5">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleEdit(user)}
+                            className="h-8 w-8 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800"
+                          >
+                            <Edit2 className="h-4 w-4 text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white transition-colors" />
+                          </Button>
+                        </div>
                       </div>
 
                       <div className="space-y-1">
@@ -263,6 +314,15 @@ export default function UsersManagementPage() {
                         <Badge className={`${colorScheme.bg} text-white text-[9px] font-black border-none uppercase tracking-widest py-1`}>
                           {user.role === 'recepcao' ? 'RECEPÇÃO' : user.role === 'admin' ? 'ADMIN' : user.role === 'especialista' ? 'ESPECIALISTA' : user.role === 'painel' ? 'PAINEL' : 'OPERADOR'}
                         </Badge>
+                        {user.ativo ? (
+                          <Badge className="bg-emerald-600 text-white text-[9px] font-black border-none uppercase tracking-widest py-1">
+                            Ativo
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-red-600 text-white text-[9px] font-black border-none uppercase tracking-widest py-1">
+                            Inativo
+                          </Badge>
+                        )}
                       </div>
                     </div>
                   </CardContent>
