@@ -1422,7 +1422,7 @@ export default function RecepcaoPage() {
                                                                         </div>
                                                                     )}
 
-                                                                    {/* BOTÃO CANCELAR */}
+                                                                    {/* BOTÃO CANCELAsR */}
                                                                     <TooltipProvider>
                                                                         <Tooltip>
                                                                             <TooltipTrigger asChild>
