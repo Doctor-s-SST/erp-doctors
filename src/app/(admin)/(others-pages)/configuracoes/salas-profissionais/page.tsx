@@ -26,6 +26,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion"
+import { Label } from "@/components/ui/label";
 
 export default function ConfiguracoesPage() {
   const [salas, setSalas] = useState<any[]>([]);
@@ -33,7 +34,11 @@ export default function ConfiguracoesPage() {
   const [especialidades, setEspecialidades] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [novaSala, setNovaSala] = useState({ numero: "", especialidades: [] as string[] });
+  const [novaSala, setNovaSala] = useState({
+    numero: "",
+    andar: 0,
+    especialidades: [] as string[]
+  });
   const [novoProfissional, setNovoProfissional] = useState({ nome: "", especialidade_id: "" });
 
   const [editandoSala, setEditandoSala] = useState<any | null>(null);
@@ -50,6 +55,7 @@ export default function ConfiguracoesPage() {
   const [busca, setBusca] = useState("");
   const [filtroEspecialidade, setFiltroEspecialidade] = useState("todas");
   const [filtroJornada, setFiltroJornada] = useState("todas");
+  const [falaAndar, setFalaAndar] = useState(false);
 
   async function fetchAll(idDaUnidade?: string) {
     const idAtivo = idDaUnidade || unidadeId;
@@ -107,31 +113,33 @@ export default function ConfiguracoesPage() {
 
   useEffect(() => {
     const fetchUserContext = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user }
+      } = await supabase.auth.getUser();
 
-      if (user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role, unidade_id')
-          .eq('id', user.id)
-          .single();
+      if (!user) return;
 
-        if (profile) {
-          let idFinal = profile.unidade_id;
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role, unidade_id")
+        .eq("id", user.id)
+        .single();
 
-          // Se for admin, tenta pegar a unidade que ele selecionou no Header
-          // if (profile.role === 'admin') {
-          //   const unidadeSessao = localStorage.getItem('unidade_ativa_id');
-          //   if (unidadeSessao) {
-          //     idFinal = unidadeSessao;
-          //   }
-          // }
+      if (!profile) return;
 
-          setUnidadeId(idFinal);
-          // Só chama o fetchAll depois que temos o unidadeId correto
-          fetchAll(idFinal);
-        }
-      }
+      const idFinal = profile.unidade_id;
+
+      setUnidadeId(idFinal);
+
+      const { data: config } = await supabase
+        .from("painel_config")
+        .select("fala_andar")
+        .eq("unidade_id", idFinal)
+        .maybeSingle();
+
+      setFalaAndar(config?.fala_andar ?? false);
+
+      fetchAll(idFinal);
     };
 
     fetchUserContext();
@@ -147,6 +155,7 @@ export default function ConfiguracoesPage() {
       .from("salas")
       .insert({
         numero: Number(novaSala.numero),
+        andar: falaAndar ? Number(novaSala.andar) : 0,
         unidade_id: unidadeId
       })
       .select()
@@ -171,6 +180,7 @@ export default function ConfiguracoesPage() {
 
     setNovaSala({
       numero: "",
+      andar: 0,
       especialidades: []
     });
 
@@ -181,7 +191,8 @@ export default function ConfiguracoesPage() {
     const { error } = await supabase
       .from("salas")
       .update({
-        numero: Number(editandoSala.numero)
+        numero: Number(editandoSala.numero),
+        andar: falaAndar ? Number(editandoSala.andar) : 0
       })
       .eq("id", editandoSala.id);
 
@@ -387,6 +398,10 @@ export default function ConfiguracoesPage() {
     if (!id) return "RECEPÇÃO";
     const esp = especialidades.find(e => e.id === id);
     return esp ? esp.nome : "RECEPÇÃO";
+  };
+
+  const formatarAndar = (andar: number) => {
+    return Number(andar) === 0 ? "Térreo" : `${andar}º Andar`;
   };
 
   if (loading) {
@@ -734,7 +749,46 @@ export default function ConfiguracoesPage() {
 
             <AccordionContent className="space-y-4 h-fit">
               <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-400 dark:border-gray-600 flex flex-col sm:flex-row gap-3 items-center shadow-sm">
-                <Input placeholder="Nº DA SALA" type="number" className="h-10 text-[10px] border border-gray-400 dark:border-gray-600 font-black uppercase tracking-widest" value={novaSala.numero} onChange={e => setNovaSala({ ...novaSala, numero: e.target.value })} />
+                <Input placeholder="Nº DA SALA" type="number" className="w-80 h-10 text-[10px] border border-gray-400 dark:border-gray-600 font-black uppercase tracking-widest" value={novaSala.numero} onChange={e => setNovaSala({ ...novaSala, numero: e.target.value })} />
+                {falaAndar && (
+                  <div className="flex items-center gap-3 px-3 py-2 rounded-lg border border-gray-400 dark:border-gray-600">
+                    <div className="flex flex-col leading-none gap-1">
+                      <Label
+                        htmlFor="input-andar"
+                        className="text-[11px] font-black uppercase tracking-widest"
+                      >
+                        Andar
+                      </Label>
+
+                      <span className="text-[11px] font-medium">
+                        0 = Térreo
+                      </span>
+                    </div>
+
+                    <Input
+                      id="input-andar"
+                      type="number"
+                      min="0"
+                      placeholder="0"
+                      className="
+                      w-20
+                      h-10
+                      text-center
+                      text-sm
+                      font-black
+                      border-gray-400
+                      dark:border-gray-600
+                    "
+                      value={novaSala.andar}
+                      onChange={(e) =>
+                        setNovaSala({
+                          ...novaSala,
+                          andar: Number(e.target.value)
+                        })
+                      }
+                    />
+                  </div>
+                )}
                 <Select
                   onValueChange={(val) => {
                     if (novaSala.especialidades.includes(val)) return;
@@ -751,7 +805,7 @@ export default function ConfiguracoesPage() {
                     {especialidades.map(e => (<SelectItem key={e.id} value={e.id} className="text-[10px] font-black uppercase">{e.nome}</SelectItem>))}
                   </SelectContent>
                 </Select>
-                <div className="flex flex-wrap gap-1 mt-2">
+                <div className="flex flex-col gap-1 mt-2">
                   {novaSala.especialidades.map((espId) => (
                     <Badge
                       key={espId}
@@ -782,37 +836,59 @@ export default function ConfiguracoesPage() {
                   <Card key={s.id} className="w-full sm:w-64 border border-gray-400 dark:border-gray-600 bg-white dark:bg-gray-900 shadow-sm hover:border-blue-500/30 transition-all border">
                     <CardContent className="p-5 py-3 space-y-3 ">
                       {editandoSala?.id === s.id ? (
-                        <><div className="flex flex-wrap gap-1">
-                          <Input
-                            className="h-8 text-[10px] font-black uppercase"
-                            value={editandoSala.numero}
-                            onChange={e =>
-                              setEditandoSala({
-                                ...editandoSala,
-                                numero: e.target.value
-                              })
-                            }
-                          />
-                          {editandoSala.especialidades?.map((espId: string) => (
-                            <Badge
-                              key={espId}
-                              className="flex items-center gap-1 text-[9px]"
-                            >
-                              {getEspecialidadeNome(espId)}
-
-                              <button
-                                onClick={() => {
+                        <><div className="flex flex-col gap-1">
+                          <div className="flex gap-2">
+                            <Label htmlFor="num-sala" className="text-md">Sala:</Label>
+                            <Input
+                              className="w-20 h-8 text-[10px] font-black uppercase"
+                              id="num-sala"
+                              value={editandoSala.numero}
+                              onChange={e =>
+                                setEditandoSala({
+                                  ...editandoSala,
+                                  numero: e.target.value
+                                })
+                              }
+                            /></div>
+                          {falaAndar && (
+                            <div className="flex gap-2 mb-2">
+                              <Label htmlFor="andar" className="text-md">Andar: </Label>
+                              <Input
+                                type="number"
+                                min="0"
+                                className="w-20 h-8 text-[10px] font-black uppercase"
+                                id="andar"
+                                value={editandoSala.andar}
+                                onChange={(e) =>
                                   setEditandoSala({
                                     ...editandoSala,
-                                    especialidades: editandoSala.especialidades.filter(
-                                      (id: string) => id !== espId
-                                    )
-                                  });
-                                }}
+                                    andar: Number(e.target.value)
+                                  })
+                                }
+                              />
+                            </div>
+                          )}
+                          {editandoSala.especialidades?.map((espId: string) => (
+                            <div className="flex flex-wrap" key={espId}>
+                              <Badge
+                                className="flex items-center gap-1 text-[9px]"
                               >
-                                <X className="w-3 h-3" />
-                              </button>
-                            </Badge>
+                                {getEspecialidadeNome(espId)}
+
+                                <button
+                                  onClick={() => {
+                                    setEditandoSala({
+                                      ...editandoSala,
+                                      especialidades: editandoSala.especialidades.filter(
+                                        (id: string) => id !== espId
+                                      )
+                                    });
+                                  }}
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </Badge>
+                            </div>
                           ))}
                         </div>
                           <Select
@@ -870,6 +946,7 @@ export default function ConfiguracoesPage() {
                               <Button variant="ghost" size="icon" onClick={() =>
                                 setEditandoSala({
                                   ...s,
+                                  andar: s.andar ?? 0,
                                   especialidades:
                                     s.sala_especialidades?.map(
                                       (v: any) => v.especialidade_id
@@ -881,6 +958,11 @@ export default function ConfiguracoesPage() {
                           </div>
                           <div className="border-t border-gray-400 dark:border-gray-600 pt-2">
                             <h3 className="font-black text-slate-800 dark:text-slate-100 text-sm uppercase">SALA {s.numero}</h3>
+                            {falaAndar && (
+                              <p className="text-[10px] text-slate-500 font-bold uppercase">
+                                {formatarAndar(s.andar)}
+                              </p>
+                            )}
                             <div className="flex flex-wrap gap-1 mt-2">
                               {s.sala_especialidades?.map((v: any) => (
                                 <Badge
@@ -904,6 +986,6 @@ export default function ConfiguracoesPage() {
         </Accordion>
 
       </div>
-    </div>
+    </div >
   );
 }

@@ -64,10 +64,11 @@ const navItems: NavItem[] = [
     icon: <Settings className="w-5 h-5" />,
     roles: ["admin", "operador"],
     subItems: [
-      { name: "Usuários", path: "/configuracoes/users", roles: ["admin"] },
-      { name: "Salas e Profissionais", path: "/configuracoes/salas-profissionais", roles: ["admin"] },
       { name: "Grupos de Especialidades", path: "/configuracoes/grupos-especialidades", roles: ["admin", "operador"] },
+      { name: "Definições do Painel", path: "/configuracoes/painel", roles: ["admin"] },
+      { name: "Salas e Profissionais", path: "/configuracoes/salas-profissionais", roles: ["admin"] },
       { name: "Unidade", path: "/configuracoes/unidade", roles: ["admin"] },
+      { name: "Usuários", path: "/configuracoes/users", roles: ["admin"] },
     ],
   },
   // {

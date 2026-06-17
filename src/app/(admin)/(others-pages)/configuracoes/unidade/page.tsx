@@ -344,10 +344,7 @@ export default function UnidadeConfigPage() {
                 <Card className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 overflow-hidden shadow-sm">
                     <CardContent className="p-0">
 
-                        {/* TOPO */}
-                        <div className="h-1.5 bg-emerald-500" />
-
-                        <div className="p-6 space-y-10">
+                        <div className="px-6 py-4 space-y-10">
 
                             {/* IDENTIDADE VISUAL */}
                             <div className="space-y-6">
@@ -716,7 +713,7 @@ export default function UnidadeConfigPage() {
                             <Button
                                 onClick={handleSalvar}
                                 disabled={saving}
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white h-12 px-6 text-[10px] font-black uppercase tracking-widest"
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white h-12 px-6 text-sm font-black uppercase tracking-widest"
                             >
                                 {saving ? (
                                     <Loader2 className="w-4 h-4 animate-spin" />

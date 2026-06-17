@@ -332,10 +332,12 @@ export const TemplateFicha = forwardRef<any, any>(({ dados }, ref) => {
       {/* FOOTER */}
       <footer className="text-center text-[10px] mt-auto">
         <div className="mb-2">
-          <img
-            src={form.logo_url}
-            className="max-h-[90px] mx-auto"
-          />
+          {form.logo_url && (
+            <img
+              src={form.logo_url}
+              className="max-h-[90px] mx-auto"
+            />
+          )}
         </div>
 
         <div className="font-bold text-[11px] uppercase">

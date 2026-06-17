@@ -14,11 +14,11 @@ interface Chamada {
   updated_at: string;
 }
 
-const salasAndar = {
-  '1': 'térreo', '2': 'térreo', '3': 'térreo', '4': 'térreo', '5': 'térreo',
-  '6': 'térreo', '7': 'primeiro andar', '8': 'primeiro andar',
-  '9': 'primeiro andar', '10': 'primeiro andar',
-};
+// const salasAndar = {
+//   '1': 'térreo', '2': 'térreo', '3': 'térreo', '4': 'térreo', '5': 'térreo',
+//   '6': 'térreo', '7': 'primeiro andar', '8': 'primeiro andar',
+//   '9': 'primeiro andar', '10': 'primeiro andar',
+// };
 
 export default function PainelTV() {
   const [ultimaChamada, setUltimaChamada] = useState<Chamada | null>(null);
@@ -27,8 +27,9 @@ export default function PainelTV() {
   const [processando, setProcessando] = useState(false);
   const [unidadeId, setUnidadeId] = useState<string | null>(null);
   const [ativado, setAtivado] = useState(false);
-  // const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
+  const [salas, setSalas] = useState<any[]>([]);
+  const [unidadeLogo, setUnidadeLogo] = useState<string>("");
+  const [falaAndar, setFalaAndar] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -84,7 +85,10 @@ export default function PainelTV() {
 
       const senhaSoletreada = (chamada.senha_codigo || "").split('').join(' ');
       const identificador = chamada.nome_paciente ? `${chamada.nome_paciente}` : `Senha, ${senhaSoletreada}`;
-      const andar = salasAndar[chamada.guiche as keyof typeof salasAndar];
+      // const andar = salasAndar[chamada.guiche as keyof typeof salasAndar];
+      const andar = falaAndar
+        ? obterAndarSala(chamada.guiche)
+        : "";
 
       const destino = chamada.origem === 'RECEPCAO'
         ? `comparecer ao guichê ${chamada.guiche}, recepção`
@@ -131,6 +135,21 @@ export default function PainelTV() {
   useEffect(() => {
     if (!unidadeId) return;
 
+    if (!unidadeId) return;
+
+    async function carregarSalas() {
+      const { data } = await supabase
+        .from("salas")
+        .select("numero, andar")
+        .eq("unidade_id", unidadeId);
+
+      if (data) {
+        setSalas(data);
+      }
+    }
+
+    carregarSalas();
+
     const fetchDados = async () => {
       try {
         const { data: rec } = await supabase.from('atendimentos').select('id, senha_codigo, guiche, updated_at, pacientes(nome)').eq('status', 'EM_FILA').eq('unidade_id', unidadeId).order('updated_at', { ascending: true });
@@ -163,85 +182,71 @@ export default function PainelTV() {
     return () => clearInterval(inv);
   }, [unidadeId]);
 
-  // const fetchDados = async () => {
-  //   try {
-  //     const { data: rec } = await supabase.from('atendimentos').select('id, senha_codigo, guiche, updated_at, pacientes(nome)').eq('status', 'EM_FILA').eq('unidade_id', unidadeId).order('updated_at', { ascending: true });
-  //     const { data: exm } = await supabase.from('atendimento_exames').select(`id, num_sala, atendimentos!inner(senha_codigo, updated_at, unidade_id, pacientes(nome))`).eq('status', 'EM_FILA').eq('atendimentos.unidade_id', unidadeId).order('atendimentos(updated_at)', { ascending: true });
-
-  //     const lRec: Chamada[] = rec?.map(r => ({ id: r.id, senha_codigo: r.senha_codigo, nome_paciente: (r.pacientes as any)?.nome, guiche: r.guiche, origem: 'RECEPCAO', updated_at: r.updated_at })) || [];
-  //     const lExm: Chamada[] = exm?.map(e => {
-  //       const a = Array.isArray(e.atendimentos) ? e.atendimentos[0] : (e.atendimentos as any);
-  //       return { id: e.id, senha_codigo: a.senha_codigo, nome_paciente: a.pacientes?.nome, guiche: e.num_sala, origem: 'EXAME', updated_at: a.updated_at };
-  //     }) || [];
-
-  //     const intercalados: Chamada[] = [];
-  //     const max = Math.max(lRec.length, lExm.length);
-  //     for (let i = 0; i < max; i++) {
-  //       if (lRec[i]) intercalados.push(lRec[i]);
-  //       if (lExm[i]) intercalados.push(lExm[i]);
-  //     }
-
-  //     if (intercalados.length > 0) {
-  //       setFila(prev => {
-  //         const ids = new Set(prev.map(p => p.id));
-  //         return [...prev, ...intercalados.filter(n => !ids.has(n.id))];
-  //       });
-  //     }
-  //   } catch (e) { console.error(e); }
-  // };
-  // 3. BUSCA COM INTERCALAÇÃO (Zip-Merge)
-  // useEffect(() => {
-  //   if (!unidadeId) return;
-
-  //   fetchDados();
-
-  //   const eventSource = new EventSource(
-  //     `https://doctors-distribuidor-sse.cgalnz.easypanel.host/stream-fila?unidadeId=${unidadeId}`
-  //   );
-
-  //   eventSource.onmessage = () => {
-
-  //     if (debounceRef.current) {
-  //       clearTimeout(debounceRef.current);
-  //     }
-
-  //     debounceRef.current = setTimeout(() => {
-  //       fetchDados();
-  //     }, 500);
-
-  //   };
-
-  //   const fallbackInterval = setInterval(() => {
-  //     fetchDados();
-  //   }, 180000);
-
-  //   return () => {
-
-  //     if (debounceRef.current) {
-  //       clearTimeout(debounceRef.current);
-  //     }
-
-  //     eventSource.close();
-  //     clearInterval(fallbackInterval);
-
-  //   };
-
-  // }, [unidadeId]);
-
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) {
-        supabase.from('profiles').select('unidade_id').eq('id', user.id).single()
-          .then(({ data }) => data && setUnidadeId(data.unidade_id));
+    const carregarDados = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) return;
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("unidade_id")
+        .eq("id", user.id)
+        .single();
+
+      if (!profile) return;
+
+      setUnidadeId(profile.unidade_id);
+
+      const { data: unidade, error } = await supabase
+        .from("unidades")
+        .select("logo_url")
+        .eq("id", profile.unidade_id)
+        .single();
+
+      if (!error && unidade) {
+        setUnidadeLogo(unidade.logo_url || "");
       }
-    });
+
+      const { data: config } = await supabase
+        .from("painel_config")
+        .select("fala_andar")
+        .eq("unidade_id", profile.unidade_id)
+        .single();
+
+      setFalaAndar(config?.fala_andar ?? false);
+    };
+
+    carregarDados();
   }, []);
+
+  function obterAndarSala(numeroSala: string | number) {
+    if (!falaAndar) return "";
+
+    const sala = salas.find(
+      s => String(s.numero) === String(numeroSala)
+    );
+
+    if (!sala) return "";
+
+    if (Number(sala.andar) === 0) {
+      return "térreo";
+    }
+
+    return `${sala.andar}º andar`;
+  }
 
   // TELA DE ATIVAÇÃO
   if (!ativado) {
     return (
       <div className="h-screen w-screen flex flex-col items-center justify-center bg-[#3498db] text-white p-10 text-center">
-        <img src="/images/logo/doctors-svg.svg" alt="Logo" className="h-24 mb-10 brightness-0 invert" />
+        {unidadeLogo && (
+          <img
+            src={unidadeLogo}
+            alt="Logo"
+            className="h-24 mb-10"
+          />
+        )}
         <h1 className="text-4xl font-bold mb-4">Painel de Chamada Doctor's</h1>
         <button
           onClick={() => setAtivado(true)}
@@ -261,7 +266,9 @@ export default function PainelTV() {
       {/* HEADER DESIGN EXATO */}
       <header className="h-20 flex justify-between items-center px-5 py-2 bg-white shadow-[0px_2px_5px_0px_rgba(0,0,0,0.2)] z-10">
         <div className="flex items-center gap-2">
-          <img src="/images/logo/doctors-svg.svg" alt="Doctors" className="h-12" />
+          {unidadeLogo && (
+            <img src={unidadeLogo} alt="Logo" className="h-12" />
+          )}
         </div>
         <p className="text-black font-medium text-lg capitalize">
           {dataAtual.weekday}, {dataAtual.day} <span className="lowercase">de {dataAtual.month} de</span> {dataAtual.year}
@@ -310,15 +317,16 @@ export default function PainelTV() {
                       </span>
                     </div>
 
-                    {unidadeId === "ba83f0b4-1b16-4b07-9473-fe929f16f881" && (
-                      <div className="flex flex-col items-center mt-2">
-                        <span className="text-5xl tracking-tight">
-                          {ultimaChamada.origem === 'RECEPCAO'
-                            ? "Recepção"
-                            : salasAndar[ultimaChamada.guiche as keyof typeof salasAndar] || ""}
-                        </span>
-                      </div>
-                    )}
+                    <div className="flex flex-col items-center mt-2">
+                      <span className="text-5xl tracking-tight">
+                        {ultimaChamada.origem === 'RECEPCAO'
+                          ? "Recepção"
+                          : falaAndar
+                            ? obterAndarSala(ultimaChamada.guiche)
+                            : ""}
+                      </span>
+                    </div>
+
                   </div>
                 </>
               )}
