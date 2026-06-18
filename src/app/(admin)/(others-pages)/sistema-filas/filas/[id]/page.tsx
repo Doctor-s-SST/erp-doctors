@@ -284,7 +284,7 @@ export default function FilaPage() {
             setEspecialidadeNome(esp.nome);
 
             // Adicionando o p_unidade_id na chamada RPC
-            const { data: result } = await supabase.rpc("get_fila_especialidade_novo", {
+            const { data: result } = await supabase.rpc("get_fila_especialidade_novo_2", {
                 p_sala: esp.nome,
                 p_unidade_id: unidadeId // <--- Filtro por unidade
             });

@@ -38,12 +38,13 @@ type Exame = {
     especialidade_id: string
     observacao?: string
     ordem?: number
-    dependencia_id?: string
-    depende_de_exame_id?: string
+    // dependencia_id?: string
+    // depende_de_exame_id?: string
     obrigatorio_checkbox?: boolean
 }
 
 type Especialidade = {
+    depende_de_especialidades: never[]
     id: string
     nome: string
     exames: Exame[]
@@ -80,7 +81,9 @@ export default function KanbanExames() {
 
     const [editandoExame, setEditandoExame] = useState<Exame | null>(null)
     const [editandoEspecialidade, setEditandoEspecialidade] = useState<Especialidade | null>(null)
-    const [form, setForm] = useState<any>({})
+    const [form, setForm] = useState<any>({
+        depende_de_especialidades: []
+    })
     const [activeExame, setActiveExame] = useState<Exame | null>(null)
     const [unidadeId, setUnidadeId] = useState<string | null>(null);
 
@@ -101,9 +104,14 @@ export default function KanbanExames() {
             .eq("unidade_id", currentUnidadeId)
             .order('nome', { ascending: true });
 
-        const { data: depsData, error: errorDeps } = await supabase
-            .from("exame_dependencias")
+        // const { data: depsData, error: errorDeps } = await supabase
+        //     .from("exame_dependencias")
+        //     .select("*")
+
+        const { data: depsEspecialidades, error: errorDeps } = await supabase
+            .from("especialidade_dependencias")
             .select("*")
+
 
         if (errorExames || errorDeps) {
             toast.error("Erro ao carregar dados")
@@ -111,18 +119,30 @@ export default function KanbanExames() {
             return
         }
 
-        const ordered = (rawData || []).map((c: any) => ({
-            ...c,
-            exames: (c.exames || [])
-                .map((exame: any) => {
-                    const dep = depsData?.find(d => d.exame_id === exame.id)
-                    return {
-                        ...exame,
-                        depende_de_exame_id: dep?.depende_de_exame_id,
-                        dependencia_id: dep?.id
-                    }
-                })
-                .sort((a: Exame, b: Exame) => (a.ordem ?? 0) - (b.ordem ?? 0)),
+        // const ordered = (rawData || []).map((c: any) => ({
+        //     ...c,
+        //     exames: (c.exames || [])
+        //         .map((exame: any) => {
+        //             const dep = depsData?.find(d => d.exame_id === exame.id)
+        //             return {
+        //                 ...exame,
+        //                 depende_de_exame_id: dep?.depende_de_exame_id,
+        //                 dependencia_id: dep?.id
+        //             }
+        //         })
+        //         .sort((a: Exame, b: Exame) => (a.ordem ?? 0) - (b.ordem ?? 0)),
+        // }))
+
+        const ordered = (rawData || []).map((esp: any) => ({
+            ...esp,
+            depende_de_especialidades:
+                depsEspecialidades
+                    ?.filter(d => d.especialidade_id === esp.id)
+                    .map(d => d.depende_de_especialidade_id) || [],
+
+            exames: (esp.exames || []).sort(
+                (a: Exame, b: Exame) => (a.ordem ?? 0) - (b.ordem ?? 0)
+            )
         }))
 
         setData(ordered)
@@ -236,6 +256,46 @@ export default function KanbanExames() {
                         .from("especialidades")
                         .insert(payloadEspecialidade)
                 }
+
+                let especialidadeId = editandoEspecialidade?.id;
+
+                if (editandoEspecialidade) {
+                    await supabase
+                        .from("especialidades")
+                        .update(payloadEspecialidade)
+                        .eq("id", especialidadeId);
+                } else {
+                    const { data: novaEspecialidade, error } = await supabase
+                        .from("especialidades")
+                        .insert(payloadEspecialidade)
+                        .select()
+                        .single();
+
+                    if (error) throw error;
+
+                    especialidadeId = novaEspecialidade.id;
+                }
+
+                await supabase
+                    .from("especialidade_dependencias")
+                    .delete()
+                    .eq("especialidade_id", especialidadeId);
+
+                if (
+                    form.depende_de_especialidades &&
+                    form.depende_de_especialidades.length > 0
+                ) {
+                    await supabase
+                        .from("especialidade_dependencias")
+                        .insert(
+                            form.depende_de_especialidades.map(
+                                (depId: string) => ({
+                                    especialidade_id: especialidadeId,
+                                    depende_de_especialidade_id: depId
+                                })
+                            )
+                        );
+                }
             }
 
             // ================= EXAME =================
@@ -272,19 +332,19 @@ export default function KanbanExames() {
                     exameId = n.id
                 }
 
-                await supabase
-                    .from("exame_dependencias")
-                    .delete()
-                    .eq("exame_id", exameId)
+                // await supabase
+                //     .from("exame_dependencias")
+                //     .delete()
+                //     .eq("exame_id", exameId)
 
-                if (form.depende_de_exame_id) {
-                    await supabase
-                        .from("exame_dependencias")
-                        .insert({
-                            exame_id: exameId,
-                            depende_de_exame_id: form.depende_de_exame_id
-                        })
-                }
+                // if (form.depende_de_exame_id) {
+                //     await supabase
+                //         .from("exame_dependencias")
+                //         .insert({
+                //             exame_id: exameId,
+                //             depende_de_exame_id: form.depende_de_exame_id
+                //         })
+                // }
             }
 
             toast.success("Salvo com sucesso")
@@ -347,12 +407,15 @@ export default function KanbanExames() {
         setOpenModal(false)
         setEditandoExame(null)
         setEditandoEspecialidade(null)
-        setForm({})
+
+        setForm({
+            depende_de_especialidades: []
+        })
     }
 
     const renderExameCard = (exame: Exame, isOverlay = false) => {
         // Encontra o nome do exame do qual este depende
-        const nomeDependencia = allExames.find(e => e.id === exame.depende_de_exame_id)?.nome
+        // const nomeDependencia = allExames.find(e => e.id === exame.depende_de_exame_id)?.nome
 
         return (
             <Card className={`border-none bg-white dark:bg-slate-800 shadow-sm transition-all ${!isOverlay ? 'hover:ring-1 ring-emerald-500 cursor-grab' : 'shadow-2xl ring-2 ring-emerald-500 scale-105'}`}>
@@ -363,14 +426,15 @@ export default function KanbanExames() {
 
                     <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-700/50 pt-2">
                         {/* Dependência Visual ao lado do tempo */}
-                        {exame.depende_de_exame_id && (
+                        {/* {exame.depende_de_exame_id && (
                             <div className="flex items-center gap-1 bg-blue-50 dark:bg-blue-900/20 px-1.5 py-0.5 rounded border border-blue-100 dark:border-blue-800">
                                 <Link2 className="w-2.5 h-2.5 text-blue-600 dark:text-blue-400" />
                                 <span className="text-[8px] font-bold text-blue-600 dark:text-blue-400 uppercase truncate max-w-[80px]">
                                     {nomeDependencia || "DEP"}
                                 </span>
                             </div>
-                        )}
+                        )} */}
+
                         {/* </div> */}
                     </div>
                 </CardContent>
@@ -425,13 +489,25 @@ export default function KanbanExames() {
                                                     setTipoModal("especialidade")
                                                     setEditandoEspecialidade(col)
 
+                                                    // setForm({
+                                                    //     nome: col.nome,
+                                                    //     tempo_finalizacao_segundos:
+                                                    //         col.tempo_finalizacao_segundos || "",
+
+                                                    //     obrigar_check_exames:
+                                                    //         col.obrigar_check_exames ?? false
+                                                    // })
+
                                                     setForm({
                                                         nome: col.nome,
                                                         tempo_finalizacao_segundos:
                                                             col.tempo_finalizacao_segundos || "",
 
                                                         obrigar_check_exames:
-                                                            col.obrigar_check_exames ?? false
+                                                            col.obrigar_check_exames ?? false,
+
+                                                        depende_de_especialidades:
+                                                            col.depende_de_especialidades || []
                                                     })
 
                                                     setOpenModal(true)
@@ -441,6 +517,7 @@ export default function KanbanExames() {
                                                 {col.nome}
                                             </button>
                                         </h2>
+
                                         <button
                                             onClick={() => deletarEspecialidade(col.id)}
                                             className="p-1 rounded hover:bg-rose-500/10 text-rose-500 transition"
@@ -508,22 +585,24 @@ export default function KanbanExames() {
                         </div>
 
                         {tipoModal === "especialidade" && (
-                            <><div className="space-y-2">
-                                <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">
-                                    Tempo para Finalização (segundos)
-                                </Label>
+                            <>
+                                <div className="space-y-2">
+                                    <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">
+                                        Tempo para Finalização (segundos)
+                                    </Label>
 
-                                <Input
-                                    type="number"
-                                    min={1}
-                                    required
-                                    className="h-12 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-bold text-xs"
-                                    value={form.tempo_finalizacao_segundos || ""}
-                                    onChange={(e) => setForm({
-                                        ...form,
-                                        tempo_finalizacao_segundos: e.target.value,
-                                    })} />
-                            </div><div className="space-y-2">
+                                    <Input
+                                        type="number"
+                                        min={1}
+                                        required
+                                        className="h-12 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-bold text-xs"
+                                        value={form.tempo_finalizacao_segundos || ""}
+                                        onChange={(e) => setForm({
+                                            ...form,
+                                            tempo_finalizacao_segundos: e.target.value,
+                                        })} />
+                                </div>
+                                <div className="space-y-2">
                                     <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">
                                         Exigir checklist dos exames?
                                     </Label>
@@ -549,7 +628,54 @@ export default function KanbanExames() {
                                             </p>
                                         </div>
                                     </label>
-                                </div></>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>
+                                        Dependências de Especialidade
+                                    </Label>
+
+                                    <div className="max-h-48 overflow-auto border rounded-md p-3 space-y-2">
+                                        {data
+                                            .filter(e => e.id !== editandoEspecialidade?.id)
+                                            .map(esp => (
+                                                <label
+                                                    key={esp.id}
+                                                    className="flex items-center gap-2 cursor-pointer"
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={
+                                                            (form.depende_de_especialidades || []).includes(esp.id)
+                                                        }
+                                                        onChange={(e) => {
+                                                            if (e.target.checked) {
+                                                                setForm({
+                                                                    ...form,
+                                                                    depende_de_especialidades: [
+                                                                        ...(form.depende_de_especialidades || []),
+                                                                        esp.id
+                                                                    ]
+                                                                })
+                                                            } else {
+                                                                setForm({
+                                                                    ...form,
+                                                                    depende_de_especialidades:
+                                                                        form.depende_de_especialidades.filter(
+                                                                            (id: string) => id !== esp.id
+                                                                        )
+                                                                })
+                                                            }
+                                                        }}
+                                                    />
+
+                                                    <span className="text-xs font-bold uppercase">
+                                                        {esp.nome}
+                                                    </span>
+                                                </label>
+                                            ))}
+                                    </div>
+                                </div>
+                            </>
                         )}
 
                         {tipoModal === "exame" && (
@@ -602,7 +728,7 @@ export default function KanbanExames() {
                                         </div>
                                     </label>
                                 </div>
-                                <div className="space-y-2">
+                                {/* <div className="space-y-2">
                                     <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Depende de qual exame?</Label>
                                     <select
                                         className="flex h-12 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-xs font-bold uppercase"
@@ -615,7 +741,7 @@ export default function KanbanExames() {
                                             .map(e => <option key={e.id} value={e.id}>{e.nome}</option>)
                                         }
                                     </select>
-                                </div>
+                                </div> */}
                             </>
                         )}
                     </div>

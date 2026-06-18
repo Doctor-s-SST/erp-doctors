@@ -936,14 +936,20 @@ export default function RecepcaoPage() {
                 exames: examesFiltrados
             }));
 
-            if(dados.medico_coordenador == "") {
+            if (dados.medico_coordenador == "") {
                 alert("Atenção: Esta ficha não possui médico responsável pelo PCMSO definido. Por favor, revise os dados antes de finalizar.")
             }
 
-            toast.success("Ficha carregada com sucesso!", {
-                id: toastId
-
-            });
+            if (dados.tipo_aso == "Demissional") {
+                toast.warning("Atenção: Inativar funcionário no SOC, ficha de exame demissional!", {
+                    id: toastId
+                });
+            }
+            else {
+                toast.success("Ficha carregada com sucesso!", {
+                    id: toastId
+                });
+            }
         } catch (error) {
             toast.error("Falha ao buscar ficha", {
                 id: toastId
@@ -987,7 +993,6 @@ export default function RecepcaoPage() {
                 const isMatchedByDatabase = formFicha.exames.some(exDigitado =>
                     esp.exames?.some((exBanco: any) => normalizar(String(exBanco.nome)) === normalizar(String(exDigitado.exame)))
                 );
-                // const isTriagem = esp.nome.toLowerCase().includes("triagem");
                 const isManual = formFicha.especialidadesSelecionadas.includes(esp.id);
 
                 return isMatchedByDatabase || isManual;
