@@ -1,7 +1,9 @@
 "use client"
 
+import { MessagesSquare, X } from "lucide-react"
 import ChatInput from "./ChatInput"
 import ChatMessages from "./ChatMessages"
+import ChatSidebar from "./ChatSidebar"
 
 interface Props {
     open: boolean
@@ -12,6 +14,10 @@ interface Props {
     usuarioId?: string
 
     onSend: (msg: string) => Promise<void>
+
+    salas: any[]
+    salaSelecionada: string
+    onSalaChange: (id: string) => void
 }
 
 export default function ChatDrawer({
@@ -19,7 +25,11 @@ export default function ChatDrawer({
     onClose,
     mensagens,
     usuarioId,
-    onSend
+    onSend,
+
+    salas,
+    salaSelecionada,
+    onSalaChange
 }: Props) {
     return (
         <>
@@ -41,7 +51,8 @@ export default function ChatDrawer({
                     right-0
                     top-0
                     h-screen
-                    w-[400px]
+                    w-[80vw]
+                    max-w-[950px]
                     bg-white
                     dark:bg-black
                     shadow-2xl
@@ -49,10 +60,9 @@ export default function ChatDrawer({
 
                     transition-transform
 
-                    ${
-                        open
-                            ? "translate-x-0"
-                            : "translate-x-full"
+                    ${open
+                        ? "translate-x-0"
+                        : "translate-x-full"
                     }
                 `}
             >
@@ -60,6 +70,7 @@ export default function ChatDrawer({
                     className="
                         h-14
                         border-b
+                        border-gray-400
                         flex
                         items-center
                         justify-between
@@ -67,23 +78,36 @@ export default function ChatDrawer({
                     "
                 >
                     <h2 className="font-bold">
-                        Chat da Unidade
+                        <span className="flex flex-row gap-2 items-center"><MessagesSquare /> <span>Chat da Unidade</span></span>
                     </h2>
 
                     <button onClick={onClose}>
-                        ✕
+                        <X />
                     </button>
                 </div>
 
-                <div className="flex flex-col h-[calc(100vh-56px)]">
-                    <ChatMessages
-                        mensagens={mensagens}
-                        meuUsuarioId={usuarioId}
+                <div className="h-[calc(100vh-56px)] flex">
+
+                    <ChatSidebar
+                        salas={salas}
+                        salaSelecionada={salaSelecionada}
+                        onSelect={onSalaChange}
+                        usuarioId={usuarioId || ""}
                     />
 
-                    <ChatInput
-                        onSend={onSend}
-                    />
+                    <div className="flex-1 flex flex-col">
+
+                        <ChatMessages
+                            mensagens={mensagens}
+                            meuUsuarioId={usuarioId}
+                        />
+
+                        <ChatInput
+                            onSend={onSend}
+                        />
+
+                    </div>
+
                 </div>
             </div>
         </>

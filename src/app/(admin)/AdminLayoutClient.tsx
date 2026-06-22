@@ -1,6 +1,6 @@
 "use client"
 
-// import ChatProvider from "@/components/chat/ChatProvider";
+import ChatProvider from "@/components/chat/ChatProvider";
 import { useSidebar } from "@/context/SidebarContext";
 import AppHeader from "@/layout/AppHeader";
 import AppSidebar from "@/layout/AppSidebar";
@@ -33,7 +33,7 @@ export default function AdminLayoutClient({
         <div className="p-2 lg:p-1 mx-auto max-w-(--breakpoint-2xl)">
           {children}
           
-          {/* <ChatProvider /> */}
+          <ChatProvider />
           <Toaster richColors position="top-right" />
         </div>
       </div>

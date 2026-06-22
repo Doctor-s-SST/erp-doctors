@@ -167,6 +167,10 @@ export default function SelecionarFila() {
         especialidade_id: selected?.id,
       }))
 
+      window.dispatchEvent(
+        new CustomEvent("fila-changed")
+      )
+
       toast.success("Fila iniciada!")
       router.push(`filas/${selected?.id}`)
     } else {

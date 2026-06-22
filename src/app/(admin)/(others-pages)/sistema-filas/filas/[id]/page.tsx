@@ -173,8 +173,11 @@ export default function FilaPage() {
 
         const dadosSessao = {
             ...form,
-            sala: salaNormalizada
+            sala: salaNormalizada,
+            especialidade_id: id
         };
+
+        console.log(form)
 
         const { data: { user } } = await supabase.auth.getUser();
 
@@ -185,6 +188,10 @@ export default function FilaPage() {
                 userKey,
                 JSON.stringify(dadosSessao)
             );
+
+            window.dispatchEvent(
+                new CustomEvent("fila-changed")
+            )
 
             setSession(dadosSessao);
 
@@ -284,7 +291,7 @@ export default function FilaPage() {
             setEspecialidadeNome(esp.nome);
 
             // Adicionando o p_unidade_id na chamada RPC
-            const { data: result } = await supabase.rpc("get_fila_especialidade_novo_2", {
+            const { data: result } = await supabase.rpc("get_fila_especialidade_novo", {
                 p_sala: esp.nome,
                 p_unidade_id: unidadeId // <--- Filtro por unidade
             });

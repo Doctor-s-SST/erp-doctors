@@ -21,7 +21,8 @@ export default function ChatInput({ onSend }: Props) {
     }
 
     return (
-        <div className="border-t p-3 flex gap-2">
+        <div className="border-t p-3 flex gap-2 
+                    border-gray-400">
             <input
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
@@ -34,6 +35,7 @@ export default function ChatInput({ onSend }: Props) {
                 className="
                     flex-1
                     border
+                    border-gray-400
                     rounded-lg
                     px-3
                     py-2

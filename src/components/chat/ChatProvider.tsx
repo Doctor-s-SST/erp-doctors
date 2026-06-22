@@ -24,39 +24,173 @@ export default function ChatProvider() {
     const [unidadeId, setUnidadeId] = useState("")
     const [ultimaLeitura, setUltimaLeitura] =
         useState<string | null>(null)
+    const [salas, setSalas] = useState<{ id: string; nome: string }[]>([])
+    const [salaSelecionada, setSalaSelecionada] = useState("")
 
-    const unread = open
-        ? 0
-        : mensagens.filter(m => {
-            if (!ultimaLeitura) return true
+    const [profissionalAtivo, setProfissionalAtivo] =
+        useState({ nome: "", sala: "" })
 
-            return (
-                new Date(m.created_at!) >
-                new Date(ultimaLeitura)
-            )
-        }).length
+    const [unread, setUnread] = useState(0)
+
 
     const ultimaMensagem =
         mensagens[mensagens.length - 1]
 
+
+    async function carregarNotificacoes() {
+
+        if (!usuarioId) return
+
+        let totalNaoLidas = 0
+
+        for (const sala of salas) {
+
+
+            const salaId =
+                sala.id === "geral"
+                    ? null
+                    : sala.id
+
+            let leituraQuery =
+                supabase
+                    .from("chat_ultima_leitura")
+                    .select("ultima_mensagem_lida")
+                    .eq("usuario_id", usuarioId)
+
+            if (salaId) {
+
+                leituraQuery =
+                    leituraQuery.eq(
+                        "sala_id",
+                        salaId
+                    )
+
+            } else {
+
+                leituraQuery =
+                    leituraQuery.is(
+                        "sala_id",
+                        null
+                    )
+
+            }
+
+            const { data: leitura } =
+                await leituraQuery.maybeSingle()
+
+            let query =
+                supabase
+                    .from("chat_mensagens")
+                    .select("*", {
+                        count: "exact",
+                        head: true
+                    })
+                    .neq(
+                        "usuario_id",
+                        usuarioId
+                    )
+
+            if (salaId) {
+
+                query =
+                    query.eq(
+                        "sala_id",
+                        salaId
+                    )
+
+            } else {
+
+                query =
+                    query.is(
+                        "sala_id",
+                        null
+                    )
+                        .eq(
+                            "unidade_id",
+                            unidadeId
+                        )
+
+            }
+
+            if (
+                leitura?.ultima_mensagem_lida
+            ) {
+
+                query =
+                    query.gt(
+                        "created_at",
+                        leitura.ultima_mensagem_lida
+                    )
+
+            }
+
+            const { count } =
+                await query
+
+            totalNaoLidas += count || 0
+        }
+
+        setUnread(totalNaoLidas)
+    }
+
     async function carregarMensagens() {
         if (!unidadeId) return
 
-        const { data: mensagensData } = await supabase
+        let query = supabase
             .from("chat_mensagens")
             .select("*")
-            .eq("unidade_id", unidadeId)
             .order("created_at", {
                 ascending: true
             })
 
-        setMensagens(mensagensData || [])
+        if (salaSelecionada === "geral") {
 
-        const { data: leituraData } = await supabase
-            .from("chat_ultima_leitura")
-            .select("ultima_mensagem_lida")
-            .eq("usuario_id", usuarioId)
-            .single()
+            query = query
+                .eq("unidade_id", unidadeId)
+                .is("sala_id", null)
+
+        } else {
+
+            query = query
+                .eq("sala_id", salaSelecionada)
+
+        }
+
+        const { data } = await query
+
+        setMensagens(data || [])
+
+        let leituraQuery =
+            supabase
+                .from("chat_ultima_leitura")
+                .select("ultima_mensagem_lida")
+                .eq("usuario_id", usuarioId)
+
+        const salaId =
+            salaSelecionada === "geral"
+                ? null
+                : salaSelecionada
+
+        if (salaId) {
+
+            leituraQuery =
+                leituraQuery.eq(
+                    "sala_id",
+                    salaId
+                )
+
+        } else {
+
+            leituraQuery =
+                leituraQuery.is(
+                    "sala_id",
+                    null
+                )
+
+        }
+
+        const { data: leituraData } =
+            await leituraQuery.maybeSingle()
 
         setUltimaLeitura(
             leituraData?.ultima_mensagem_lida ?? null
@@ -69,8 +203,17 @@ export default function ChatProvider() {
             .from("chat_mensagens")
             .insert({
                 unidade_id: unidadeId,
+
+                sala_id:
+                    salaSelecionada === "geral"
+                        ? null
+                        : salaSelecionada,
+
                 usuario_id: usuarioId,
-                usuario_nome: usuarioNome,
+                usuario_nome:
+                    profissionalAtivo.nome
+                        ? `${profissionalAtivo.nome} (${profissionalAtivo.sala ? `Sala ${profissionalAtivo.sala}` : usuarioNome})`
+                        : usuarioNome,
                 mensagem: texto
             })
 
@@ -79,6 +222,214 @@ export default function ChatProvider() {
         if (open) {
             await marcarComoLido()
         }
+    }
+
+    async function carregarSalas(userId: string) {
+
+        const salas = [
+            {
+                id: "geral",
+                nome: "Geral"
+            }
+        ]
+
+        const sessao = localStorage.getItem(
+            `fila_session_${userId}`
+        )
+
+
+
+        if (sessao) {
+
+            const dados = JSON.parse(sessao)
+
+            if (dados.especialidade_id) {
+
+                const { data } = await supabase
+                    .from("especialidades")
+                    .select("nome")
+                    .eq("id", dados.especialidade_id)
+                    .maybeSingle()
+
+                salas.push({
+                    id: dados.especialidade_id,
+                    nome: data?.nome || "Especialidade"
+                })
+            }
+        }
+
+        setSalas(salas)
+        await carregarUltimasMensagens(salas)
+        setSalaSelecionada("geral")
+    }
+
+    async function carregarUltimasMensagens(salasBase: any[]) {
+
+        const salasComMensagem = await Promise.all(
+
+            salasBase.map(async sala => {
+
+                let query = supabase
+                    .from("chat_mensagens")
+                    .select(`
+                        mensagem,
+                        usuario_id,
+                        created_at,
+                        usuario_nome
+                    `)
+                    .order("created_at", {
+                        ascending: false
+                    })
+                    .limit(1)
+
+                if (sala.id === "geral") {
+
+                    query = query
+                        .eq("unidade_id", unidadeId)
+                        .is("sala_id", null)
+
+                } else {
+
+                    query = query.eq("sala_id", sala.id)
+
+                }
+
+                const { data } = await query
+
+                const salaId =
+                    sala.id === "geral"
+                        ? null
+                        : sala.id
+
+                const ultimaLeituraAtual =
+                    await obterUltimaLeitura(salaId)
+
+                return {
+                    ...sala,
+
+                    ultimaMensagem: data?.[0]?.mensagem,
+                    usuarioNome: data?.[0]?.usuario_nome,
+                    ultimoUsuarioId: data?.[0]?.usuario_id,
+                    naoLida:
+                        data?.[0]?.usuario_id !== usuarioId &&
+                        (
+                            !ultimaLeituraAtual ||
+                            new Date(data?.[0]?.created_at) >
+                            new Date(ultimaLeituraAtual)
+                        )
+                }
+
+            })
+        )
+
+        setSalas(salasComMensagem)
+    }
+
+    async function obterUltimaLeitura(salaId: string | null) {
+
+        let query =
+            supabase
+                .from("chat_ultima_leitura")
+                .select("ultima_mensagem_lida")
+                .eq("usuario_id", usuarioId)
+
+        if (salaId) {
+
+            query =
+                query.eq("sala_id", salaId)
+
+        } else {
+
+            query =
+                query.is("sala_id", null)
+
+        }
+
+        const { data } =
+            await query.maybeSingle()
+
+        return data?.ultima_mensagem_lida ?? null
+    }
+
+    function carregarProfissionalAtivo(userId: string) {
+
+        const sessao = localStorage.getItem(
+            `fila_session_${userId}`
+        )
+
+        if (!sessao) return
+
+        const dados = JSON.parse(sessao)
+
+        setProfissionalAtivo(
+            {
+                nome: dados.profissional || "",
+                sala: dados.sala || ""
+            }
+        )
+    }
+
+    async function marcarComoLido() {
+
+        const agora = new Date().toISOString()
+
+        const salaId =
+            salaSelecionada === "geral"
+                ? null
+                : salaSelecionada
+
+        if (salaId === null) {
+
+            const { data } = await supabase
+                .from("chat_ultima_leitura")
+                .select("id")
+                .eq("usuario_id", usuarioId)
+                .is("sala_id", null)
+                .maybeSingle()
+
+            if (data) {
+
+                await supabase
+                    .from("chat_ultima_leitura")
+                    .update({
+                        ultima_mensagem_lida: agora
+                    })
+                    .eq("usuario_id", usuarioId)
+                    .is("sala_id", null)
+
+            } else {
+
+                await supabase
+                    .from("chat_ultima_leitura")
+                    .insert({
+                        usuario_id: usuarioId,
+                        sala_id: null,
+                        ultima_mensagem_lida: agora
+                    })
+
+            }
+
+        } else {
+
+            await supabase
+                .from("chat_ultima_leitura")
+                .upsert(
+                    {
+                        usuario_id: usuarioId,
+                        sala_id: salaId,
+                        ultima_mensagem_lida: agora
+                    },
+                    {
+                        onConflict: "usuario_id,sala_id"
+                    }
+                )
+
+        }
+
+        await Promise.all([
+            carregarUltimasMensagens(salas),
+            carregarNotificacoes()
+        ])
     }
 
     useEffect(() => {
@@ -96,36 +447,78 @@ export default function ChatProvider() {
                         *
                     `)
                     .eq("id", user.id)
-                    .single()
+                    .maybeSingle()
 
             if (!profile) return
 
             setUsuarioId(user.id)
             setUsuarioNome(profile.first_name)
             setUnidadeId(profile.unidade_id)
+            await carregarSalas(user.id)
+            carregarProfissionalAtivo(user.id)
         }
 
         init()
     }, [])
 
     useEffect(() => {
-        carregarMensagens()
 
-        const interval = setInterval(
-            carregarMensagens,
-            3000
+        if (!unidadeId) return
+
+        const evt = new EventSource(
+            `https://doctors-distribuidor-sse.cgalnz.easypanel.host/stream-chat?unidadeId=${unidadeId}`
         )
 
-        return () =>
-            clearInterval(interval)
+        evt.onmessage = async (e) => {
 
-    }, [unidadeId, usuarioId])
+            const payload = JSON.parse(e.data)
+
+            const salaPayload =
+                payload.sala_id ?? null
+
+            const salaAtual =
+                salaSelecionada === "geral"
+                    ? null
+                    : salaSelecionada
+
+            const mesmaSala =
+                salaPayload === salaAtual
+
+            if (mesmaSala) {
+
+                setMensagens(prev => {
+
+                    const existe = prev.some(
+                        m => m.id === payload.id
+                    )
+
+                    if (existe) return prev
+
+                    return [...prev, payload]
+                })
+
+            }
+
+            await carregarNotificacoes()
+
+            await Promise.all([
+                carregarUltimasMensagens(salas),
+                carregarNotificacoes()
+            ])
+
+        }
+
+        return () => evt.close()
+
+    }, [unidadeId, usuarioId, salaSelecionada])
 
     useEffect(() => {
-        if (!open || !ultimaMensagem) return
 
-        marcarComoLido()
-    }, [ultimaMensagem?.id, open])
+        if (!salas.length) return
+
+        carregarUltimasMensagens(salas)
+
+    }, [mensagens])
 
     useEffect(() => {
         if (open) {
@@ -133,18 +526,46 @@ export default function ChatProvider() {
         }
     }, [open])
 
-    async function marcarComoLido() {
-        const agora = new Date().toISOString()
+    useEffect(() => {
 
-        setUltimaLeitura(agora)
+        if (!open) return
 
-        await supabase
-            .from("chat_ultima_leitura")
-            .upsert({
-                usuario_id: usuarioId,
-                ultima_mensagem_lida: agora
-            })
-    }
+        marcarComoLido()
+
+    }, [salaSelecionada])
+
+    useEffect(() => {
+
+        const atualizarSalas = async () => {
+
+            await carregarSalas(usuarioId)
+
+            carregarProfissionalAtivo(usuarioId)
+
+            setMensagens([])
+        }
+
+        window.addEventListener(
+            "fila-changed",
+            atualizarSalas
+        )
+
+        return () => {
+            window.removeEventListener(
+                "fila-changed",
+                atualizarSalas
+            )
+        }
+
+    }, [usuarioId])
+
+    useEffect(() => {
+
+        if (!unidadeId || !salaSelecionada) return
+
+        carregarMensagens()
+
+    }, [unidadeId, salaSelecionada])
 
     return (
         <>
@@ -159,6 +580,9 @@ export default function ChatProvider() {
                 mensagens={mensagens}
                 usuarioId={usuarioId}
                 onSend={enviarMensagem}
+                salas={salas}
+                salaSelecionada={salaSelecionada}
+                onSalaChange={setSalaSelecionada}
             />
         </>
     )
