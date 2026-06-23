@@ -441,15 +441,28 @@ export default function PaginaRelatorio() {
 
     const exportToExcel = () => {
         try {
+
             const rows = dadosFiltradosOrdenados.map(item => ({
                 "Empresa": item.cabecalho.empresa,
                 "Funcionário": item.cabecalho.nome,
                 "Sequencial Ficha": item.cabecalho.sequencial_ficha,
                 "Tipo Exame": item.cabecalho.tipo_exame,
                 "Acionamento": item.cabecalho.acionamento,
+                "Recepcionista": item.recepcao?.atendente || "",
+
+                "Fluxo de Atendimento":
+                    item.procedimentos
+                        ?.map((p: any) =>
+                            `${p.especialidade} (${p.profissional})`
+                        )
+                        .join(" → "),
                 "Exames": item.exames_atendimento.map((ex: any) => `${ex.exame} ${ex.realizado ? '✔️' : '❌'}`).join(', '),
                 "Tempo Total": item.tempo_total_dispensado.split('(')[1]?.replace(')', '') || '',
             }));
+
+            dadosFiltradosOrdenados.map(item => (
+                console.log(item.recepcao, item.procedimentos)
+            ));
 
             const dataInicioStr = filtros.dataInicio
                 ? filtros.dataInicio
@@ -491,7 +504,7 @@ export default function PaginaRelatorio() {
             ws["!merges"] = [
                 {
                     s: { r: 0, c: 0 },
-                    e: { r: 0, c: 6 }
+                    e: { r: 0, c: 8 }
                 }
             ];
 
@@ -508,6 +521,8 @@ export default function PaginaRelatorio() {
                 { wch: 12 }, // Ficha
                 { wch: 15 }, // Tipo Exame
                 { wch: 15 }, // Acionamento
+                { wch: 20 }, // Recepcionista
+                { wch: 60 }, // Fluxo
                 { wch: 60 }, // Exames
                 { wch: 15 }, // Tempo Total
             ];
@@ -538,7 +553,7 @@ export default function PaginaRelatorio() {
             }
 
             // CABEÇALHO (linha 2)
-            for (let col = 0; col <= 6; col++) {
+            for (let col = 0; col <= 8; col++) {
 
                 const cellAddress =
                     XLSX.utils.encode_cell({
@@ -923,7 +938,7 @@ export default function PaginaRelatorio() {
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
-                                                <BotaoImprimirDeclaracao item={item} unidade={formUnidade}/>
+                                                <BotaoImprimirDeclaracao item={item} unidade={formUnidade} />
                                                 <BotaoImprimirRelatorio item={[item]} text="Relatório" unidade={formUnidade} />
                                                 <button onClick={() => setExpandedRow(expandedRow === item.cabecalho.atendimento_id ? null : item.cabecalho.atendimento_id)} className="p-2 rounded-lg bg-blue-600 text-white shadow-lg">
                                                     {expandedRow === item.cabecalho.atendimento_id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
