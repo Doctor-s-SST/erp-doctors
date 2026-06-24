@@ -135,8 +135,6 @@ export default function PainelTV() {
   useEffect(() => {
     if (!unidadeId) return;
 
-    if (!unidadeId) return;
-
     async function carregarSalas() {
       const { data } = await supabase
         .from("salas")
@@ -150,36 +148,36 @@ export default function PainelTV() {
 
     carregarSalas();
 
-    const fetchDados = async () => {
-      try {
-        const { data: rec } = await supabase.from('atendimentos').select('id, senha_codigo, guiche, updated_at, pacientes(nome)').eq('status', 'EM_FILA').eq('unidade_id', unidadeId).order('updated_at', { ascending: true });
-        const { data: exm } = await supabase.from('atendimento_exames').select(`id, num_sala, atendimentos!inner(senha_codigo, updated_at, unidade_id, pacientes(nome))`).eq('status', 'EM_FILA').eq('atendimentos.unidade_id', unidadeId).order('atendimentos(updated_at)', { ascending: true });
+    // const fetchDados = async () => {
+    //   try {
+    //     const { data: rec } = await supabase.from('atendimentos').select('id, senha_codigo, guiche, updated_at, pacientes(nome)').eq('status', 'EM_FILA').eq('unidade_id', unidadeId).order('updated_at', { ascending: true });
+    //     const { data: exm } = await supabase.from('atendimento_exames').select(`id, num_sala, atendimentos!inner(senha_codigo, updated_at, unidade_id, pacientes(nome))`).eq('status', 'EM_FILA').eq('atendimentos.unidade_id', unidadeId).order('atendimentos(updated_at)', { ascending: true });
 
-        const lRec: Chamada[] = rec?.map(r => ({ id: r.id, senha_codigo: r.senha_codigo, nome_paciente: (r.pacientes as any)?.nome, guiche: r.guiche, origem: 'RECEPCAO', updated_at: r.updated_at })) || [];
-        const lExm: Chamada[] = exm?.map(e => {
-          const a = Array.isArray(e.atendimentos) ? e.atendimentos[0] : (e.atendimentos as any);
-          return { id: e.id, senha_codigo: a.senha_codigo, nome_paciente: a.pacientes?.nome, guiche: e.num_sala, origem: 'EXAME', updated_at: a.updated_at };
-        }) || [];
+    //     const lRec: Chamada[] = rec?.map(r => ({ id: r.id, senha_codigo: r.senha_codigo, nome_paciente: (r.pacientes as any)?.nome, guiche: r.guiche, origem: 'RECEPCAO', updated_at: r.updated_at })) || [];
+    //     const lExm: Chamada[] = exm?.map(e => {
+    //       const a = Array.isArray(e.atendimentos) ? e.atendimentos[0] : (e.atendimentos as any);
+    //       return { id: e.id, senha_codigo: a.senha_codigo, nome_paciente: a.pacientes?.nome, guiche: e.num_sala, origem: 'EXAME', updated_at: a.updated_at };
+    //     }) || [];
 
-        const intercalados: Chamada[] = [];
-        const max = Math.max(lRec.length, lExm.length);
-        for (let i = 0; i < max; i++) {
-          if (lRec[i]) intercalados.push(lRec[i]);
-          if (lExm[i]) intercalados.push(lExm[i]);
-        }
+    //     const intercalados: Chamada[] = [];
+    //     const max = Math.max(lRec.length, lExm.length);
+    //     for (let i = 0; i < max; i++) {
+    //       if (lRec[i]) intercalados.push(lRec[i]);
+    //       if (lExm[i]) intercalados.push(lExm[i]);
+    //     }
 
-        if (intercalados.length > 0) {
-          setFila(prev => {
-            const ids = new Set(prev.map(p => p.id));
-            return [...prev, ...intercalados.filter(n => !ids.has(n.id))];
-          });
-        }
-      } catch (e) { console.error(e); }
-    };
+    //     if (intercalados.length > 0) {
+    //       setFila(prev => {
+    //         const ids = new Set(prev.map(p => p.id));
+    //         return [...prev, ...intercalados.filter(n => !ids.has(n.id))];
+    //       });
+    //     }
+    //   } catch (e) { console.error(e); }
+    // };
 
-    fetchDados();
-    const inv = setInterval(fetchDados, 4000);
-    return () => clearInterval(inv);
+    // fetchDados();
+    // const inv = setInterval(fetchDados, 4000);
+    // return () => clearInterval(inv);
   }, [unidadeId]);
 
   useEffect(() => {
@@ -219,6 +217,61 @@ export default function PainelTV() {
 
     carregarDados();
   }, []);
+
+  useEffect(() => {
+
+    if (!unidadeId) return;
+
+    const eventSource = new EventSource(
+      `https://doctors-distribuidor-sse.cgalnz.easypanel.host/stream-fila` +
+      `?tipo=painel_tv` +
+      `&unidadeId=${unidadeId}`
+    );
+
+    eventSource.onmessage = (event) => {
+
+      try {
+
+        const payload =
+          JSON.parse(event.data);
+
+        if (
+          payload.tipo !== 'painel_tv'
+        ) return;
+
+        const novas =
+          payload.dados || [];
+
+        setFila(prev => {
+
+          const ids =
+            new Set(
+              prev.map(
+                x => x.id
+              )
+            );
+
+          return [
+            ...prev,
+            ...novas.filter(
+              (x: { id: string; }) => !ids.has(x.id)
+            )
+          ];
+
+        });
+
+      } catch (err) {
+
+        console.error(err);
+
+      }
+
+    };
+
+    return () =>
+      eventSource.close();
+
+  }, [unidadeId]);
 
   function obterAndarSala(numeroSala: string | number) {
     if (!falaAndar) return "";

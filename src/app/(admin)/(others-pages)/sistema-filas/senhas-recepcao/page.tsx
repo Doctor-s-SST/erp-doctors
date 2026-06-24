@@ -260,7 +260,7 @@ export default function RecepcaoPage() {
                     }
 
                     // 4. Primeiro fetch de dados
-                    fetchData(idFinal);
+                    // fetchData(idFinal);
                 }
             }
         };
@@ -1102,7 +1102,7 @@ export default function RecepcaoPage() {
                                 </Button>
                             </div>
 
-                            <div
+                            {/* <div
                                 className="flex h-8 items-center gap-1 bg-green-500 text-muted p-1 rounded-full hover:bg-green-700 hover:text-white cursor-pointer transition-all shrink-0"
                             >
                                 <RefreshCw className={`w-5 h-5 font-bold ml-1 ${loadingAction ? 'animate-spin' : ''}`} />
@@ -1113,6 +1113,12 @@ export default function RecepcaoPage() {
                                 >
                                     Atualizar
                                 </Button>
+                            </div> */}
+                            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                                <RefreshCw className="w-3 h-3 animate-spin" />
+                                <span>
+                                    A fila é atualizada automaticamente em tempo real.
+                                </span>
                             </div>
                         </div>
                     </div>

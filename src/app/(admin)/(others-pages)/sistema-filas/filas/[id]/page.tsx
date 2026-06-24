@@ -345,17 +345,17 @@ export default function FilaPage() {
 
             setEspecialidadeNome(esp.nome);
 
-            const { data: result } = await supabase.rpc(
-                "get_fila_especialidade_novo",
-                {
-                    p_sala: esp.nome,
-                    p_unidade_id: unidadeId
-                }
-            );
+            // const { data: result } = await supabase.rpc(
+            //     "get_fila_especialidade_novo",
+            //     {
+            //         p_sala: esp.nome,
+            //         p_unidade_id: unidadeId
+            //     }
+            // );
 
-            if (result) {
-                setData(result);
-            }
+            // if (result) {
+            //     setData(result);
+            // }
         }
 
         inicializar();
