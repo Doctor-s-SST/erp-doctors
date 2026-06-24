@@ -1091,10 +1091,17 @@ export default function FilaPage() {
                         </div>
                     </div>
 
-                    <div className="flex gap-2">
+                    {/* <div className="flex gap-2">
                         <Button onClick={fetchFila} disabled={isRefreshing} variant="outline" className="h-12 bg-white dark:bg-gray-900 p-2 px-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800">
                             <RefreshCw className={`w-3 h-3 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} /> Atualizar
                         </Button>
+                    </div> */}
+
+                    <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                        <RefreshCw className="w-3 h-3 animate-spin" />
+                        <span>
+                            A fila é atualizada automaticamente em tempo real.
+                        </span>
                     </div>
 
                 </div>
