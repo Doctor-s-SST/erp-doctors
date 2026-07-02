@@ -64,12 +64,12 @@ npm run dev
 
 ## Funcionalidades
 
-* Emissão de senhas (normal, preferencial)
+* Emissão de senhas
 * Painel de chamada
 * Kanban de exames e especialidades
 * Relatórios e dashboards de atendimento
 * Filas de atendimentos com autonomia de trabalho
-* Impressão automática
+* Impressão de senha automática
 * Controle de tempo de espera e permanência
 * Controle de usuários e permissões (admin)
 * Controle de salas e profissionais

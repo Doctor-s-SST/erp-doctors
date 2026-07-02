@@ -27,7 +27,7 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 ```
 
-Definir variáveis de ambiente do n8n também
+Definir variáveis de ambiente do n8n.
 
 ---
 

@@ -37,7 +37,10 @@ Impressora térmica (TCP)
 
 * `/api/gerar-declaracao`
 * `/api/importar-ficha`
+* `/api/importar-ficha-sequencial`
 * `/api/relatorio`
+* `/api/relatorio-aso`
+* `/api/relatorio-exames`
 * Processamento de dados
 * Integração com n8n
 

@@ -118,7 +118,17 @@ export default function PaginaRelatorio() {
             formData.append("dataFim", filtros.dataFim);
             formData.append("unidadeId", filtros.unidadeId);
 
-            const res = await fetch("/api/relatorio-aso", { method: "POST", body: formData });
+            // const res = await fetch("/api/relatorio-aso", { method: "POST", body: formData });
+            const res = await fetch(
+                process.env.N8N_WEBHOOK_RELAT_ASO_URL!,
+                {
+                    method: "POST",
+                    body: formData,
+                    headers: {
+                        "x-api-key": process.env.N8N_API_KEY!,
+                    },
+                }
+            );
             const result = await res.json();
             const data = Array.isArray(result) ? result : result.data || [];
             const normalizado = data.map((item: any) => item.json || item);
