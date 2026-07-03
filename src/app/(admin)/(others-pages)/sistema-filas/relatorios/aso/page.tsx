@@ -145,10 +145,10 @@ export default function PaginaRelatorio() {
 
             while (!terminou) {
 
-                await new Promise(r => setTimeout(r, 2000));
+                await new Promise(r => setTimeout(r, 3000));
 
                 const status = await fetch(
-                    `/api/relatorio-aso/status?id=${jobId}`
+                    `/api/consulta-relatorios/?id=${jobId}`
                 );
 
                 const resultado = await status.json();

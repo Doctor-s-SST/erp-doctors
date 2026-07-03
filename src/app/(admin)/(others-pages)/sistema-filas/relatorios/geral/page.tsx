@@ -114,9 +114,9 @@ export default function PaginaRelatorio() {
         }
     }, [filtros.unidadeId]);
 
-    useEffect(() => {
-        handleGerarRelatorio(new Event('change') as any);
-    }, [filtros.dataInicio, filtros.dataFim, filtros.horaInicio, filtros.horaFim, filtros.unidadeId]);
+    // useEffect(() => {
+    //     handleGerarRelatorio(new Event('change') as any);
+    // }, [filtros.dataInicio, filtros.dataFim, filtros.horaInicio, filtros.horaFim, filtros.unidadeId]);
 
     useEffect(() => {
         if (periodo === 'todos') {
@@ -213,19 +213,75 @@ export default function PaginaRelatorio() {
             return;
         }
         setLoading(true);
+        // try {
+        //     const formData = new FormData();
+        //     formData.append("dataInicio", filtros.dataInicio);
+        //     formData.append("dataFim", filtros.dataFim);
+        //     formData.append("unidadeId", filtros.unidadeId);
+
+        //     const res = await fetch("/api/relatorio", { method: "POST", body: formData });
+        //     const result = await res.json();
+        //     const data = Array.isArray(result) ? result : result.data || [];
+        //     const normalizado = data.map((item: any) => item.json || item);
+        //     setDadosRelatorio(normalizado);
+        //     toast.success(`${normalizado.length} atendimentos.`);
+        // } 
         try {
+            setLoading(true);
+
             const formData = new FormData();
             formData.append("dataInicio", filtros.dataInicio);
             formData.append("dataFim", filtros.dataFim);
             formData.append("unidadeId", filtros.unidadeId);
 
-            const res = await fetch("/api/relatorio", { method: "POST", body: formData });
-            const result = await res.json();
-            const data = Array.isArray(result) ? result : result.data || [];
-            const normalizado = data.map((item: any) => item.json || item);
-            setDadosRelatorio(normalizado);
-            toast.success(`${normalizado.length} atendimentos.`);
-        } catch (error) {
+            const start = await fetch("/api/relatorio", {
+                method: "POST",
+                body: formData
+            });
+            console.log("start", start);
+
+            const { jobId } = await start.json();
+
+            let terminou = false;
+
+            while (!terminou) {
+
+                await new Promise(r => setTimeout(r, 3000));
+
+                const status = await fetch(
+                    `/api/consulta-relatorios/?id=${jobId}`
+                );
+
+                const resultado = await status.json();
+
+                const respostaBruta = Array.isArray(resultado)
+                    ? resultado[0]
+                    : resultado;
+
+                const resposta = respostaBruta.json ?? respostaBruta;
+
+                if (resposta.status === "processing") {
+                    continue;
+                }
+
+                if (resposta.status === "empty") {
+                    toast.warning(`0 atendimentos encontrados`);
+                    terminou = true;
+
+                }
+
+                if (resposta.status === "done") {
+
+                    terminou = true;
+
+                    setDadosRelatorio(resposta.data);
+
+                    toast.success(`${resposta.data.length} atendimentos encontrados`);
+                }
+
+            }
+        }
+        catch (error) {
             toast.error("Erro ao carregar dados.");
         } finally {
             setLoading(false);
