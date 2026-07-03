@@ -73,9 +73,9 @@ export default function PaginaRelatorio() {
         carregarUnidade();
     }, []);
 
-    useEffect(() => {
-        handleGerarRelatorio(new Event('change') as any);
-    }, [filtros.dataInicio, filtros.dataFim, filtros.horaInicio, filtros.horaFim, filtros.unidadeId]);
+    // useEffect(() => {
+    //     handleGerarRelatorio(new Event('change') as any);
+    // }, [filtros.dataInicio, filtros.dataFim, filtros.horaInicio, filtros.horaFim, filtros.unidadeId]);
 
     useEffect(() => {
         if (dias === 'hoje') {
@@ -112,29 +112,75 @@ export default function PaginaRelatorio() {
             return;
         }
         setLoading(true);
+        // try {
+        //     const formData = new FormData();
+        //     formData.append("dataInicio", filtros.dataInicio);
+        //     formData.append("dataFim", filtros.dataFim);
+        //     formData.append("unidadeId", filtros.unidadeId);
+
+        //     const res = await fetch("/api/relatorio-aso", { method: "POST", body: formData });
+        //     const result = await res.json();
+        //     const data = Array.isArray(result) ? result : result.data || [];
+        //     const normalizado = data.map((item: any) => item.json || item);
+        //     setDadosRelatorio(normalizado);
+        //     toast.success(`${normalizado.length} atendimentos.`);
+        // } 
+
         try {
+            setLoading(true);
+
             const formData = new FormData();
             formData.append("dataInicio", filtros.dataInicio);
             formData.append("dataFim", filtros.dataFim);
             formData.append("unidadeId", filtros.unidadeId);
 
-            // const res = await fetch("/api/relatorio-aso", { method: "POST", body: formData });
-            const res = await fetch(
-                process.env.N8N_WEBHOOK_RELAT_ASO_URL!,
-                {
-                    method: "POST",
-                    body: formData,
-                    headers: {
-                        "x-api-key": process.env.N8N_API_KEY!,
-                    },
+            const start = await fetch("/api/relatorio-aso", {
+                method: "POST",
+                body: formData
+            });
+
+            const { jobId } = await start.json();
+
+            let terminou = false;
+
+            while (!terminou) {
+
+                await new Promise(r => setTimeout(r, 2000));
+
+                const status = await fetch(
+                    `/api/relatorio-aso/status?id=${jobId}`
+                );
+
+                const resultado = await status.json();
+
+                const respostaBruta = Array.isArray(resultado)
+                    ? resultado[0]
+                    : resultado;
+
+                const resposta = respostaBruta.json ?? respostaBruta;
+
+                if (resposta.status === "processing") {
+                    continue;
                 }
-            );
-            const result = await res.json();
-            const data = Array.isArray(result) ? result : result.data || [];
-            const normalizado = data.map((item: any) => item.json || item);
-            setDadosRelatorio(normalizado);
-            toast.success(`${normalizado.length} atendimentos.`);
-        } catch (error) {
+
+                if (resposta.status === "empty") {
+                    toast.warning(`0 atendimentos encontrados`);
+                    terminou = true;
+
+                }
+
+                if (resposta.status === "done") {
+
+                    terminou = true;
+
+                    setDadosRelatorio(resposta.data);
+
+                    toast.success(`${resposta.data.length} atendimentos encontrados`);
+                }
+
+            }
+        }
+        catch (error) {
             toast.error("Erro ao carregar dados.");
         } finally {
             setLoading(false);
@@ -147,6 +193,7 @@ export default function PaginaRelatorio() {
     }, [grupos, grupoSelecionado]);
 
     const dadosFiltradosOrdenados = useMemo(() => {
+        console.log(dadosRelatorio);
         let items = [...dadosRelatorio];
         // 1. FILTRAGEM
         items = items.filter(item => {
