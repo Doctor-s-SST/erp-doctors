@@ -262,7 +262,7 @@ export default function IndicadoresMensais() {
                                 Atendimentos (Recepção)
                             </TabsTrigger>
                             <TabsTrigger value="exames" className="data-[state=active]:bg-blue-600 text-[10px] uppercase text-white font-bold transition-all">
-                                Procedimentos (Exames)
+                                Especialidades
                             </TabsTrigger>
                         </TabsList>
                     </Tabs>
