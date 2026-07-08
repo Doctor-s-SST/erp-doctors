@@ -156,6 +156,8 @@ export default function UnidadeConfigPage() {
                                 flex
                                 justify-between
                                 items-center
+                                border
+                                border-gray-700
                             ">
                         <div className="flex items-center gap-4">
 

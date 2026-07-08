@@ -112,19 +112,6 @@ export default function PaginaRelatorio() {
             return;
         }
         setLoading(true);
-        // try {
-        //     const formData = new FormData();
-        //     formData.append("dataInicio", filtros.dataInicio);
-        //     formData.append("dataFim", filtros.dataFim);
-        //     formData.append("unidadeId", filtros.unidadeId);
-
-        //     const res = await fetch("/api/relatorio-aso", { method: "POST", body: formData });
-        //     const result = await res.json();
-        //     const data = Array.isArray(result) ? result : result.data || [];
-        //     const normalizado = data.map((item: any) => item.json || item);
-        //     setDadosRelatorio(normalizado);
-        //     toast.success(`${normalizado.length} atendimentos.`);
-        // } 
 
         try {
             setLoading(true);
@@ -491,8 +478,8 @@ export default function PaginaRelatorio() {
 
     return (
         <>
-            <div className="min-h-screen bg-gray-50 dark:bg-black/40 p-4">
-                <div className='max-w-7xl mx-auto space-y-6'>
+            <div className="min-h-screen bg-gray-500/20 rounded-xl p-2">
+                <div className='w-full mx-auto space-y-6'>
                     {/* HEADER */}
                     <div className="bg-gray-900 rounded-2xl p-4 flex justify-between items-center border border-gray-700 shadow-xl">
                         <div className="flex items-center gap-4">
@@ -676,22 +663,22 @@ export default function PaginaRelatorio() {
                         <table className="w-full text-left">
                             <thead>
                                 <tr className="bg-muted/30 border-b backdrop-blur">
-                                    <th className="px-6 py-4 text-[11px] font-bold tracking-wider uppercase text-muted-foreground" onClick={() => handleSort('senha')}>
+                                    <th className="px-6 py-4 text-[11px] font-bold tracking-wider uppercase text-muted-foreground cursor-pointer" onClick={() => handleSort('nome')}>
                                         <div className='flex items-center gap-2'>Funcionário <ArrowUpDown className="w-3 h-3" /></div>
                                     </th>
-                                    <th className="py-4 text-[11px] font-bold tracking-wider uppercase text-muted-foreground" onClick={() => handleSort('nome')}>
+                                    <th className="py-4 text-[11px] font-bold tracking-wider uppercase text-muted-foreground cursor-pointer" onClick={() => handleSort('razao_social')}>
                                         <div className='flex items-center gap-2'>Empresa <ArrowUpDown className="w-3 h-3" /></div>
                                     </th>
-                                    <th className="px-6 py-4 text-[11px] font-bold tracking-wider uppercase text-muted-foreground" onClick={() => handleSort('acionamento')}>
+                                    <th className="px-6 py-4 text-[11px] font-bold tracking-wider uppercase text-muted-foreground cursor-pointer" onClick={() => handleSort('tipo_aso')}>
                                         <div className='flex items-center gap-2'>Tipo ASO <ArrowUpDown className="w-3 h-3" /></div>
                                     </th>
-                                    <th className="px-6 py-4 text-[11px] font-bold tracking-wider uppercase text-muted-foreground" onClick={() => handleSort('tempo')}>
+                                    <th className="px-6 py-4 text-[11px] font-bold tracking-wider uppercase text-muted-foreground cursor-pointer" onClick={() => handleSort('data_aso')}>
                                         <div className='flex items-center gap-2'>Data ASO <ArrowUpDown className="w-3 h-3" /></div>
                                     </th>
-                                    <th className="px-6 py-4 text-[11px] font-bold tracking-wider uppercase text-muted-foreground" onClick={() => handleSort('tempo')}>
+                                    <th className="px-6 py-4 text-[11px] font-bold tracking-wider uppercase text-muted-foreground cursor-pointer" onClick={() => handleSort('cargo')}>
                                         <div className='flex items-center gap-2'>Cargo <ArrowUpDown className="w-3 h-3" /></div>
                                     </th>
-                                    <th className="px-6 py-4 text-[11px] font-bold tracking-wider uppercase text-muted-foreground" onClick={() => handleSort('tempo')}>
+                                    <th className="px-6 py-4 text-[11px] font-bold tracking-wider uppercase text-muted-foreground">
                                         <div className='flex items-center gap-2'></div>
                                     </th>
                                 </tr>

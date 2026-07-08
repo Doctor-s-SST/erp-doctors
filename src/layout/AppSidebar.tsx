@@ -10,7 +10,7 @@ import {
   HorizontaLDots,
   UserCircleIcon,
 } from "../icons/index";
-import { ChartPie, FileText, House, LayoutDashboard, MonitorCog, Settings } from 'lucide-react';
+import { ChartNoAxesCombined, ChartPie, FileText, House, LayoutDashboard, MonitorCog, Settings } from 'lucide-react';
 import { supabase } from "@/lib/supabase";
 
 type NavItem = {
@@ -47,6 +47,14 @@ const navItems: NavItem[] = [
       { name: "Filas", path: "/sistema-filas/filas", roles: ["admin", "recepcao", "especialista", "painel"] },
       { name: "Painel TV", path: "/painel-senhas", roles: ["admin", "painel"] },
       { name: "Kanban", path: "/sistema-filas/kanban", roles: ["admin"] },
+    ],
+  },
+   {
+    name: "Análise de Dados",
+    icon: <ChartNoAxesCombined className="w-5 h-5" />,
+    roles: ["admin"],
+    subItems: [
+      { name: "Indicadores Mensais", path: "/sistema-filas/analise-dados", roles: ["admin"] },
     ],
   },
   {
