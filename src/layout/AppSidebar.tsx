@@ -54,7 +54,8 @@ const navItems: NavItem[] = [
     icon: <ChartNoAxesCombined className="w-5 h-5" />,
     roles: ["admin", "especialista", "recepcao", "operador"],
     subItems: [
-      { name: "Indicadores Mensais", path: "/sistema-filas/analise-dados", roles: ["admin", "especialista", "recepcao", "operador"] },
+      { name: "Indicadores Mensais", path: "/sistema-filas/analise-dados/indicadores-mensais", roles: ["admin", "especialista", "recepcao", "operador"] },
+      // { name: "Especialidades", path: "/sistema-filas/analise-dados/especialidades", roles: ["admin", "especialista", "recepcao", "operador"] },
     ],
   },
   {

@@ -177,7 +177,7 @@ export default function IndicadoresMensais() {
             formData.append("dataFim", fim);
             formData.append("unidadeId", unidade);
 
-            const start = await fetch("/api/indicadores", {
+            const start = await fetch("/api/indicadores-especialidades", {
                 method: "POST",
                 body: formData
             });
