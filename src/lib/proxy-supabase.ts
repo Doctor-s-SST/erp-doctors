@@ -12,7 +12,8 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   "/configuracoes/users": ["admin"],
   "/configuracoes/salas-profissionais": ["admin"],
   "/configuracoes/grupos-especialidades": ["admin", "operador"],
-  "/dashboards/": ["admin",]
+  "/dashboards/": ["admin",],
+  "/sistema-filas/analise-dados": ["admin", "especialista", "recepcao", "operador"],
 }
 
 // Define pra onde cada role vai

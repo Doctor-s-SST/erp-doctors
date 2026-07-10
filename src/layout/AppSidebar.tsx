@@ -52,9 +52,9 @@ const navItems: NavItem[] = [
    {
     name: "Análise de Dados",
     icon: <ChartNoAxesCombined className="w-5 h-5" />,
-    roles: ["admin"],
+    roles: ["admin", "especialista", "recepcao", "operador"],
     subItems: [
-      { name: "Indicadores Mensais", path: "/sistema-filas/analise-dados", roles: ["admin"] },
+      { name: "Indicadores Mensais", path: "/sistema-filas/analise-dados", roles: ["admin", "especialista", "recepcao", "operador"] },
     ],
   },
   {
