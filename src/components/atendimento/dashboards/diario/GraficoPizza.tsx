@@ -7,7 +7,6 @@ import {
     Cell,
     ResponsiveContainer,
     Tooltip,
-    TooltipProps,
     Label
 } from "recharts"
 
@@ -20,11 +19,11 @@ const PALETTE = [
     "#3b82f6", // blue
     "#f59e0b", // amber
     "#6366f1", // indigo
-    // "#8b5cf6", // violet
-    // "#14b8a6", // teal
-    // "#ec4899", // pink
-    // "#84cc16", // lime
-    // "#06b6d4", // cyan
+    "#8b5cf6", // violet
+    "#14b8a6", // teal
+    "#ec4899", // pink
+    "#84cc16", // lime
+    "#06b6d4", // cyan
 ]
 
 const AGUARDANDO_COLOR = "#64748b" // slate-500
@@ -71,7 +70,6 @@ function formatarTempo(minutos?: number) {
     const mins = Math.floor((totalSegundos % 3600) / 60)
     const segs = totalSegundos % 60
 
-    // sempre mostra min + seg
     if (horas > 0) {
         return `${horas}h ${mins.toString().padStart(2, "0")}min ${segs
             .toString()
@@ -123,7 +121,6 @@ function CustomTooltip(props: any) {
 
     return (
         <div className="bg-gray-900 border border-gray-700 rounded-xl px-3.5 py-2.5 text-xs shadow-2xl min-w-[160px]">
-
             {/* header */}
             <div className="flex items-center gap-2 mb-2 pb-2 border-b border-gray-700">
                 <span
@@ -146,7 +143,6 @@ function CustomTooltip(props: any) {
 
             {/* métricas */}
             <div className="space-y-1">
-
                 <Row
                     label="Atendidos"
                     value={`${porcentagem}%`}
@@ -202,14 +198,14 @@ function Row({
 export function GraficoPizza({ data, mode = "especialidade", aguardandoExterno = 0 }: GraficoPizzaProps) {
     const items = Array.isArray(data) ? data : []
 
-    // 1. Calculamos os totais para decidir a lógica de exibição
+    // 1. Calculamos os totais
     const totalAtendimentos = items.reduce((acc, i) => acc + (i.total || 0), 0)
     const totalAguardando =
         aguardandoExterno > 0
             ? aguardandoExterno
             : (items[0]?.aguardando || 0)
 
-    // 2. Se não houver absolutamente nada (nem atendimentos nem fila), exibe "Sem dados"
+    // 2. Se não houver dados, exibe "Sem dados"
     if (items.length === 0 || (totalAtendimentos === 0 && totalAguardando === 0)) {
         return (
             <div className="flex flex-col items-center justify-center h-[160px] text-gray-500 text-[10px] uppercase tracking-widest font-bold">
@@ -218,34 +214,35 @@ export function GraficoPizza({ data, mode = "especialidade", aguardandoExterno =
         )
     }
 
-    // 3. Mapeamos os itens ativos (salas ou atendentes)
-    const totalGeral = items.reduce(
-        (acc, item) => acc + (item.total || 0),
-        0
-    )
+    const totalGeral = totalAtendimentos
 
-    const ativas = items.map((item, index) => ({
-        ...item,
-        fill: getColor(index),
-        value: item.total,
-        totalGeral,
-    }))
+    // 3. Ordena por quantidade de atendimentos (decrescente) e atribui cores apenas a quem tem total > 0
+    const itensOrdenados = [...items].sort((a, b) => (b.total || 0) - (a.total || 0))
 
-    // 4. Lógica solicitada: Se não houver atendimentos, a fila vira uma fatia visível
-    // Caso contrário, ela tem valor 0 (fica invisível no gráfico, mas existe nos dados)
+    let colorIndex = 0
+    const ativas = itensOrdenados.map((item) => {
+        const temAtendimento = (item.total || 0) > 0
+        const fill = temAtendimento ? getColor(colorIndex++) : "transparent"
+
+        return {
+            ...item,
+            fill,
+            value: item.total,
+            totalGeral,
+        }
+    })
+
+    // 4. Fatia da fila
     const fatiaFila = {
         nome: "Aguardando",
         total: 0,
         aguardando: totalAguardando,
-        // Se totalAtendimentos for 0, usamos o totalAguardando para dar corpo ao gráfico
         value: totalAtendimentos === 0 ? totalAguardando : 0,
         fill: AGUARDANDO_COLOR,
         isQueue: true,
     }
 
     const chartData = [...ativas, fatiaFila]
-
-    const totalAtendimentoEspecialidade = items.reduce((acc, i) => acc + (i.total || 0), 0)
 
     return (
         <div className="flex flex-col items-center gap-3 w-full">
@@ -280,12 +277,10 @@ export function GraficoPizza({ data, mode = "especialidade", aguardandoExterno =
 
                                 const item = payload
 
-                                // remove aguardando das labels
-                                if (item.isQueue) return null
+                                // Se não houver atendimentos ou for fila, esconde a label
+                                if (item.isQueue || item.total === 0) return null
 
                                 const RADIAN = Math.PI / 180
-
-                                // distância da label pra fora do donut
                                 const radius = outerRadius + 30
 
                                 const x = cx + radius * Math.cos(-midAngle * RADIAN)
@@ -298,31 +293,29 @@ export function GraficoPizza({ data, mode = "especialidade", aguardandoExterno =
 
                                 return (
                                     <g>
-                                        {item.total !== 0 && (
-                                            <text
+                                        <text
+                                            x={x}
+                                            y={y}
+                                            textAnchor="middle"
+                                            fill={item.fill}
+                                            className="font-bold"
+                                        >
+                                            <tspan
                                                 x={x}
-                                                y={y}
-                                                textAnchor="middle"
-                                                fill={item.fill}
-                                                className="font-bold"
+                                                dy={0}
+                                                className="text-[11px]"
                                             >
-                                                <tspan
-                                                    x={x}
-                                                    dy={0}
-                                                    className="text-[11px]"
-                                                >
-                                                    {mode === "especialidade" ? nome : nome.split(" ")[0]}
-                                                </tspan>
+                                                {mode === "especialidade" ? nome : nome.split(" ")[0]}
+                                            </tspan>
 
-                                                <tspan
-                                                    x={x}
-                                                    dy={15}
-                                                    className="text-[12px] font-black"
-                                                >
-                                                    {item.total}
-                                                </tspan>
-                                            </text>
-                                        )}
+                                            <tspan
+                                                x={x}
+                                                dy={15}
+                                                className="text-[12px] font-black"
+                                            >
+                                                {item.total}
+                                            </tspan>
+                                        </text>
                                     </g>
                                 )
                             }}
@@ -376,8 +369,8 @@ export function GraficoPizza({ data, mode = "especialidade", aguardandoExterno =
                     rotulo="Aguardando"
                     valor={totalAguardando}
                     dimmed
-                />)
-            }
+                />
+            )}
         </div>
     )
 }

@@ -1511,6 +1511,11 @@ export default function FilaPage() {
                                                                             </Button>
                                                                         )
                                                                     )}
+                                                                    {item.ultimo_atendimento && (
+                                                                        <Badge className="bg-gray-300 py-3 text-black border border-black/50">
+                                                                            Última especialidade!
+                                                                        </Badge>
+                                                                    )}
                                                                     <Button
                                                                         size="sm"
                                                                         variant="outline"
