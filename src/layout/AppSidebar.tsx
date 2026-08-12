@@ -10,7 +10,7 @@ import {
   HorizontaLDots,
   UserCircleIcon,
 } from "../icons/index";
-import { ChartNoAxesCombined, ChartPie, FileText, House, LayoutDashboard, MonitorCog, Settings } from 'lucide-react';
+import { ChartNoAxesCombined, ChartPie, FileText, FolderKanban, House, LayoutDashboard, MonitorCog, Settings } from 'lucide-react';
 import { supabase } from "@/lib/supabase";
 
 type NavItem = {
@@ -66,6 +66,16 @@ const navItems: NavItem[] = [
       { name: "Atendimento", path: "/sistema-filas/relatorios/geral", roles: ["admin", "painel", "recepcao", "operador", "especialista"] },
       { name: "ASO", path: "/sistema-filas/relatorios/aso", roles: ["admin", "painel", "recepcao", "operador"] },
       { name: "Pendências de Exames", path: "/sistema-filas/relatorios/exames-pendentes", roles: ["admin", "painel", "recepcao", "operador", "especialista"] },
+    ],
+  },
+  {
+    name: "ASO",
+    icon: <FolderKanban className="w-5 h-5" />,
+    // roles: ["admin", "operador"],
+    roles: ["admin"],
+    subItems: [
+      { name: "ASO Pendente", path: "/aso/aso-pendente", roles: ["admin"] },
+      { name: "Prazo de Exames", path: "/aso/prazo-exames", roles: ["admin"] },
     ],
   },
   {
