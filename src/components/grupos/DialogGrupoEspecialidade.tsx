@@ -47,6 +47,7 @@ export function DialogGrupoEspecialidade({
     const [descricao, setDescricao] = useState('');
 
     const [especialidades, setEspecialidades] = useState<Especialidade[]>([]);
+    const [obrigatorias, setObrigatorias] = useState<number[]>([]);
     const [selecionadas, setSelecionadas] = useState<number[]>([]);
 
     const [tipoFiltro, setTipoFiltro] =
@@ -55,18 +56,29 @@ export function DialogGrupoEspecialidade({
     useEffect(() => {
         if (!grupo) {
             setNome('');
+            setDescricao('');
             setSelecionadas([]);
+            setObrigatorias([]);
+            setTipoFiltro('todos');
             return;
         }
 
         setNome(grupo.nome);
+        setDescricao(grupo.descricao || '');
         setTipoFiltro(grupo.tipo_filtro);
 
+        const itens = grupo.grupo_especialidade_itens || [];
+
         setSelecionadas(
-            grupo.grupo_especialidade_itens.map(
-                (i: any) => i.especialidade_id
-            )
+            itens.map((i: any) => i.especialidade_id)
         );
+
+        setObrigatorias(
+            itens
+                .filter((i: any) => i.obrigatoria)
+                .map((i: any) => i.especialidade_id)
+        );
+
     }, [grupo]);
 
     useEffect(() => {
@@ -76,6 +88,14 @@ export function DialogGrupoEspecialidade({
         carregarEspecialidades();
 
     }, [open]);
+
+    const toggleObrigatoria = (id: number) => {
+        setObrigatorias(prev =>
+            prev.includes(id)
+                ? prev.filter(item => item !== id)
+                : [...prev, id]
+        );
+    };
 
     const carregarEspecialidades = async () => {
 
@@ -99,11 +119,28 @@ export function DialogGrupoEspecialidade({
 
     const toggleEspecialidade = (id: number) => {
 
-        setSelecionadas(prev =>
-            prev.includes(id)
-                ? prev.filter(item => item !== id)
-                : [...prev, id]
-        );
+        setSelecionadas(prev => {
+
+            const jaSelecionada = prev.includes(id);
+
+            if (jaSelecionada) {
+
+                setObrigatorias(obrigatoriasPrev =>
+                    obrigatoriasPrev.filter(
+                        item => item !== id
+                    )
+                );
+
+                return prev.filter(
+                    item => item !== id
+                );
+            }
+
+            return [
+                ...prev,
+                id
+            ];
+        });
     };
 
     const salvarGrupo = async () => {
@@ -115,6 +152,28 @@ export function DialogGrupoEspecialidade({
 
         if (selecionadas.length === 0) {
             toast.warning('Selecione ao menos uma especialidade');
+            return;
+        }
+
+        if (
+            tipoFiltro === 'obrigatorio_mais_algum' &&
+            obrigatorias.length === 0
+        ) {
+            toast.warning(
+                'Selecione ao menos uma especialidade obrigatória'
+            );
+
+            return;
+        }
+
+        if (
+            tipoFiltro === 'obrigatorio_mais_algum' &&
+            obrigatorias.length === selecionadas.length
+        ) {
+            toast.warning(
+                'Selecione pelo menos uma especialidade adicional permitida'
+            );
+
             return;
         }
 
@@ -175,7 +234,10 @@ export function DialogGrupoEspecialidade({
                 especialidade_id => ({
                     unidade_id: unidadeId,
                     grupo_id: grupoId,
-                    especialidade_id
+                    especialidade_id,
+                    obrigatoria: obrigatorias.includes(
+                        especialidade_id
+                    )
                 })
             );
 
@@ -261,15 +323,20 @@ export function DialogGrupoEspecialidade({
                             <SelectTrigger>
                                 <SelectValue />
                             </SelectTrigger>
-
                             <SelectContent>
+
                                 <SelectItem value="todos">
-                                    Obrigatório todas as especialidades
+                                    Conjunto exato de especialidades
                                 </SelectItem>
 
                                 <SelectItem value="algum">
                                     Uma ou mais especialidades
                                 </SelectItem>
+
+                                <SelectItem value="obrigatorio_mais_algum">
+                                    Obrigatórias + pelo menos uma adicional
+                                </SelectItem>
+
                             </SelectContent>
                         </Select>
                     </div>
@@ -284,34 +351,89 @@ export function DialogGrupoEspecialidade({
 
                             <div className="space-y-2">
 
-                                {especialidades.map((esp) => (
+                                {especialidades.map((esp) => {
 
-                                    <div
-                                        key={esp.id}
-                                        className="
-                                            flex
-                                            items-center
-                                            gap-3
-                                            rounded-lg
-                                            border
-                                            p-3
-                                            hover:bg-muted/50
-                                            cursor-pointer
-                                        "
-                                        onClick={() => toggleEspecialidade(esp.id)}
-                                    >
+                                    const selecionada =
+                                        selecionadas.includes(esp.id);
 
-                                        <Checkbox
-                                            checked={selecionadas.includes(esp.id)}
-                                        />
+                                    const obrigatoria =
+                                        obrigatorias.includes(esp.id);
 
-                                        <span className="text-sm">
-                                            {esp.nome}
-                                        </span>
+                                    return (
+                                        <div
+                                            key={esp.id}
+                                            className="
+                flex
+                items-center
+                justify-between
+                gap-3
+                rounded-lg
+                border
+                p-3
+                hover:bg-muted/50
+            "
+                                        >
 
-                                    </div>
+                                            <div
+                                                className="
+                    flex
+                    items-center
+                    gap-3
+                    cursor-pointer
+                "
+                                                onClick={() =>
+                                                    toggleEspecialidade(esp.id)
+                                                }
+                                            >
 
-                                ))}
+                                                <Checkbox
+                                                    checked={selecionada}
+                                                    onCheckedChange={() =>
+                                                        toggleEspecialidade(esp.id)
+                                                    }
+                                                />
+
+                                                <span className="text-sm">
+                                                    {esp.nome}
+                                                </span>
+
+                                            </div>
+
+                                            {tipoFiltro === 'obrigatorio_mais_algum' &&
+                                                selecionada && (
+                                                    <div
+                                                        className="
+                            flex
+                            items-center
+                            gap-2
+                            text-xs
+                            text-muted-foreground
+                        "
+                                                        onClick={(e) =>
+                                                            e.stopPropagation()
+                                                        }
+                                                    >
+
+                                                        <Checkbox
+                                                            checked={obrigatoria}
+                                                            onCheckedChange={() =>
+                                                                toggleObrigatoria(
+                                                                    esp.id
+                                                                )
+                                                            }
+                                                        />
+
+                                                        <span>
+                                                            Obrigatória
+                                                        </span>
+
+                                                    </div>
+                                                )
+                                            }
+
+                                        </div>
+                                    );
+                                })}
 
                             </div>
 

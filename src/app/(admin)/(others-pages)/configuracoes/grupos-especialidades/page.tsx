@@ -108,8 +108,9 @@ export default function UnidadeConfigPage() {
                 .select(`
                 *,
                 grupo_especialidade_itens(
-                    id,
-                    especialidade_id,
+                id,
+                especialidade_id,
+                obrigatoria,
                     especialidades(
                         id,
                         nome
