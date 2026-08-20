@@ -32,9 +32,9 @@ import {
     Loader2,
     X,
     UserCog,
-    DatabaseSearch
+    DatabaseSearch,
+    Users
 } from "lucide-react"
-import { is } from "zod/v4/locales"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { StatusSenhaFilas } from "@/components/atendimento/status-senha-filas/StatusSenhaFilas"
 
@@ -73,12 +73,10 @@ type Profissional = {
     profissional_especialidades: { especialidade_id: string }[];
 }
 
-// Mesmo shape usado na PaginaRelatorio, com o campo "obrigatoria"
-// adicional (necessário só para o tipo "obrigatorio_mais_algum").
 type GrupoEspecialidade = {
     id: string
     nome: string
-    tipo_filtro: "todos" | "algum" | "obrigatorio_mais_algum"
+    tipo_filtro: "todos" | "algum" | "obrigatorio_mais_algum" | "apenas_do_grupo"
     grupo_especialidade_itens: {
         especialidade_id: string
         obrigatoria: boolean
@@ -101,7 +99,6 @@ export default function FilaPage() {
     const [ordenacao, setOrdenacao] = useState<ConfigOrdenacao>({ coluna: 'tempo_espera', direcao: 'desc' })
     const [filtroPesquisa, setFiltroPesquisa] = useState("")
     const [filtroTipo, setFiltroTipo] = useState<string>("TODOS")
-    // const [listaGlobalExames, setListaGlobalExames] = useState<any[]>([]);
     const [examesPorAtendimento, setExamesPorAtendimento] = useState<Record<string, any[]>>({});
     const [examesConcluidos, setExamesConcluidos] = useState<Record<string, string[]>>({});
     const [finalizandoIds, setFinalizandoIds] = useState<Record<string, number>>({});
@@ -117,11 +114,13 @@ export default function FilaPage() {
         return salas.filter(s => s.especialidade_id === id)
     }, [salas, id])
 
-    // ============================================================
-    // GRUPOS DE ESPECIALIDADES (mesma lógica da PaginaRelatorio)
-    // ============================================================
     const [gruposEspecialidades, setGruposEspecialidades] = useState<GrupoEspecialidade[]>([])
-    const [grupoSelecionado, setGrupoSelecionado] = useState<string>("todos")
+    const [grupoSelecionado, setGrupoSelecionado] = useState<string>(() => {
+        if (typeof window !== "undefined" && id) {
+            return localStorage.getItem(`filtro_grupo_fila_${id}`) || "todos";
+        }
+        return "todos";
+    })
     const [especialidadesPorAtendimento, setEspecialidadesPorAtendimento] =
         useState<Record<string, string[]>>({});
 
@@ -134,7 +133,7 @@ export default function FilaPage() {
     const [unidadeId, setUnidadeId] = useState<string | null>(null);
     const finalizandoEmAndamento = useRef<Set<string>>(new Set());
     const [now, setNow] = useState(Date.now());
-    // const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
     useEffect(() => {
         const interval = setInterval(() => {
             setNow(Date.now());
@@ -157,7 +156,7 @@ export default function FilaPage() {
         return segundos;
     };
 
-    const [naoAtendidosRecentes, setNaoAtendidosRecentes] = useState<string[]>([]);;
+    const [naoAtendidosRecentes, setNaoAtendidosRecentes] = useState<string[]>([]);
 
     useEffect(() => {
         const saved = localStorage.getItem('nao_atendidos_recentes');
@@ -198,8 +197,6 @@ export default function FilaPage() {
             sala: salaNormalizada,
             especialidade_id: id
         };
-
-        console.log(form)
 
         const { data: { user } } = await supabase.auth.getUser();
 
@@ -311,9 +308,6 @@ export default function FilaPage() {
             });
 
             if (result) {
-                console.log(
-                    result.filter((x: any) => x.finaliza_em)
-                );
                 setData(result);
 
                 const novosTimers: Record<string, number> = {};
@@ -355,10 +349,6 @@ export default function FilaPage() {
 
             setEspecialidadeNome(esp.nome);
 
-            // ============================================================
-            // CARREGA OS GRUPOS DE ESPECIALIDADES (mesma query da PaginaRelatorio,
-            // só filtrando também pra grupos relevantes a esta especialidade)
-            // ============================================================
             const { data: gruposData, error: gruposError } = await supabase
                 .from("grupos_especialidades")
                 .select(`
@@ -390,7 +380,18 @@ export default function FilaPage() {
                 ) as unknown as GrupoEspecialidade[];
 
                 setGruposEspecialidades(gruposDaEspecialidade);
-                setGrupoSelecionado("todos");
+
+                const storageKey = `filtro_grupo_fila_${id}`;
+                const savedGrupo = typeof window !== "undefined" ? localStorage.getItem(storageKey) : null;
+
+                if (savedGrupo && (savedGrupo === "todos" || gruposDaEspecialidade.some(g => String(g.id) === String(savedGrupo)))) {
+                    setGrupoSelecionado(savedGrupo);
+                } else {
+                    setGrupoSelecionado("todos");
+                    if (typeof window !== "undefined") {
+                        localStorage.setItem(storageKey, "todos");
+                    }
+                }
             }
         }
 
@@ -700,11 +701,6 @@ export default function FilaPage() {
         });
     }
 
-    // ============================================================
-    // ESPECIALIDADES POR ATENDIMENTO (mesma fonte de dados usada
-    // pra "examesPorAtendimento", só que lendo a coluna "sala" da
-    // atendimento_exames — é o que alimenta o filtro por grupo)
-    // ============================================================
     async function fetchEspecialidadesAtendimentos(data: ItemFila[]) {
         if (!data.length) return;
 
@@ -880,11 +876,7 @@ export default function FilaPage() {
         // Remove duplicatas
         lista = Array.from(new Map(lista.map(item => [item.id, item])).values());
 
-        // ============================================================
-        // FILTRO POR GRUPO DE ESPECIALIDADES
-        // (mesma lógica da PaginaRelatorio + o novo tipo
-        // "obrigatorio_mais_algum")
-        // ============================================================
+        // Filtro por Grupo de Especialidades
         if (grupoSelecionado !== "todos" && grupoAtual) {
 
             lista = lista.filter(item => {
@@ -916,6 +908,17 @@ export default function FilaPage() {
                     return especialidadesGrupo.some(
                         (espGrupo: string) =>
                             especialidadesAtendimento.includes(espGrupo)
+                    );
+                }
+
+                // APENAS especialidades do grupo (qualquer combinação entre elas, sem nada além)
+                if (grupoAtual.tipo_filtro === "apenas_do_grupo") {
+
+                    return (
+                        especialidadesAtendimento.length > 0 &&
+                        especialidadesAtendimento.every((esp: string) =>
+                            especialidadesGrupo.includes(esp)
+                        )
                     );
                 }
 
@@ -1169,7 +1172,15 @@ export default function FilaPage() {
 
                 {/* CONTROLES E FILTRO */}
                 <div className="flex flex-col md:flex-row justify-between items-center gap-6 w-full">
-                    <div className="flex flex-col md:flex-row gap-2">
+                    <div className="flex flex-col md:flex-row gap-2 flex-wrap items-center">
+
+                        {/* CONTADOR DE PACIENTES */}
+                        <div className="flex items-center gap-2 bg-white dark:bg-black px-3 py-2 rounded-xl shadow-sm border dark:border-gray-600">
+                            <Users className="w-4 h-4 font-black text-emerald-600 dark:text-emerald-400" />
+                            <span className="text-xs font-black bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-md">
+                                {dadosProcessados.length}
+                            </span>
+                        </div>
 
                         {/* FILTRO DE GRUPO DE ESPECIALIDADES */}
                         {gruposEspecialidades.length > 0 && (
@@ -1177,7 +1188,12 @@ export default function FilaPage() {
                                 <Stethoscope className="w-4 h-4 font-black text-emerald-600 dark:text-emerald-400" />
                                 <Select
                                     value={grupoSelecionado}
-                                    onValueChange={setGrupoSelecionado}
+                                    onValueChange={(val) => {
+                                        setGrupoSelecionado(val);
+                                        if (typeof window !== "undefined" && id) {
+                                            localStorage.setItem(`filtro_grupo_fila_${id}`, val);
+                                        }
+                                    }}
                                 >
                                     <SelectTrigger className="h-8 w-[220px] border-0 shadow-none text-[9px] font-black uppercase tracking-widest focus:ring-0">
                                         <SelectValue placeholder="FILTRAR ESPECIALIDADES" />

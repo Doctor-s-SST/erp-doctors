@@ -345,6 +345,18 @@ export default function PaginaRelatorio() {
                     );
                 }
 
+                // APENAS especialidades do grupo (qualquer combinação entre elas, sem extras)
+                if (grupoAtual.tipo_filtro === 'apenas_do_grupo') {
+
+                    return (
+                        especialidadesAtendimento.length > 0 &&
+                        especialidadesAtendimento.every(
+                            (esp: string) =>
+                                especialidadesGrupo.includes(esp)
+                        )
+                    );
+                }
+
                 return true;
             });
         }
