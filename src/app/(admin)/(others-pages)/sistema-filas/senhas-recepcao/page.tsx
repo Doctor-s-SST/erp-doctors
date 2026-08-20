@@ -23,6 +23,7 @@ type Atendimento = {
     senha_codigo: string;
     tipo_senha: string;
     nome: string;
+    nome_social: string;
     ficha_sequencial: string;
     created_at: string;
     status: string;
@@ -90,7 +91,7 @@ export default function RecepcaoPage() {
         sequencial: "",
         arquivo: null as File | null,
         empresa: { razao_social: "", cnpj: "", codigo_empresa: "" },
-        funcionario: { nome: "", rg: "", nascimento: "", cargo: "", setor: "", cpf: "", codigo_funcionario: "" },
+        funcionario: { nome: "", nome_social: "", rg: "", nascimento: "", cargo: "", setor: "", cpf: "", codigo_funcionario: "" },
         exame: { tipo: "" },
         exames: [] as Array<{ exame: string }>,
         especialidadesSelecionadas: [] as number[],
@@ -501,10 +502,11 @@ export default function RecepcaoPage() {
             ? Array.from(new Set([idTriagem, ...formFicha.especialidadesSelecionadas]))
             : formFicha.especialidadesSelecionadas;
 
-        const { error } = await supabase.rpc("registrar_dados_ficha_novo", {
+        const { error } = await supabase.rpc("registrar_dados_ficha_novo_duplicate_1", {
             p_atendimento_id: importModal.item.id,
             p_sequencial: formFicha.sequencial,
             p_paciente_nome: formFicha.funcionario.nome,
+            p_paciente_nome_social: formFicha.funcionario.nome_social? formFicha.funcionario.nome_social : null,
             p_paciente_cpf: formFicha.funcionario.cpf,
             p_paciente_nascimento: formatarParaSQL(formFicha.funcionario.nascimento),
             p_paciente_rg: formFicha.funcionario.rg,
@@ -612,6 +614,7 @@ export default function RecepcaoPage() {
                 },
                 funcionario: {
                     nome: detalhes.pacientes?.nome || item.nome || "",
+                    nome_social: detalhes.pacientes?.nome_social || item.nome_social || "",
                     rg: detalhes.pacientes?.rg || "",
                     nascimento: detalhes.pacientes?.data_nascimento || "",
                     cargo: detalhes.pacientes?.cargo || "",
@@ -793,6 +796,7 @@ export default function RecepcaoPage() {
                 },
                 funcionario: {
                     nome: formatarNome(data.funcionario?.nome) || "",
+                    nome_social: formatarNome(data.funcionario?.nome_social) || "",
                     rg: data.funcionario?.rg || "",
                     nascimento: data.funcionario?.nascimento || "",
                     cargo: data.funcionario?.cargo || "",
@@ -908,6 +912,9 @@ export default function RecepcaoPage() {
                 funcionario: {
                     nome:
                         formatarNome(dados.nome) || "",
+
+                    nome_social:
+                        formatarNome(dados.nome_social) || "",
 
                     rg:
                         dados.rg || "",
@@ -1610,6 +1617,10 @@ export default function RecepcaoPage() {
                                 </div>
                             </div>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div className="md:col-span-2 space-y-1.5">
+                                    <Label className="text-[10px] font-black uppercase text-gray-400">Nome Social</Label>
+                                    <Input className="h-10 font-bold" value={formFicha.funcionario.nome_social} onChange={(e) => setFormFicha({ ...formFicha, funcionario: { ...formFicha.funcionario, nome_social: e.target.value } })} />
+                                </div>
                                 <div className="space-y-1.5">
                                     <Label className="text-[10px] font-black uppercase text-gray-400">CPF</Label>
                                     <Input
