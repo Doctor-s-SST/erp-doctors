@@ -104,7 +104,7 @@ export default function FilaPage() {
     const [finalizandoIds, setFinalizandoIds] = useState<Record<string, number>>({});
     const [selectedAtendimento, setSelectedAtendimento] = useState<ItemFila | null>(null)
     const [isDetailsOpen, setIsDetailsOpen] = useState(false)
-
+    const [role, setRole] = useState<string | null>(null)
     const [salas, setSalas] = useState<Sala[]>([])
     const [profissionais, setProfissionais] = useState<Profissional[]>([])
     const [form, setForm] = useState({ sala: "", profissional: "" });
@@ -533,6 +533,7 @@ export default function FilaPage() {
                 if (profile) {
                     let idFinal = profile.unidade_id;
 
+                    setRole(profile.role);
                     setUnidadeId(idFinal);
 
                     const userKey = `fila_session_${user.id}`;
@@ -1183,7 +1184,7 @@ export default function FilaPage() {
                         </div>
 
                         {/* FILTRO DE GRUPO DE ESPECIALIDADES */}
-                        {gruposEspecialidades.length > 0 && (
+                        {(role == "admin" && gruposEspecialidades.length > 0) && (
                             <div className="flex items-center gap-2 bg-white dark:bg-black p-2 rounded-xl shadow-sm border dark:border-gray-600">
                                 <Stethoscope className="w-4 h-4 font-black text-emerald-600 dark:text-emerald-400" />
                                 <Select
