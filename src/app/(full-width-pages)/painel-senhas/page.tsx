@@ -14,12 +14,6 @@ interface Chamada {
   updated_at: string;
 }
 
-// const salasAndar = {
-//   '1': 'térreo', '2': 'térreo', '3': 'térreo', '4': 'térreo', '5': 'térreo',
-//   '6': 'térreo', '7': 'primeiro andar', '8': 'primeiro andar',
-//   '9': 'primeiro andar', '10': 'primeiro andar',
-// };
-
 export default function PainelTV() {
   const [ultimaChamada, setUltimaChamada] = useState<Chamada | null>(null);
   const [historico, setHistorico] = useState<Chamada[]>([]);

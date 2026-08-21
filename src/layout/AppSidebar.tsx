@@ -49,7 +49,7 @@ const navItems: NavItem[] = [
       { name: "Kanban", path: "/sistema-filas/kanban", roles: ["admin"] },
     ],
   },
-   {
+  {
     name: "Análise de Dados",
     icon: <ChartNoAxesCombined className="w-5 h-5" />,
     roles: ["admin", "especialista", "recepcao", "operador"],
@@ -64,7 +64,7 @@ const navItems: NavItem[] = [
     roles: ["admin", "painel", "recepcao", "operador", "especialista"],
     subItems: [
       { name: "Atendimento", path: "/sistema-filas/relatorios/geral", roles: ["admin", "painel", "recepcao", "operador", "especialista"] },
-      { name: "ASO", path: "/sistema-filas/relatorios/aso", roles: ["admin", "painel", "recepcao", "operador"] },
+      // { name: "ASO", path: "/sistema-filas/relatorios/aso", roles: ["admin", "painel", "recepcao", "operador"] },
       { name: "Pendências de Exames", path: "/sistema-filas/relatorios/exames-pendentes", roles: ["admin", "painel", "recepcao", "operador", "especialista"] },
     ],
   },
