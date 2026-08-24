@@ -751,12 +751,6 @@ export default function IndicadoresSocged() {
             }
 
         } catch (error) {
-
-            console.error(
-                "Erro no processamento:",
-                error
-            );
-
             toast.error(
                 "Erro ao importar e processar o arquivo."
             );
@@ -1259,6 +1253,9 @@ export default function IndicadoresSocged() {
                             }
                             filtroTipoExame={
                                 filtroTipoExame
+                            }
+                            unidadeId={
+                                unidadeId
                             }
                         />
 
@@ -3048,6 +3045,7 @@ interface ViewExamesConcluidosProps {
     funcionariosSalvos: Set<string>;
     onFuncionariosSalvos: (cpfs: string[]) => void;
     filtroTipoExame: FiltroTipoExame;
+    unidadeId: string;
 }
 
 
@@ -3060,6 +3058,7 @@ export function ViewExamesConcluidos({
     funcionariosSalvos,
     onFuncionariosSalvos,
     filtroTipoExame,
+    unidadeId
 }: ViewExamesConcluidosProps) {
 
     const [selectedFuncionario, setSelectedFuncionario] =
@@ -3112,7 +3111,6 @@ export function ViewExamesConcluidos({
             const lista: any[] = [];
 
             todosFuncionarios.forEach((item) => {
-
                 const res =
                     item.socResumo ||
                     item;
@@ -3147,7 +3145,7 @@ export function ViewExamesConcluidos({
                             "Não informado",
 
                         cpf,
-
+                        sequencial_ficha: res.sequencialFicha,
                         empresa:
                             res.razaoSocial ||
                             res.empresa ||
@@ -3187,6 +3185,8 @@ export function ViewExamesConcluidos({
                             res.crmMedico ||
                             "-",
 
+                        observacao: res.observacao || "",
+
                         totalExames:
                             Number(
                                 res.totalExames ||
@@ -3195,11 +3195,6 @@ export function ViewExamesConcluidos({
 
                         examesPendentes:
                             0,
-
-                        observacao:
-                            res.observacao ||
-                            res.observação ||
-                            "",
 
                         examesConcluidos:
                             Number(
@@ -3574,127 +3569,85 @@ export function ViewExamesConcluidos({
     };
 
 
-    const handleSaveSelection =
-        async () => {
+    const handleSaveSelection = async () => {
+        if (selectedCpfs.size === 0) {
+            toast.warning("Selecione ao menos um funcionário para salvar.");
+            return;
+        }
 
-            if (
-                selectedCpfs.size ===
-                0
-            ) {
+        setSaving(true);
 
-                toast.warning(
-                    "Selecione ao menos um funcionário para salvar."
-                );
+        try {
+            const selecionados = funcionariosConcluidosFiltrados.filter(
+                (f) =>
+                    selectedCpfs.has(f.cpf) &&
+                    !isFuncionarioMontado(f)
+            );
 
+            if (selecionados.length === 0) {
+                toast.warning("Nenhum funcionário válido foi selecionado.");
                 return;
             }
 
-            setSaving(true);
-
-            try {
-
-                const selecionados =
-                    funcionariosConcluidosFiltrados.filter(
-                        (f) =>
-                            selectedCpfs.has(
-                                f.cpf
-                            ) &&
-                            !isFuncionarioMontado(
-                                f
-                            )
-                    );
-
-                if (
-                    selecionados.length ===
-                    0
-                ) {
-
-                    toast.warning(
-                        "Nenhum funcionário válido foi selecionado."
-                    );
-
-                    return;
+            const response = await fetch(
+                "/api/enviar-asos-concluidos",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        selecionados,
+                    }),
                 }
+            );
 
-                const response =
-                    await fetch(
-                        "/api/enviar-asos-concluidos",
-                        {
-                            method:
-                                "POST",
-
-                            headers: {
-                                "Content-Type":
-                                    "application/json",
-                            },
-
-                            body:
-                                JSON.stringify({
-                                    selecionados
-                                }),
-                        }
-                    );
-
-                if (
-                    !response.ok
-                ) {
-
-                    throw new Error(
-                        "Erro ao enviar funcionários."
-                    );
-                }
-
-                await response.json();
-
-                const cpfsSalvos =
-                    selecionados.map(
-                        (f) =>
-                            f.cpf
-                    );
-
-                onFuncionariosSalvos(
-                    cpfsSalvos
-                );
-
-                setSelectedCpfs(
-                    (prev) => {
-
-                        const novo =
-                            new Set(
-                                prev
-                            );
-
-                        cpfsSalvos.forEach(
-                            (cpf) =>
-                                novo.delete(
-                                    cpf
-                                )
-                        );
-
-                        return novo;
-                    }
-                );
-
-                toast.success(
-                    `${selecionados.length} funcionário(s) salvo(s) com sucesso!`
-                );
-
-            } catch (error) {
-
-                console.error(
-                    "Erro no processamento:",
-                    error
-                );
-
-                toast.error(
-                    "Não foi possível salvar os funcionários selecionados."
-                );
-
-            } finally {
-
-                setSaving(false);
+            if (!response.ok) {
+                throw new Error("Erro ao enviar funcionários.");
             }
-        };
+
+            // Mapeia todos os selecionados para um array de objetos prontos para inserção em lote
+            const dadosParaInserir = selecionados.map((f) => ({
+                nome_paciente: f.nome,
+                sequencial_ficha: f.sequencial_ficha,
+                codigo_empresa_soc: f.codigoEmpresa,
+                codigo_ged_soc: f.codigoGed,
+                unidade_id: unidadeId,
+            }));
+
+            const saveBd = await supabase
+                .from("pacientes_assinatura")
+                .insert(dadosParaInserir);
+
+            if (saveBd.error) {
+                toast.error("Erro ao salvar funcionários.");
+                return;
+            }
+
+            await response.json();
+
+            const cpfsSalvos = selecionados.map((f) => f.cpf);
+
+            onFuncionariosSalvos(cpfsSalvos);
+
+            setSelectedCpfs((prev) => {
+                const novo = new Set(prev);
+                cpfsSalvos.forEach((cpf) => novo.delete(cpf));
+                return novo;
+            });
+
+            toast.success(
+                `${selecionados.length} funcionário(s) salvo(s) com sucesso!`
+            );
+
+        } catch (error) {
+            toast.error(
+                "Não foi possível salvar os funcionários selecionados."
+            );
+        } finally {
+            setSaving(false);
+        }
+    };
 
 
     const handleRowClick = (
@@ -4353,6 +4306,11 @@ export function ViewExamesConcluidos({
                             />
 
                             <SortHeader
+                                label="Observação"
+                                sortKeyValue="observacao"
+                            />
+
+                            <SortHeader
                                 label="Status"
                                 sortKeyValue="resultadoAsoSoc"
                             />
@@ -4394,7 +4352,6 @@ export function ViewExamesConcluidos({
 
                             funcionariosPaginados.map(
                                 (item) => {
-
                                     const isSelected =
                                         selectedCpfs.has(
                                             item.cpf
@@ -4684,6 +4641,10 @@ export function ViewExamesConcluidos({
 
                                                 </div>
 
+                                            </TableCell>
+
+                                            <TableCell className="text-xs">
+                                                {item.observacao || ""}
                                             </TableCell>
 
 

@@ -74,8 +74,9 @@ const navItems: NavItem[] = [
     // roles: ["admin", "operador"],
     roles: ["admin"],
     subItems: [
-      { name: "ASO Pendente", path: "/aso/aso-pendente", roles: ["admin"] },
+      { name: "Gestão de ASO", path: "/aso/aso-pendente", roles: ["admin"] },
       { name: "Prazo de Exames", path: "/aso/prazo-exames", roles: ["admin"] },
+      { name: "Assinatura de ASO", path: "/aso/assinatura-aso", roles: ["admin"] },
     ],
   },
   {
