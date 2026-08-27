@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getAuthSession } from "@/lib/api-auth";
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await getAuthSession();
+    if (!auth.authorized) {
+      return auth.response;
+    }
+
     const dataFromForm = await req.formData();
     const file = dataFromForm.get("file") as File;
 

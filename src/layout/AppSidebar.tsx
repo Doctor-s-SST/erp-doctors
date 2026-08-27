@@ -72,10 +72,11 @@ const navItems: NavItem[] = [
     name: "ASO",
     icon: <FolderKanban className="w-5 h-5" />,
     // roles: ["admin", "operador"],
-    roles: ["admin"],
+    roles: ["admin", "operador", "especialista"],
     subItems: [
-      { name: "ASO Pendente", path: "/aso/aso-pendente", roles: ["admin"] },
-      { name: "Prazo de Exames", path: "/aso/prazo-exames", roles: ["admin"] },
+      { name: "Gestão de ASO", path: "/aso/aso-pendente", roles: ["admin", "operador"] },
+      { name: "Assinatura e Envio", path: "/aso/assinatura-aso", roles: ["admin", "operador", "especialista"] },
+      { name: "Prazo de Exames", path: "/aso/prazo-exames", roles: ["admin", "operador"] },
     ],
   },
   {
