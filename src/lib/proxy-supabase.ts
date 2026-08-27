@@ -7,7 +7,7 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   "/painel-senhas": ["admin", "painel"],
   "/sistema-filas/senhas-recepcao": ["admin", "recepcao", "especialista", "painel"],
   "/sistema-filas/relatorios/": ["admin", "painel", "recepcao", "operador", "especialista"],
-  "/aso/": ["admin"],
+  "/aso/": ["admin", "operador", "especialista"],
   // "/aso/": ["admin", "painel", "recepcao", "operador",],
   "/sistema-filas/filas": ["admin", "especialista", "recepcao", "painel"],
   "/configuracoes/unidade": ["admin"],
@@ -23,7 +23,7 @@ function getRedirectByRole(role?: string, especialidade_id?: string) {
   if (role === "admin") return "/dashboards/atendimento"
   if (role === "recepcao") return "/sistema-filas/senhas-recepcao"
   if (role === "painel") return "/painel-senhas"
-  if (role === "operador") return "/sistema-filas/relatorios/aso"
+  if (role === "operador") return "/aso/aso-pendente"
   if (role === "especialista") {
     return especialidade_id
       ? `/sistema-filas/filas/${especialidade_id}`

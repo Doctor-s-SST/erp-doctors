@@ -1,27 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getAuthSession } from "@/lib/api-auth";
 
 export async function POST(req: NextRequest) {
   try {
-    // 1. Extrai o FormData vindo do frontend
     const incomingFormData = await req.formData();
     const file = incomingFormData.get("file") as File | null;
-    const unidadeId = incomingFormData.get("unidadeId") as string | null;
+
+    const auth = await getAuthSession();
+    if (!auth.authorized) {
+      return auth.response;
+    }
 
     if (!file) {
       return NextResponse.json({ error: "Nenhum arquivo enviado." }, { status: 400 });
     }
 
-    // 2. Cria um novo FormData para enviar ao n8n
     const n8nFormData = new FormData();
     n8nFormData.append("file", file, file.name);
-    n8nFormData.append("unidadeId", unidadeId || "");
+    n8nFormData.append("unidadeId", auth.unidadeId);
 
-    // 3. Envia para o Webhook do n8n
     const n8nResponse = await fetch(process.env.N8N_WEBHOOK_IMPORTAR_EXCEL_ASOS_URL!, {
       method: "POST",
       headers: {
         "x-api-key": process.env.N8N_API_KEY!,
-        // IMPORTANTE: Não defina Content-Type aqui! O fetch fará isso automaticamente com o boundary correto.
       },
       body: n8nFormData,
     });

@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getAuthSession } from "@/lib/api-auth";
 
 export async function POST(req: NextRequest) {
   try {
-    // 1. Extrai o corpo JSON vindo do frontend
+    const auth = await getAuthSession();
+    if (!auth.authorized) {
+      return auth.response;
+    }
+
     const body = await req.json();
     const { selecionados } = body;
 
@@ -13,7 +18,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2. Envia a lista completa de selecionados diretamente como JSON para o Webhook do n8n
     const n8nResponse = await fetch(process.env.N8N_WEBHOOK_ENVIAR_ASOS_CONCLUIDOS_URL!, {
       method: "POST",
       headers: {

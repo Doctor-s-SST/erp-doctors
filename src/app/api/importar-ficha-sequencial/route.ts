@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getAuthSession } from "@/lib/api-auth";
 
 export async function POST(req: NextRequest) {
     try {
-        const body = await req.json();
+        const auth = await getAuthSession();
+        if (!auth.authorized) {
+            return auth.response;
+        }
 
+        const body = await req.json();
         const { sequencial } = body;
 
         if (!sequencial) {
@@ -29,9 +34,7 @@ export async function POST(req: NextRequest) {
 
         if (!n8nResponse.ok) {
             const errorText = await n8nResponse.text();
-
             console.error("Erro n8n:", errorText);
-
             return NextResponse.json(
                 { error: "n8n recusou a requisição" },
                 { status: n8nResponse.status }
@@ -39,12 +42,10 @@ export async function POST(req: NextRequest) {
         }
 
         const data = await n8nResponse.json();
-
         return NextResponse.json(data);
 
     } catch (error) {
-        console.error("Erro na API Route:", error);
-
+        console.error("Erro na rota sequencial:", error);
         return NextResponse.json(
             { error: "Erro interno no servidor" },
             { status: 500 }
