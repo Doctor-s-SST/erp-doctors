@@ -17,7 +17,7 @@ export async function POST(req: Request) {
     const horarioSaida =
       item.cabecalho?.horario_saida?.split(" ")[1] || "______";
     const cpf = item.cabecalho?.cpf || "________________________";
-    
+
     const cnpj = unidade.cnpj || "________________________";
     const razao_social = unidade.razao_social.toUpperCase() || "______________________________"
     const cidade = unidade.cidade || "______________________________"
