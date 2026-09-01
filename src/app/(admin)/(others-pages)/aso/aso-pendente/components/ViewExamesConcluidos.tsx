@@ -93,6 +93,7 @@ export function ViewExamesConcluidos({
                     empresa: res.razaoSocial || res.empresa || "-",
                     codigoEmpresa: res.codigoEmpresa || "-",
                     codigoGed: res.codigoGed || "-",
+                    dataCriacaoGed: res.dataCriacaoGed || "-",
                     codigoFuncionario: res.codigoFuncionario || "-",
                     dataAso: res.dataAso || res.dataPedido || null,
                     dataFicha: res.dataFicha || res.dataPedido || null,
@@ -321,6 +322,7 @@ export function ViewExamesConcluidos({
                 sequencial_ficha: f.sequencial_ficha,
                 codigo_empresa_soc: f.codigoEmpresa,
                 codigo_ged_soc: f.codigoGed,
+                data_criacao_ged_soc: f.dataCriacaoGed,
                 unidade_id: unidadeId,
             }));
 
