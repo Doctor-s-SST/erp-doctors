@@ -197,6 +197,7 @@ export default function IndicadoresSocged() {
                     terminou = true;
                     const analyticsData = resposta.data?.analytics || null;
                     const funcionariosList = resposta.data?.funcionarios || [];
+                    console.log(funcionariosList)
 
                     setDadosRelatorio(funcionariosList);
                     setDadosGraficos(analyticsData);
