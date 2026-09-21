@@ -3,4 +3,6 @@ export interface PrazoExame {
     unidade_id?: string;
     nome_exame: string;
     prazo_dias: number;
+    tipo_filtro?: string;
+    ignorar_exame?: boolean;
 }

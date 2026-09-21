@@ -30,8 +30,11 @@ import {
     THEME_COLORS,
     CORES_TIPO_ASO,
     classificarTipoExame,
-    obterMaiorPrazo,
-    obterStatusVencimento,
+    calcularStatusVencimentoVisual,
+    asoEstaConcluido,
+    obterPrazoAso,
+    obterStatusPrazoPendente,
+    possuiAso,
     formatPercent,
 } from "../utils";
 
@@ -41,14 +44,6 @@ export function ViewDashboard({
     filtroTipoExame,
     prazosMap,
 }: ViewDashboardProps) {
-    if (!analytics) {
-        return (
-            <div className="flex min-h-[300px] items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white text-xs font-mono uppercase text-slate-400 dark:border-gray-700 dark:bg-gray-900">
-                Importe uma planilha Excel para visualizar o Dashboard.
-            </div>
-        );
-    }
-
     /* ============================================================
        FUNCIONÁRIOS FILTRADOS
     ============================================================ */
@@ -62,24 +57,30 @@ export function ViewDashboard({
         }
 
         return todosFuncionarios.filter((item) => {
-            const funcionario = item.socResumo || item;
-            return classificarTipoExame(funcionario) === filtroTipoExame;
+            return (
+                classificarTipoExame(item, prazosMap) === filtroTipoExame
+            );
         });
-    }, [todosFuncionarios, filtroTipoExame]);
+    }, [todosFuncionarios, filtroTipoExame, prazosMap]);
+
+    if (!analytics) {
+        return (
+            <div className="flex min-h-[300px] items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white text-xs font-mono uppercase text-slate-400 dark:border-gray-700 dark:bg-gray-900">
+                Importe uma planilha Excel para visualizar o Dashboard.
+            </div>
+        );
+    }
 
     /* ============================================================
        INDICADORES PRINCIPAIS
+       (Conclusão determinada pelas regras reais dos exames:
+       Clínico -> dataExame | Complementar -> dataExame + temRelacao)
     ============================================================ */
     const total = funcionarios.length;
 
-    const concluidos = funcionarios.filter((item) => {
-        const res = item.socResumo || item;
-        const pendentes = Array.isArray(res.examesPendentes)
-            ? res.examesPendentes.length
-            : Number(res.examesPendentes ?? 0);
-
-        return pendentes === 0;
-    }).length;
+    const concluidos = funcionarios.filter((item) =>
+        asoEstaConcluido(item)
+    ).length;
 
     const pendentes = total - concluidos;
 
@@ -87,25 +88,38 @@ export function ViewDashboard({
        TIPO DE EXAME
     ============================================================ */
     const quantidadeClinicos = funcionarios.filter((item) => {
-        const res = item.socResumo || item;
-        return classificarTipoExame(res) === "clinico";
+        return classificarTipoExame(item, prazosMap) === "clinico";
     }).length;
 
     const quantidadeComplementares = funcionarios.filter((item) => {
-        const res = item.socResumo || item;
-        return classificarTipoExame(res) === "complementar";
+        return classificarTipoExame(item, prazosMap) === "complementar";
     }).length;
 
-    const comparacaoTipoData = [
-        {
-            tipo: "Clínicos",
-            total: quantidadeClinicos,
-        },
-        {
-            tipo: "Complementares",
-            total: quantidadeComplementares,
-        },
-    ];
+    const comparacaoTipoData =
+        filtroTipoExame === "clinico"
+            ? [
+                {
+                    tipo: "Clínicos",
+                    total: quantidadeClinicos,
+                },
+            ]
+            : filtroTipoExame === "complementar"
+                ? [
+                    {
+                        tipo: "Complementares",
+                        total: quantidadeComplementares,
+                    },
+                ]
+                : [
+                    {
+                        tipo: "Clínicos",
+                        total: quantidadeClinicos,
+                    },
+                    {
+                        tipo: "Complementares",
+                        total: quantidadeComplementares,
+                    },
+                ];
 
     /* ============================================================
        MAPA DOS EXAMES
@@ -114,13 +128,16 @@ export function ViewDashboard({
     const examesComplementaresMap: Record<string, number> = {};
 
     funcionarios.forEach((item) => {
-        const res = item.socResumo || item;
-        const exames = Array.isArray(res.listaExamesResumida)
-            ? res.listaExamesResumida
-            : [];
+        const aso = item.aso || item.socResumo || item;
+
+        const exames = Array.isArray(aso.listaExamesResumida)
+            ? aso.listaExamesResumida
+            : Array.isArray(item.listaExamesResumida)
+                ? item.listaExamesResumida
+                : [];
 
         exames.forEach((exame: any) => {
-            const nome = String(
+            const nomeExibicao = String(
                 exame?.descricaoExame ||
                 exame?.nomeExame ||
                 exame?.nome ||
@@ -128,16 +145,27 @@ export function ViewDashboard({
                 ""
             ).trim();
 
-            if (!nome) return;
+            const nomeNormalizado = nomeExibicao
+                .normalize("NFD")
+                .replace(/[\u0300-\u036f]/g, "")
+                .replace(/\./g, "")
+                .trim()
+                .toLowerCase();
 
-            const tipo = classificarTipoExame({
-                listaExamesResumida: [exame],
-            });
+            if (!nomeNormalizado) return;
 
-            if (tipo === "clinico") {
-                examesClinicosMap[nome] = (examesClinicosMap[nome] || 0) + 1;
-            } else {
-                examesComplementaresMap[nome] = (examesComplementaresMap[nome] || 0) + 1;
+            const prazo = prazosMap[nomeNormalizado];
+
+            if (!prazo || prazo.ignorar_exame) return;
+
+            if (prazo.tipo_filtro === "clinico") {
+                examesClinicosMap[nomeExibicao] =
+                    (examesClinicosMap[nomeExibicao] || 0) + 1;
+            }
+
+            if (prazo.tipo_filtro === "complementar") {
+                examesComplementaresMap[nomeExibicao] =
+                    (examesComplementaresMap[nomeExibicao] || 0) + 1;
             }
         });
     });
@@ -154,43 +182,98 @@ export function ViewDashboard({
     const topComplementares = examesComplementaresData.slice(0, 10);
 
     /* ============================================================
-       VENCIMENTO DOS ASOS PENDENTES
+       MAPA DE PENDÊNCIAS POR CPF
+       Constrói a partir de analytics.funcionariosComExamesPendentes
+       para que o dashboard avalie prazo somente sobre exames
+       realmente pendentes — consistente com ViewExamesPendentes.
     ============================================================ */
-    const pendenciasList = analytics?.funcionariosComExamesPendentes || [];
+    const pendenciasMap = useMemo(() => {
+        const map = new Map<string, string[]>();
+        const lista = analytics?.funcionariosComExamesPendentes || [];
 
+        lista.forEach((item: any) => {
+            const cpf = String(
+                item.cpfFuncionario || item.cpf || ""
+            ).trim();
+            if (!cpf) return;
+
+            const examesPendentes: string[] = Array.isArray(item.examesPendentes)
+                ? item.examesPendentes
+                : [item.examesPendentes || ""].filter(Boolean);
+
+            if (examesPendentes.length > 0) {
+                map.set(cpf, examesPendentes);
+            }
+        });
+
+        return map;
+    }, [analytics?.funcionariosComExamesPendentes]);
+
+    /* ============================================================
+       VENCIMENTO DOS ASOS
+       Considera TODOS os funcionários (concluídos e pendentes),
+       contando por ASO/funcionário, não por exame:
+
+       - Concluído -> usa obterPrazoAso (dataExame + dias úteis),
+         igual à tela de Exames Concluídos.
+
+       - Pendente -> usa obterStatusPrazoPendente que avalia
+         SOMENTE os exames que ainda estão pendentes, igual à
+         tela de Exames Pendentes.
+    ============================================================ */
     let vencidos = 0;
     let noPrazo = 0;
     let semPrazo = 0;
 
-    const funcionariosMap = new Map<string, any>();
-
     funcionarios.forEach((item) => {
-        const res = item.socResumo || item;
-        if (!res) return;
-        const cpf = res.cpfFuncionario || res.cpf;
-        if (!cpf) return;
-        funcionariosMap.set(cpf, res);
-    });
+        if (asoEstaConcluido(item)) {
+            const prazoAso = obterPrazoAso(item, prazosMap);
 
-    pendenciasList.forEach((item: any) => {
-        const cpf = item.cpfFuncionario || item.cpf;
-        const funcionario = funcionariosMap.get(cpf);
+            if (!prazoAso) {
+                semPrazo++;
+                return;
+            }
 
-        const dataFicha = funcionario?.dataFicha || item.dataFicha || null;
+            const status = calcularStatusVencimentoVisual(
+                prazoAso.dataLimite
+            );
 
-        const examesList: string[] = Array.isArray(item.examesPendentes)
-            ? item.examesPendentes
-            : [item.examesPendentes || ""];
+            if (status.estaVencido) {
+                vencidos++;
+            } else {
+                noPrazo++;
+            }
 
-        const maiorPrazo = obterMaiorPrazo(examesList, prazosMap);
-        const status = obterStatusVencimento(dataFicha, maiorPrazo);
+            return;
+        }
 
-        if (status === "vencido") {
-            vencidos++;
-        } else if (status === "no_prazo") {
-            noPrazo++;
-        } else {
+        // Funcionário ainda com exames pendentes:
+        // avalia SOMENTE os exames que estão pendentes.
+        if (!possuiAso(item)) {
             semPrazo++;
+            return;
+        }
+
+        const cpf = String(
+            item.cpfFuncionario ||
+            item.cpf ||
+            item.aso?.cpfFuncionario ||
+            ""
+        ).trim();
+
+        const examesPendentesNomes = pendenciasMap.get(cpf);
+        const statusPendente = obterStatusPrazoPendente(
+            item,
+            prazosMap,
+            examesPendentesNomes
+        );
+
+        if (!statusPendente.temStatus) {
+            semPrazo++;
+        } else if (statusPendente.estaVencido) {
+            vencidos++;
+        } else {
+            noPrazo++;
         }
     });
 
@@ -222,9 +305,8 @@ export function ViewDashboard({
     const tipoAsoMap: Record<string, number> = {};
 
     funcionarios.forEach((item) => {
-        const funcionario = item.socResumo || item;
         const tipoAso = String(
-            funcionario?.tipoAso || "Não informado"
+            item.aso?.tipoAso || item.tipoAso || "Não informado"
         ).trim();
 
         const nomeTipo = tipoAso || "Não informado";
@@ -276,7 +358,7 @@ export function ViewDashboard({
                                     {vencidos}
                                 </p>
                                 <p className="mt-1 text-[10px] font-bold text-red-500">
-                                    {percentualVencidos.toFixed(1)}% dos pendentes
+                                    {percentualVencidos.toFixed(1)}% do total
                                 </p>
                             </div>
                             <div className="rounded-xl bg-red-500/10 p-2.5">
@@ -301,7 +383,7 @@ export function ViewDashboard({
                                     {totalComStatus > 0
                                         ? ((noPrazo / totalComStatus) * 100).toFixed(1)
                                         : "0.0"}
-                                    % dos pendentes
+                                    % do total
                                 </p>
                             </div>
                             <div className="rounded-xl bg-emerald-500/10 p-2.5">
@@ -349,7 +431,7 @@ export function ViewDashboard({
                     <CardContent className="h-[330px] pt-4">
                         {totalComStatus === 0 ? (
                             <div className="flex h-full items-center justify-center text-xs font-mono uppercase text-slate-400">
-                                Nenhum ASO pendente encontrado.
+                                Nenhum ASO encontrado.
                             </div>
                         ) : (
                             <ResponsiveContainer width="100%" height="100%">
@@ -402,7 +484,7 @@ export function ViewDashboard({
                                             fontSize="9"
                                             fontWeight="700"
                                         >
-                                            COM PENDÊNCIA
+                                            ASO'S
                                         </tspan>
                                     </text>
                                     <Tooltip
@@ -535,7 +617,7 @@ export function ViewDashboard({
                                             fontSize="9"
                                             fontWeight="700"
                                         >
-                                            FUNCIONÁRIOS
+                                            ASO'S
                                         </tspan>
                                     </text>
                                     <Tooltip
@@ -560,164 +642,188 @@ export function ViewDashboard({
             {/* =====================================================
                 PRINCIPAIS EXAMES
             ===================================================== */}
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <div
+                className={
+                    filtroTipoExame === "todos"
+                        ? "grid grid-cols-1 xl:grid-cols-2 gap-4"
+                        : "grid grid-cols-1 gap-4"
+                }
+            >
                 {/* CLÍNICOS */}
-                <Card className="border-slate-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
-                    <CardHeader className="border-b border-slate-200 px-5 py-3 dark:border-gray-700">
-                        <CardTitle className="flex items-center gap-2 text-xs font-black uppercase text-slate-700 dark:text-slate-200">
-                            <Stethoscope className="h-4 w-4 text-blue-500" />
-                            Principais exames clínicos
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="h-[390px] pt-4">
-                        {topClinicos.length === 0 ? (
-                            <div className="flex h-full items-center justify-center text-xs font-mono uppercase text-slate-400">
-                                Nenhum exame clínico encontrado.
-                            </div>
-                        ) : (
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart
-                                    data={topClinicos}
-                                    layout="vertical"
-                                    margin={{
-                                        top: 5,
-                                        right: 90,
-                                        left: 10,
-                                        bottom: 5,
-                                    }}
-                                >
-                                    <CartesianGrid
-                                        strokeDasharray="3 3"
-                                        horizontal={false}
-                                        opacity={0.12}
-                                    />
-                                    <XAxis
-                                        type="number"
-                                        allowDecimals={false}
-                                        domain={[0, Math.ceil(maxClinico * 1.25)]}
-                                        tick={{ fontSize: 10 }}
-                                    />
-                                    <YAxis
-                                        dataKey="nome"
-                                        type="category"
-                                        width={190}
-                                        tick={{ fontSize: 9 }}
-                                    />
-                                    <Tooltip
-                                        contentStyle={{
-                                            background: THEME_COLORS.legendBackground,
-                                            border: "none",
-                                            color: "#fff",
-                                            borderRadius: 8,
+                {(filtroTipoExame === "todos" || filtroTipoExame === "clinico") && (
+                    <Card className="border-slate-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                        <CardHeader className="border-b border-slate-200 px-5 py-3 dark:border-gray-700">
+                            <CardTitle className="flex items-center gap-2 text-xs font-black uppercase text-slate-700 dark:text-slate-200">
+                                <Stethoscope className="h-4 w-4 text-blue-500" />
+                                Principais exames clínicos
+                            </CardTitle>
+                        </CardHeader>
+
+                        <CardContent className="h-[390px] pt-4">
+                            {topClinicos.length === 0 ? (
+                                <div className="flex h-full items-center justify-center text-xs font-mono uppercase text-slate-400">
+                                    Nenhum exame clínico encontrado.
+                                </div>
+                            ) : (
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart
+                                        data={topClinicos}
+                                        layout="vertical"
+                                        margin={{
+                                            top: 5,
+                                            right: 90,
+                                            left: 10,
+                                            bottom: 5,
                                         }}
-                                    />
-                                    <Bar
-                                        dataKey="total"
-                                        name="Quantidade"
-                                        fill={THEME_COLORS.primary}
-                                        radius={[0, 5, 5, 0]}
-                                        barSize={17}
                                     >
-                                        <LabelList
-                                            dataKey="total"
-                                            position="right"
-                                            offset={8}
-                                            formatter={(value: any) =>
-                                                `${value} (${formatPercent(
-                                                    Number(value),
-                                                    total
-                                                )})`
-                                            }
-                                            style={{
-                                                fontSize: 10,
-                                                fontWeight: "800",
+                                        <CartesianGrid
+                                            strokeDasharray="3 3"
+                                            horizontal={false}
+                                            opacity={0.12}
+                                        />
+
+                                        <XAxis
+                                            type="number"
+                                            allowDecimals={false}
+                                            domain={[0, Math.ceil(maxClinico * 1.25)]}
+                                            tick={{ fontSize: 10 }}
+                                        />
+
+                                        <YAxis
+                                            dataKey="nome"
+                                            type="category"
+                                            width={190}
+                                            tick={{ fontSize: 9 }}
+                                        />
+
+                                        <Tooltip
+                                            contentStyle={{
+                                                background: THEME_COLORS.legendBackground,
+                                                border: "none",
+                                                color: "#fff",
+                                                borderRadius: 8,
                                             }}
                                         />
-                                    </Bar>
-                                </BarChart>
-                            </ResponsiveContainer>
-                        )}
-                    </CardContent>
-                </Card>
+
+                                        <Bar
+                                            dataKey="total"
+                                            name="Quantidade"
+                                            fill={THEME_COLORS.primary}
+                                            radius={[0, 5, 5, 0]}
+                                            barSize={17}
+                                        >
+                                            <LabelList
+                                                dataKey="total"
+                                                position="right"
+                                                offset={8}
+                                                formatter={(value: any) =>
+                                                    `${value} (${formatPercent(
+                                                        Number(value),
+                                                        total
+                                                    )})`
+                                                }
+                                                style={{
+                                                    fontSize: 10,
+                                                    fontWeight: "800",
+                                                }}
+                                            />
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            )}
+                        </CardContent>
+                    </Card>
+                )}
 
                 {/* COMPLEMENTARES */}
-                <Card className="border-slate-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
-                    <CardHeader className="border-b border-slate-200 px-5 py-3 dark:border-gray-700">
-                        <CardTitle className="flex items-center gap-2 text-xs font-black uppercase text-slate-700 dark:text-slate-200">
-                            <Microscope className="h-4 w-4 text-orange-500" />
-                            Principais exames complementares
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="h-[390px] pt-4">
-                        {topComplementares.length === 0 ? (
-                            <div className="flex h-full items-center justify-center text-xs font-mono uppercase text-slate-400">
-                                Nenhum exame complementar encontrado.
-                            </div>
-                        ) : (
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart
-                                    data={topComplementares}
-                                    layout="vertical"
-                                    margin={{
-                                        top: 5,
-                                        right: 90,
-                                        left: 10,
-                                        bottom: 5,
-                                    }}
-                                >
-                                    <CartesianGrid
-                                        strokeDasharray="3 3"
-                                        horizontal={false}
-                                        opacity={0.12}
-                                    />
-                                    <XAxis
-                                        type="number"
-                                        allowDecimals={false}
-                                        domain={[0, Math.ceil(maxComplementar * 1.25)]}
-                                        tick={{ fontSize: 10 }}
-                                    />
-                                    <YAxis
-                                        dataKey="nome"
-                                        type="category"
-                                        width={190}
-                                        tick={{ fontSize: 9 }}
-                                    />
-                                    <Tooltip
-                                        contentStyle={{
-                                            background: THEME_COLORS.legendBackground,
-                                            border: "none",
-                                            color: "#fff",
-                                            borderRadius: 8,
-                                        }}
-                                    />
-                                    <Bar
-                                        dataKey="total"
-                                        name="Quantidade"
-                                        fill={THEME_COLORS.secondary}
-                                        radius={[0, 5, 5, 0]}
-                                        barSize={17}
-                                    >
-                                        <LabelList
-                                            dataKey="total"
-                                            position="right"
-                                            offset={8}
-                                            formatter={(value: any) =>
-                                                `${value} (${formatPercent(
-                                                    Number(value),
-                                                    total
-                                                )})`
-                                            }
-                                            style={{
-                                                fontSize: 10,
-                                                fontWeight: "800",
+                {(filtroTipoExame === "todos" ||
+                    filtroTipoExame === "complementar") && (
+                        <Card className="border-slate-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                            <CardHeader className="border-b border-slate-200 px-5 py-3 dark:border-gray-700">
+                                <CardTitle className="flex items-center gap-2 text-xs font-black uppercase text-slate-700 dark:text-slate-200">
+                                    <Microscope className="h-4 w-4 text-orange-500" />
+                                    Principais exames complementares
+                                </CardTitle>
+                            </CardHeader>
+
+                            <CardContent className="h-[390px] pt-4">
+                                {topComplementares.length === 0 ? (
+                                    <div className="flex h-full items-center justify-center text-xs font-mono uppercase text-slate-400">
+                                        Nenhum exame complementar encontrado.
+                                    </div>
+                                ) : (
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart
+                                            data={topComplementares}
+                                            layout="vertical"
+                                            margin={{
+                                                top: 5,
+                                                right: 90,
+                                                left: 10,
+                                                bottom: 5,
                                             }}
-                                        />
-                                    </Bar>
-                                </BarChart>
-                            </ResponsiveContainer>
-                        )}
-                    </CardContent>
-                </Card>
+                                        >
+                                            <CartesianGrid
+                                                strokeDasharray="3 3"
+                                                horizontal={false}
+                                                opacity={0.12}
+                                            />
+
+                                            <XAxis
+                                                type="number"
+                                                allowDecimals={false}
+                                                domain={[
+                                                    0,
+                                                    Math.ceil(maxComplementar * 1.25),
+                                                ]}
+                                                tick={{ fontSize: 10 }}
+                                            />
+
+                                            <YAxis
+                                                dataKey="nome"
+                                                type="category"
+                                                width={190}
+                                                tick={{ fontSize: 9 }}
+                                            />
+
+                                            <Tooltip
+                                                contentStyle={{
+                                                    background: THEME_COLORS.legendBackground,
+                                                    border: "none",
+                                                    color: "#fff",
+                                                    borderRadius: 8,
+                                                }}
+                                            />
+
+                                            <Bar
+                                                dataKey="total"
+                                                name="Quantidade"
+                                                fill={THEME_COLORS.secondary}
+                                                radius={[0, 5, 5, 0]}
+                                                barSize={17}
+                                            >
+                                                <LabelList
+                                                    dataKey="total"
+                                                    position="right"
+                                                    offset={8}
+                                                    formatter={(value: any) =>
+                                                        `${value} (${formatPercent(
+                                                            Number(value),
+                                                            total
+                                                        )})`
+                                                    }
+                                                    style={{
+                                                        fontSize: 10,
+                                                        fontWeight: "800",
+                                                    }}
+                                                />
+                                            </Bar>
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                )}
+                            </CardContent>
+                        </Card>
+                    )}
             </div>
         </div>
     );

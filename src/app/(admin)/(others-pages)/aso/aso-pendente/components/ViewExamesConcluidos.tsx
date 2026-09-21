@@ -24,6 +24,7 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import {
+    AlertCircle,
     CheckCircle2,
     Clock3,
     Search,
@@ -36,7 +37,13 @@ import {
 } from "lucide-react";
 import { FuncionarioModal } from "./FuncionarioModal";
 import { ViewExamesConcluidosProps, FuncionarioItem } from "../types";
-import { classificarTipoExame, possuiAsoMontado } from "../utils";
+import {
+    classificarTipoExame,
+    possuiAsoMontado,
+    asoEstaConcluido,
+    obterPrazoAso,
+    calcularStatusVencimentoVisual,
+} from "../utils";
 
 export function ViewExamesConcluidos({
     todosFuncionarios,
@@ -44,6 +51,7 @@ export function ViewExamesConcluidos({
     onFuncionariosSalvos,
     filtroTipoExame,
     unidadeId,
+    prazosMap,
 }: ViewExamesConcluidosProps) {
     const [selectedFuncionario, setSelectedFuncionario] = useState<any | null>(null);
     const [modalOpen, setModalOpen] = useState(false);
@@ -64,57 +72,176 @@ export function ViewExamesConcluidos({
     const [itensPorPagina, setItensPorPagina] = useState(15);
 
     /* ============================================================
-       FUNCIONÁRIOS CONCLUÍDOS (0 EXAMES PENDENTES)
-    ============================================================ */
+   FUNCIONÁRIOS CONCLUÍDOS
+   ============================================================ */
     const funcionariosConcluidos = useMemo(() => {
+
         const lista: FuncionarioItem[] = [];
 
         todosFuncionarios.forEach((item) => {
-            const res = item.socResumo || item;
-            if (!res) return;
+
+            const aso =
+                item.aso ||
+                item.socResumo ||
+                item;
+
+            if (!aso) return;
+
+            /*
+             * A conclusão agora é determinada diretamente
+             * pelas regras dos exames:
+             *
+             * Clínico:
+             *   dataExame
+             *
+             * Complementar:
+             *   dataExame + temRelacao
+             */
+            if (!asoEstaConcluido(item, prazosMap)) {
+                return;
+            }
 
             const cpf = String(
-                res.cpfFuncionario || res.cpf || ""
+                item.cpfFuncionario ||
+                item.cpf ||
+                aso.cpfFuncionario ||
+                aso.cpf ||
+                ""
             ).trim();
 
             if (!cpf) return;
 
-            const pendentesCount = Number(
-                Array.isArray(res.examesPendentes)
-                    ? res.examesPendentes.length
-                    : res.examesPendentes ?? 0
-            );
+            lista.push({
+                ...item,
 
-            if (pendentesCount === 0) {
-                lista.push({
-                    nome: res.nomeFuncionario || res.nome || "Não informado",
-                    cpf,
-                    sequencial_ficha: res.sequencialFicha,
-                    empresa: res.razaoSocial || res.empresa || "-",
-                    codigoEmpresa: res.codigoEmpresa || "-",
-                    codigoGed: res.codigoGed || "-",
-                    dataCriacaoGed: res.dataCriacaoGed || "-",
-                    codigoFuncionario: res.codigoFuncionario || "-",
-                    dataAso: res.dataAso || res.dataPedido || null,
-                    dataFicha: res.dataFicha || res.dataPedido || null,
-                    resultadoAsoSoc: res.resultadoAsoSoc || "Concluído",
-                    medico: res.medico || "Não informado",
-                    crmMedico: res.crmMedico || "-",
-                    observacao: res.observacao || "",
-                    totalExames: Number(res.totalExames || 0),
-                    examesPendentes: 0,
-                    examesConcluidos: Number(
-                        res.examesConcluidos || res.totalExames || 0
+                nome:
+                    item.nomeFuncionario ||
+                    item.nome ||
+                    aso.nomeFuncionario ||
+                    "Não informado",
+
+                nomeFuncionario:
+                    item.nomeFuncionario ||
+                    item.nome ||
+                    aso.nomeFuncionario ||
+                    "Não informado",
+
+                cpf,
+                cpfFuncionario: cpf,
+
+                empresa:
+                    item.razaoSocial ||
+                    item.empresa ||
+                    aso.razaoSocial ||
+                    "-",
+
+                razaoSocial:
+                    item.razaoSocial ||
+                    item.empresa ||
+                    aso.razaoSocial ||
+                    "-",
+
+                codigoEmpresa:
+                    item.codigoEmpresa ||
+                    aso.codigoEmpresa ||
+                    "-",
+
+                codigoFuncionario:
+                    item.codigoFuncionario ||
+                    aso.codigoFuncionario ||
+                    "-",
+
+                codigoGed:
+                    aso.codigoGed ||
+                    item.codigoGed ||
+                    "-",
+
+                dataCriacaoGed:
+                    aso.dataCriacaoGed ||
+                    item.dataCriacaoGed ||
+                    "-",
+
+                sequencial_ficha:
+                    aso.sequencialFicha ||
+                    item.sequencialFicha ||
+                    "-",
+
+                sequencialFicha:
+                    aso.sequencialFicha ||
+                    item.sequencialFicha ||
+                    "-",
+
+                dataAso:
+                    aso.dataAso ||
+                    item.dataAso ||
+                    null,
+
+                dataFicha:
+                    aso.dataFicha ||
+                    item.dataFicha ||
+                    null,
+
+                resultadoAsoSoc:
+                    aso.resultadoAsoSoc ||
+                    item.resultadoAsoSoc ||
+                    "Concluído",
+
+                medico:
+                    aso.medico ||
+                    item.medico ||
+                    "Não informado",
+
+                crmMedico:
+                    aso.crmMedico ||
+                    item.crmMedico ||
+                    "-",
+
+                observacao:
+                    item.observacao || "",
+
+                totalExames:
+                    Number(
+                        aso.totalExames || 0
                     ),
-                    sequencialFicha: res.sequencialFicha || "",
-                    tipoAso: res.tipoAso || "",
-                    listaExamesResumida: res.listaExamesResumida || [],
-                });
-            }
+
+                examesPendentes: 0,
+
+                examesConcluidos:
+                    Number(
+                        aso.examesConcluidos ||
+                        aso.totalExames ||
+                        0
+                    ),
+
+                tipoAso:
+                    aso.tipoAso ||
+                    item.tipoAso ||
+                    "",
+
+                listaExamesResumida:
+                    aso.listaExamesResumida ||
+                    item.listaExamesResumida ||
+                    [],
+
+                aso:
+                    item.aso ||
+                    aso,
+
+                /*
+                 * IMPORTANTE:
+                 * documentosGed pode estar no item ou
+                 * dentro do objeto ASO.
+                 */
+                documentosGed:
+                    item.documentosGed ||
+                    aso.documentosGed ||
+                    [],
+            });
         });
 
         return lista;
-    }, [todosFuncionarios]);
+
+    }, [todosFuncionarios, prazosMap]);
 
     const funcionariosConcluidosFiltrados = useMemo(() => {
         if (filtroTipoExame === "todos") {
@@ -122,9 +249,72 @@ export function ViewExamesConcluidos({
         }
 
         return funcionariosConcluidos.filter((funcionario) => {
-            return classificarTipoExame(funcionario) === filtroTipoExame;
+            return (
+                classificarTipoExame(funcionario, prazosMap) ===
+                filtroTipoExame
+            );
         });
-    }, [funcionariosConcluidos, filtroTipoExame]);
+    }, [
+        funcionariosConcluidos,
+        filtroTipoExame,
+        prazosMap,
+    ]);
+
+    /* ============================================================
+   PRAZO DO ASO
+   Só existe para funcionários já concluídos.
+   ============================================================ */
+    const funcionariosComPrazo = useMemo(() => {
+
+        return funcionariosConcluidosFiltrados.map(
+            (funcionario) => {
+
+                const prazoAso =
+                    obterPrazoAso(
+                        funcionario,
+                        prazosMap
+                    );
+
+                const statusPrazo =
+                    calcularStatusVencimentoVisual(
+                        prazoAso?.dataLimite || null
+                    );
+
+                return {
+                    ...funcionario,
+                    prazoAso,
+                    statusPrazo,
+                };
+            }
+        );
+
+    }, [
+        funcionariosConcluidosFiltrados,
+        prazosMap,
+    ]);
+
+    /* ============================================================
+       INDICADORES DE VENCIMENTO DO ASO
+    ============================================================ */
+    const indicadoresVencimento = useMemo(() => {
+        let vencidos = 0;
+        let noPrazo = 0;
+
+        funcionariosComPrazo.forEach((item: any) => {
+            if (!item.prazoAso) return;
+
+            if (item.statusPrazo?.estaVencido) {
+                vencidos++;
+            } else {
+                noPrazo++;
+            }
+        });
+
+        return {
+            vencidos,
+            noPrazo,
+        };
+    }, [funcionariosComPrazo]);
 
     const isFuncionarioMontado = (funcionario: any) => {
         if (!funcionario) return false;
@@ -140,7 +330,7 @@ export function ViewExamesConcluidos({
     const funcionariosFiltrados = useMemo(() => {
         const termo = busca.trim().toLowerCase();
 
-        const lista = funcionariosConcluidosFiltrados.filter((f) => {
+        const lista = funcionariosComPrazo.filter((f) => {
             const jaMontado = isFuncionarioMontado(f);
 
             // Aba pendentes = somente quem ainda não foi montado
@@ -156,9 +346,9 @@ export function ViewExamesConcluidos({
             if (!termo) return true;
 
             return (
-                String(f.nome || "").toLowerCase().includes(termo) ||
-                String(f.empresa || "").toLowerCase().includes(termo) ||
-                String(f.cpf || "").includes(termo)
+                String(f.nome || f.nomeFuncionario || "").toLowerCase().includes(termo) ||
+                String(f.empresa || f.razaoSocial || "").toLowerCase().includes(termo) ||
+                String(f.cpf || f.cpfFuncionario || "").includes(termo)
             );
         });
 
@@ -179,7 +369,7 @@ export function ViewExamesConcluidos({
 
         return lista;
     }, [
-        funcionariosConcluidosFiltrados,
+        funcionariosComPrazo,
         busca,
         sortKey,
         sortDirection,
@@ -206,7 +396,7 @@ export function ViewExamesConcluidos({
     ============================================================ */
     useEffect(() => {
         setPaginaAtual(1);
-    }, [busca, filtroTipoExame, sortKey, sortDirection, abaAtiva]);
+    }, [busca, filtroTipoExame, sortKey, sortDirection, abaAtiva, prazosMap]);
 
     useEffect(() => {
         if (totalPaginas > 0 && paginaAtual > totalPaginas) {
@@ -316,13 +506,13 @@ export function ViewExamesConcluidos({
                 throw new Error("Erro ao enviar funcionários.");
             }
 
-            // Inserção em lote no Supabase
+            // Inserção em lote no Supabase com novo schema e fallbacks
             const dadosParaInserir = selecionados.map((f) => ({
-                nome_paciente: f.nome,
-                sequencial_ficha: f.sequencial_ficha,
+                nome_paciente: f.nomeFuncionario || f.nome,
+                sequencial_ficha: f.aso?.sequencialFicha || f.sequencial_ficha,
                 codigo_empresa_soc: f.codigoEmpresa,
-                codigo_ged_soc: f.codigoGed,
-                data_criacao_ged_soc: f.dataCriacaoGed,
+                codigo_ged_soc: f.aso?.codigoGed || f.codigoGed,
+                data_criacao_ged_soc: f.aso?.dataCriacaoGed || f.dataCriacaoGed,
                 unidade_id: unidadeId,
             }));
 
@@ -365,7 +555,7 @@ export function ViewExamesConcluidos({
 
     if (funcionariosConcluidosFiltrados.length === 0) {
         return (
-            <div className="flex flex-col items-center justify-center py-20 px-4 bg-white dark:bg-gray-900 rounded-xl border border-dashed border-gray-300 dark:border-gray-700">
+            <div className="flex flex-col items-center justify-center py-20 px-4 bg-white dark:bg-gray-900 rounded-2xl border border-dashed border-gray-300 dark:border-gray-700">
                 <div className="w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center mb-4">
                     <CheckCircle2 className="w-6 h-6 text-emerald-500" />
                 </div>
@@ -387,80 +577,122 @@ export function ViewExamesConcluidos({
         sortKeyValue: string;
     }) => (
         <TableHead
-            className="font-black text-[10px] uppercase text-slate-500 cursor-pointer select-none"
+            className="font-black text-[10px] uppercase text-slate-500 cursor-pointer select-none whitespace-nowrap transition-colors hover:text-slate-800 dark:hover:text-slate-200"
             onClick={() => handleSort(sortKeyValue)}
         >
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5">
                 {label}
                 {sortKey === sortKeyValue ? (
                     sortDirection === "asc" ? (
-                        <ArrowUp className="w-3 h-3" />
+                        <ArrowUp className="w-3 h-3 text-blue-500" />
                     ) : (
-                        <ArrowDown className="w-3 h-3" />
+                        <ArrowDown className="w-3 h-3 text-blue-500" />
                     )
                 ) : (
-                    <ArrowUpDown className="w-3 h-3 opacity-40" />
+                    <ArrowUpDown className="w-3 h-3 opacity-30" />
                 )}
             </div>
         </TableHead>
     );
 
     return (
-        <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden">
+        <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm rounded-2xl overflow-hidden">
             {/* HEADER */}
             <CardHeader className="border-b border-gray-200 dark:border-gray-700 p-4">
                 <div className="flex flex-col gap-4">
+                    {/* TÍTULO + INDICADORES */}
                     <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-                        {/* TÍTULO */}
                         <div>
-                            <CardTitle className="text-sm font-black uppercase text-slate-700 dark:text-slate-200 flex items-center gap-2">
-                                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                            <CardTitle className="text-sm font-black uppercase tracking-wide text-slate-700 dark:text-slate-200 flex items-center gap-2">
+                                <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-500/10">
+                                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                                </span>
                                 Funcionários Concluídos
                             </CardTitle>
-                            <p className="text-[11px] text-slate-400 mt-1">
-                                Gerencie os funcionários prontos ou visualize os que já foram montados.
-                            </p>
+
+                            {/* ABAS */}
+                            <div className="mt-3 flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 shrink-0">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setAbaAtiva("pendentes");
+                                        setSelectedCpfs(new Set());
+                                        setPaginaAtual(1);
+                                    }}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black uppercase transition-all ${abaAtiva === "pendentes"
+                                        ? "bg-white dark:bg-gray-900 text-blue-600 shadow-sm"
+                                        : "text-slate-500 hover:text-slate-700"
+                                        }`}
+                                >
+                                    <Clock3 className="w-3.5 h-3.5" />
+                                    Pendentes
+                                    <span className="px-1.5 py-0.5 rounded-full bg-blue-500/10">
+                                        {quantidadePendentes}
+                                    </span>
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setAbaAtiva("salvos");
+                                        setSelectedCpfs(new Set());
+                                        setPaginaAtual(1);
+                                    }}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black uppercase transition-all ${abaAtiva === "salvos"
+                                        ? "bg-white dark:bg-gray-900 text-emerald-600 shadow-sm"
+                                        : "text-slate-500 hover:text-slate-700"
+                                        }`}
+                                >
+                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                    Montados
+                                    <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/10">
+                                        {quantidadeSalvos}
+                                    </span>
+                                </button>
+                            </div>
                         </div>
 
-                        {/* ABAS */}
-                        <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 shrink-0">
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setAbaAtiva("pendentes");
-                                    setSelectedCpfs(new Set());
-                                    setPaginaAtual(1);
-                                }}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black uppercase transition-all ${abaAtiva === "pendentes"
-                                    ? "bg-white dark:bg-gray-900 text-blue-600 shadow-sm"
-                                    : "text-slate-500 hover:text-slate-700"
-                                    }`}
-                            >
-                                <Clock3 className="w-3.5 h-3.5" />
-                                Pendentes
-                                <span className="px-1.5 py-0.5 rounded-full bg-blue-500/10">
-                                    {quantidadePendentes}
+                        {/* INDICADORES DE VENCIMENTO DO ASO */}
+                        <div className="flex flex-row justify-center gap-3">
+                            {/* ASOS VENCIDOS */}
+                            <div className="flex items-center justify-between gap-3 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-red-500/10">
+                                        <AlertCircle className="w-5 h-5 text-red-500" />
+                                    </div>
+                                    <div>
+                                        <div className="text-[9px] uppercase font-bold tracking-wide text-slate-400">
+                                            ASOs Vencidos
+                                        </div>
+                                        <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                                            Prazo expirado
+                                        </div>
+                                    </div>
+                                </div>
+                                <span className="text-2xl font-black text-red-500">
+                                    {indicadoresVencimento.vencidos}
                                 </span>
-                            </button>
+                            </div>
 
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setAbaAtiva("salvos");
-                                    setSelectedCpfs(new Set());
-                                    setPaginaAtual(1);
-                                }}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black uppercase transition-all ${abaAtiva === "salvos"
-                                    ? "bg-white dark:bg-gray-900 text-emerald-600 shadow-sm"
-                                    : "text-slate-500 hover:text-slate-700"
-                                    }`}
-                            >
-                                <CheckCircle2 className="w-3.5 h-3.5" />
-                                Montados
-                                <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/10">
-                                    {quantidadeSalvos}
+                            {/* ASOS NO PRAZO */}
+                            <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-emerald-500/10">
+                                        <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                                    </div>
+                                    <div>
+                                        <div className="text-[9px] uppercase font-bold tracking-wide text-slate-400">
+                                            ASOs no Prazo
+                                        </div>
+                                        <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                                            Dentro do prazo
+                                        </div>
+                                    </div>
+                                </div>
+                                <span className="text-2xl font-black text-emerald-500">
+                                    {indicadoresVencimento.noPrazo}
                                 </span>
-                            </button>
+                            </div>
                         </div>
 
                         {/* LINHA DE AÇÕES */}
@@ -516,6 +748,12 @@ export function ViewExamesConcluidos({
                             )}
                         </div>
                     </div>
+
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+
+
+
+                    </div>
                 </div>
             </CardHeader>
 
@@ -535,20 +773,31 @@ export function ViewExamesConcluidos({
                             </TableHead>
 
                             <SortHeader label="Funcionário" sortKeyValue="nome" />
-                            <SortHeader label="CPF" sortKeyValue="cpf" />
                             <SortHeader label="Empresa / Unidade" sortKeyValue="empresa" />
+                            <SortHeader label="Médico Examinador" sortKeyValue="medico" />
+                            <SortHeader label="Seq. Ficha" sortKeyValue="sequencialFicha" />
                             <SortHeader label="Data Ficha" sortKeyValue="dataFicha" />
-                            <SortHeader label="Exames" sortKeyValue="examesConcluidos" />
+                            <SortHeader
+                                label="Prazo ASO"
+                                sortKeyValue="prazoAso"
+                            />
+
+                            <SortHeader
+                                label="Vencimento"
+                                sortKeyValue="dataLimite"
+                            />
+
+                            {/* <SortHeader label="Exames" sortKeyValue="examesConcluidos" /> */}
                             <SortHeader label="Observação" sortKeyValue="observacao" />
                             <SortHeader label="Status" sortKeyValue="resultadoAsoSoc" />
                         </TableRow>
                     </TableHeader>
 
-                    <TableBody>
+                    <TableBody className="divide-y divide-slate-100 dark:divide-slate-800">
                         {funcionariosPaginados.length === 0 ? (
                             <TableRow>
                                 <TableCell
-                                    colSpan={8}
+                                    colSpan={11}
                                     className="text-center py-8 text-xs text-slate-400"
                                 >
                                     {abaAtiva === "pendentes"
@@ -564,7 +813,7 @@ export function ViewExamesConcluidos({
                                 return (
                                     <TableRow
                                         key={item.cpf}
-                                        className={`transition-all border-b dark:border-gray-800 ${jaMontado
+                                        className={`transition-colors ${jaMontado
                                             ? "bg-emerald-500/[0.05] hover:bg-emerald-500/[0.08]"
                                             : isSelected
                                                 ? "bg-blue-500/[0.06] hover:bg-blue-500/[0.09]"
@@ -634,11 +883,6 @@ export function ViewExamesConcluidos({
                                             </button>
                                         </TableCell>
 
-                                        {/* CPF */}
-                                        <TableCell className="text-xs font-mono text-slate-500">
-                                            {item.cpf}
-                                        </TableCell>
-
                                         {/* EMPRESA */}
                                         <TableCell className="text-xs text-slate-600 dark:text-slate-400">
                                             <div
@@ -649,14 +893,88 @@ export function ViewExamesConcluidos({
                                             </div>
                                         </TableCell>
 
+                                        {/* MÉDICO EXAMINADOR */}
+                                        <TableCell className="text-xs text-slate-600 dark:text-slate-400">
+                                            <div
+                                                className="max-w-[180px] truncate"
+                                                title={item.medico || "Não informado"}
+                                            >
+                                                {item.medico || "Não informado"}
+                                            </div>
+                                        </TableCell>
+
+                                        {/* SEQ. FICHA */}
+                                        <TableCell className="text-xs font-mono text-slate-500">
+                                            {item.sequencialFicha || item.sequencial_ficha || "-"}
+                                        </TableCell>
+
                                         {/* DATA */}
                                         <TableCell className="text-xs font-mono text-slate-500">
                                             {item.dataFicha || "-"}
                                         </TableCell>
 
-                                        {/* EXAMES */}
+                                        {/* PRAZO ASO */}
                                         <TableCell>
-                                            <div className="flex items-center gap-1.5">
+                                            {item.prazoAso ? (
+                                                <div className="flex flex-col gap-0.5">
+                                                    <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                                                        {item.prazoAso.maiorPrazo}{" "}
+                                                        {item.prazoAso.maiorPrazo === 1
+                                                            ? "dia útil"
+                                                            : "dias úteis"}
+                                                    </span>
+
+                                                    <span className="text-[9px] text-slate-400">
+                                                        Base:{" "}
+                                                        {item.prazoAso.dataBase.toLocaleDateString(
+                                                            "pt-BR"
+                                                        )}
+                                                    </span>
+                                                </div>
+                                            ) : (
+                                                <span className="text-xs text-slate-400">
+                                                    Sem prazo
+                                                </span>
+                                            )}
+                                        </TableCell>
+
+                                        {/* VENCIMENTO */}
+                                        <TableCell>
+                                            <Badge
+                                                variant="outline"
+                                                className={`text-[10px] font-bold gap-1 rounded-full ${item.statusPrazo.color}`}
+                                            >
+                                                {item.statusPrazo.estaVencido ? (
+                                                    <Clock3 className="w-3 h-3" />
+                                                ) : (
+                                                    <CheckCircle2 className="w-3 h-3" />
+                                                )}
+
+                                                {item.statusPrazo.label}
+                                            </Badge>
+
+                                            {item.prazoAso && (
+                                                <div className="text-[9px] text-slate-400 mt-1">
+                                                    Limite:{" "}
+                                                    {item.prazoAso.dataLimite.toLocaleDateString(
+                                                        "pt-BR"
+                                                    )}
+                                                </div>
+                                            )}
+                                        </TableCell>
+
+                                        {/* EXAMES */}
+                                        {/* <TableCell>
+                                            <div
+                                                className="flex items-center gap-1.5"
+                                                title={(item.aso?.listaExamesResumida || item.listaExamesResumida || [])
+                                                    .map(
+                                                        (e: any) =>
+                                                            `${e?.descricaoExame || e?.nomeExame || e?.nome || "Exame"}: ${e?.dataExame || "-"
+                                                            }`
+                                                    )
+                                                    .join("\n")}
+                                            >
                                                 <span
                                                     className={`text-xs font-bold ${jaMontado
                                                         ? "text-emerald-600 dark:text-emerald-400"
@@ -672,7 +990,7 @@ export function ViewExamesConcluidos({
                                                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 ml-1" />
                                                 )}
                                             </div>
-                                        </TableCell>
+                                        </TableCell> */}
 
                                         {/* OBSERVAÇÃO */}
                                         <TableCell className="text-xs">
@@ -684,7 +1002,7 @@ export function ViewExamesConcluidos({
                                             {jaMontado ? (
                                                 <Badge
                                                     variant="outline"
-                                                    className="text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 gap-1"
+                                                    className="text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 gap-1 rounded-full"
                                                 >
                                                     <CheckCircle2 className="w-3 h-3" />
                                                     ASO MONTADO
@@ -692,10 +1010,10 @@ export function ViewExamesConcluidos({
                                             ) : (
                                                 <Badge
                                                     variant="outline"
-                                                    className="text-[10px] font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 gap-1"
+                                                    className="text-[10px] font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 gap-1 rounded-full"
                                                 >
                                                     <Clock3 className="w-3 h-3" />
-                                                    PRONTO PARA MONTAGEM
+                                                    PRONTO
                                                 </Badge>
                                             )}
                                         </TableCell>

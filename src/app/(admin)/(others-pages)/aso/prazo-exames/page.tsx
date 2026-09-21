@@ -18,7 +18,7 @@ import {
 import { Download, Upload, Clock, RefreshCw, Plus, Pencil, Trash2 } from "lucide-react";
 
 import { PrazoExame } from "./types";
-import { normalizarNomeExame } from "./utils";
+import { normalizarNomeExame, normalizarTipoFiltro } from "./utils";
 import { PrazoExameModal } from "./components/PrazoExameModal";
 
 export default function PrazosAsoPage() {
@@ -33,7 +33,8 @@ export default function PrazosAsoPage() {
     const [selectedItem, setSelectedItem] = useState<PrazoExame | null>(null);
     const [nomeExame, setNomeExame] = useState("");
     const [prazoDias, setPrazoDias] = useState<number | "">(0);
-
+    const [tipoFiltro, setTipoFiltro] = useState("");
+    const [ignorarExame, setIgnorarExame] = useState(false)
     // Carrega o contexto do usuário (unidade_id)
     useEffect(() => {
         const fetchUserContext = async () => {
@@ -85,6 +86,7 @@ export default function PrazosAsoPage() {
         setSelectedItem(null);
         setNomeExame("");
         setPrazoDias(0);
+        setIgnorarExame(false)
         setIsDialogOpen(true);
     };
 
@@ -93,6 +95,8 @@ export default function PrazosAsoPage() {
         setSelectedItem(item);
         setNomeExame(item.nome_exame);
         setPrazoDias(item.prazo_dias);
+        setTipoFiltro(item.tipo_filtro || "");
+        setIgnorarExame(item.ignorar_exame || false);
         setIsDialogOpen(true);
     };
 
@@ -119,6 +123,8 @@ export default function PrazosAsoPage() {
                 unidade_id: unidadeId,
                 nome_exame: nomeExameNormalizado,
                 prazo_dias: Number(prazoDias) || 0,
+                tipo_filtro: tipoFiltro,
+                ignorar_exame: ignorarExame,
                 updated_at: new Date().toISOString(),
             };
 
@@ -178,26 +184,37 @@ export default function PrazosAsoPage() {
 
     // Gerar e baixar modelo Excel de Exemplo
     const handleDownloadModelo = () => {
-        const dadosModelo = [
-            { "Nome do Exame": "Audiometria", "Prazo (Dias)": 2 },
-            { "Nome do Exame": "Hemograma Completo", "Prazo (Dias)": 3 },
-            { "Nome do Exame": "Raio X de Tórax", "Prazo (Dias)": 5 },
-            { "Nome do Exame": "Eletrocardiograma (ECG)", "Prazo (Dias)": 2 },
-            { "Nome do Exame": "Exame Clínico (ASO)", "Prazo (Dias)": 1 },
-        ];
-
+        const dadosModelo = prazos.map((item) => ({
+            "Nome do Exame": item.nome_exame,
+            "Prazo (Dias)": item.prazo_dias,
+            "Tipo Filtro": item.tipo_filtro === "clinico" || item.tipo_filtro === "complementar" ? item.tipo_filtro : "",
+            "Ignorar Exame": item.ignorar_exame ? "Sim" : "Não",
+        }));
         const worksheet = XLSX.utils.json_to_sheet(dadosModelo);
         const workbook = XLSX.utils.book_new();
+
         XLSX.utils.book_append_sheet(workbook, worksheet, "Prazos_ASO");
 
-        worksheet["!cols"] = [{ wch: 35 }, { wch: 15 }];
+        worksheet["!cols"] = [
+            { wch: 35 },
+            { wch: 15 },
+            { wch: 18 },
+            { wch: 30 },
+        ];
 
         XLSX.writeFile(workbook, "Modelo_Importacao_Prazos_ASO.xlsx");
-        toast.success("Modelo baixado com sucesso!");
+
+        toast.success(
+            dadosModelo.length > 0
+                ? "Modelo gerado com os prazos cadastrados!"
+                : "Modelo vazio gerado com sucesso!"
+        );
     };
 
     // Importar planilha Excel
-    const handleImportExcel = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const handleImportExcel = async (
+        event: React.ChangeEvent<HTMLInputElement>
+    ) => {
         const file = event.target.files?.[0];
         if (!file) return;
 
@@ -207,6 +224,7 @@ export default function PrazosAsoPage() {
         }
 
         setLoading(true);
+
         try {
             const dataBuffer = await file.arrayBuffer();
             const workbook = XLSX.read(dataBuffer);
@@ -216,43 +234,84 @@ export default function PrazosAsoPage() {
 
             if (rows.length === 0) {
                 toast.warning("A planilha selecionada está vazia.");
-                setLoading(false);
                 return;
             }
 
             const payloadBruto = rows
-                .map((row) => ({
-                    unidade_id: unidadeId,
-                    nome_exame: normalizarNomeExame(
-                        row["Nome do Exame"] || row["nome_exame"] || ""
-                    ),
-                    prazo_dias: Number(
-                        row["Prazo (Dias)"] || row["prazo_dias"] || 0
-                    ),
-                    updated_at: new Date().toISOString(),
-                }))
+                .map((row, index) => {
+                    const linhaExcel = index + 2;
+
+                    const tipoFiltro = normalizarTipoFiltro(
+                        row["Tipo Filtro"] ?? row["tipo_filtro"] ?? ""
+                    );
+
+                    const ignorarExameRaw = String(
+                        row["Ignorar Exame"] ?? row["ignorar_exame"] ?? ""
+                    ).trim().toLowerCase();
+                    const ignorarExameValor = ["sim", "true", "1"].includes(ignorarExameRaw);
+
+                    return {
+                        linhaExcel,
+                        unidade_id: unidadeId,
+                        nome_exame: normalizarNomeExame(row["Nome do Exame"] || row["nome_exame"] || ""),
+                        prazo_dias: Number(row["Prazo (Dias)"] || row["prazo_dias"] || 0),
+                        tipo_filtro: tipoFiltro,
+                        ignorar_exame: ignorarExameValor,
+                        updated_at: new Date().toISOString(),
+                    };
+                })
                 .filter((item) => item.nome_exame !== "");
 
-            const mapaExames = new Map<string, (typeof payloadBruto)[number]>();
+            // ============================================================
+            // VALIDAÇÃO DO TIPO DE FILTRO
+            // ============================================================
 
-            for (const item of payloadBruto) {
-                const chave = `${item.unidade_id}|${item.nome_exame}`;
-                mapaExames.set(chave, item);
+            const tiposPermitidos = ["clinico", "complementar", ""];
+
+            const linhasInvalidas = payloadBruto.filter(
+                (item) => !tiposPermitidos.includes(item.tipo_filtro)
+            );
+
+            if (linhasInvalidas.length > 0) {
+                const detalhes = linhasInvalidas
+                    .map(
+                        (item) =>
+                            `• Linha ${item.linhaExcel}: ${item.tipo_filtro || "(vazio)"
+                            } → permitido: clinico, complementar ou vazio`
+                    )
+                    .join("\n");
+
+                toast.error(
+                    `Não foi possível importar a planilha.\n\n` +
+                    `Existem tipos de filtro inválidos:\n\n${detalhes}`,
+                    {
+                        duration: 10000,
+                    }
+                );
+
+                return;
             }
 
-            const payload = Array.from(mapaExames.values());
+            // ============================================================
+            // REMOVE A LINHA AUXILIAR ANTES DO ENVIO AO SUPABASE
+            // ============================================================
+
+            const payload = payloadBruto.map(
+                ({ linhaExcel, ...item }) => item
+            );
 
             if (payload.length === 0) {
                 toast.error(
                     "Formato inválido. Certifique-se de usar a coluna 'Nome do Exame'."
                 );
-                setLoading(false);
                 return;
             }
 
             const { error } = await supabase
                 .from("prazos_exames")
-                .upsert(payload, { onConflict: "unidade_id,nome_exame" });
+                .upsert(payload, {
+                    onConflict: "unidade_id,nome_exame",
+                });
 
             if (error) {
                 console.error(error);
@@ -261,6 +320,7 @@ export default function PrazosAsoPage() {
                 toast.success(
                     `${payload.length} prazos importados/atualizados com sucesso!`
                 );
+
                 fetchPrazos();
             }
         } catch (err) {
@@ -268,10 +328,12 @@ export default function PrazosAsoPage() {
             toast.error("Erro ao processar arquivo Excel.");
         } finally {
             setLoading(false);
-            if (fileInputRef.current) fileInputRef.current.value = "";
+
+            if (fileInputRef.current) {
+                fileInputRef.current.value = "";
+            }
         }
     };
-
     return (
         <div className="min-h-fit mt-2 space-y-4 bg-gray-500/20 rounded-xl p-2">
             <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gray-900 p-4 rounded-xl border border-gray-800 shadow-lg">
@@ -357,6 +419,12 @@ export default function PrazosAsoPage() {
                                 <TableHead className="font-bold text-xs uppercase text-right">
                                     Prazo p/ ASO (Dias)
                                 </TableHead>
+                                <TableHead className="font-bold text-xs uppercase text-right">
+                                    Tipo Filtro
+                                </TableHead>
+                                <TableHead className="font-bold text-xs uppercase text-right">
+                                    Ignorar Exame
+                                </TableHead>
                                 <TableHead className="font-bold text-xs uppercase text-right w-24">
                                     Ações
                                 </TableHead>
@@ -383,6 +451,12 @@ export default function PrazosAsoPage() {
                                         </TableCell>
                                         <TableCell className="text-sm text-right font-bold text-blue-500">
                                             {item.prazo_dias} dia(s)
+                                        </TableCell>
+                                        <TableCell className="font-medium text-right text-sm text-slate-800 dark:text-slate-200s">
+                                            {item.tipo_filtro}
+                                        </TableCell>
+                                        <TableCell className="font-medium text-right text-sm text-slate-800 dark:text-slate-200s">
+                                            {item.ignorar_exame ? "Sim" : "Não"}
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <div className="flex items-center justify-end gap-1">
@@ -420,9 +494,13 @@ export default function PrazosAsoPage() {
                 selectedItem={selectedItem}
                 nomeExame={nomeExame}
                 prazoDias={prazoDias}
+                tipo_filtro={tipoFiltro}
+                ignorar_exame={ignorarExame}
                 saving={saving}
                 onNomeExameChange={setNomeExame}
                 onPrazoDiasChange={setPrazoDias}
+                onTipoFiltroChange={setTipoFiltro}
+                onIgnorarExameChange={setIgnorarExame}
                 onClose={() => setIsDialogOpen(false)}
                 onSave={handleSaveManual}
             />

@@ -24,3 +24,12 @@ export const normalizarNomeExame = (valor: unknown): string => {
     // Primeira letra maiúscula + restante minúsculo
     return texto.charAt(0).toUpperCase() + texto.slice(1).toLowerCase();
 };
+
+export const normalizarTipoFiltro = (valor: unknown) => {
+    return String(valor || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/\./g, "")
+        .trim()
+        .toLowerCase();
+};

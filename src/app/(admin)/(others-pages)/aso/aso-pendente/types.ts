@@ -10,35 +10,89 @@ export interface ExameResumido {
     dataExame?: string;
 }
 
-export interface FuncionarioItem {
-    id?: string;
-    cpf?: string;
-    cpfFuncionario?: string;
-    nome?: string;
-    nomeFuncionario?: string;
-    empresa?: string;
-    razaoSocial?: string;
+export interface ArquivoGed {
+    codigoArquivo?: string;
+    nomeArquivo?: string;
+    codigoTipoGed?: string;
+    assinadoDigitalmente?: string;
+    dataUpload?: string;
+    horaUpload?: string;
+    dataAssinaturaDigital?: string;
+    horaAssinaturaDigital?: string;
+    exameRelacao?: string[];
+    criadoSocnet?: string;
+    [key: string]: any;
+}
+
+export interface DocumentoGed {
     codigoEmpresa?: string;
-    codigoGed?: string;
+    codigoUnidade?: string;
+    unidade?: string;
+    codigoGed: string;
+    nomeGed: string;
     codigoFuncionario?: string;
-    dataAso?: string | null;
-    dataPedido?: string | null;
-    dataFicha?: string | null;
+    nomeFuncionario?: string;
+    cpfFuncionario?: string;
+    matriculaFuncionario?: string;
+    dataFicha?: string;
+    tipoFicha?: string;
+    sequencialFicha?: string;
+    dataEmissao?: string;
+    dataValidade?: string;
+    observacao?: string;
+    arquivos?: (ArquivoGed | string)[];
+    [key: string]: any;
+}
+
+export interface Aso {
+    codigoGed?: string;
+    dataCriacaoGed?: string;
+    sequencialFicha?: string;
+    dataAso?: string;
+    dataFicha?: string;
+    tipoAso?: string;
     resultadoAsoSoc?: string;
     medico?: string;
     crmMedico?: string;
-    observacao?: string;
     totalExames?: number;
-    examesPendentes?: number | string[] | any[];
+    examesPendentes?: number;
     examesConcluidos?: number;
-    sequencialFicha?: string;
-    sequencial_ficha?: string;
-    tipoAso?: string;
-    unidade?: string;
-    listaExamesResumida?: (ExameResumido | string | any)[];
-    socResumo?: any;
+    listaExamesResumida?: ExameResumido[];
     [key: string]: any;
 }
+
+export interface Funcionario {
+    jobId?: string;
+    socStatus?: string;
+    codigoEmpresa?: string;
+    codigoFuncionario?: string;
+    nomeFuncionario?: string;
+    cpfFuncionario?: string;
+    razaoSocial?: string;
+    observacao?: string;
+    aso?: Aso;
+    documentosGed?: DocumentoGed[];
+    // Propriades legadas/compatibilidade se necessário
+    id?: string;
+    cpf?: string;
+    nome?: string;
+    empresa?: string;
+    [key: string]: any;
+}
+
+export interface Analytics {
+    totalFuncionarios?: number;
+    totalExames?: number;
+    totalExamesPendentes?: number;
+    totalExamesConcluidos?: number;
+    mediaExamesPorFuncionario?: number;
+    quantidadePorTipoExame?: Record<string, number>;
+    distribuicaoStatusAso?: Record<string, number>;
+    funcionariosComExamesPendentes?: any[];
+    [key: string]: any;
+}
+
+export type FuncionarioItem = Funcionario;
 
 export interface StatusVencimentoVisual {
     label: string;
@@ -52,25 +106,35 @@ export interface FuncionarioPendenteProcessado extends FuncionarioItem {
     statusVencimento: StatusVencimentoVisual;
 }
 
-export type PrazosMap = Record<string, number>;
+export type PrazosMap = Record<
+    string,
+    {
+        prazo_dias: number;
+        tipo_filtro: "clinico" | "complementar" | "";
+        ignorar_exame: boolean;
+    }
+>;
 
 export interface ViewExamesPendentesProps {
-    analytics: any;
-    todosFuncionarios: any[];
+    analytics: Analytics | null | undefined;
+    todosFuncionarios: Funcionario[];
     filtroTipoExame: FiltroTipoExame;
+    prazosMap: PrazosMap;
+
 }
 
 export interface ViewExamesConcluidosProps {
-    todosFuncionarios: any[];
+    todosFuncionarios: Funcionario[];
     funcionariosSalvos: Set<string>;
     onFuncionariosSalvos: (cpfs: string[]) => void;
     filtroTipoExame: FiltroTipoExame;
     unidadeId: string;
+    prazosMap: PrazosMap;
 }
 
 export interface ViewDashboardProps {
-    analytics: any;
-    todosFuncionarios: any[];
+    analytics: Analytics | null | undefined;
+    todosFuncionarios: Funcionario[];
     filtroTipoExame: FiltroTipoExame;
     prazosMap: PrazosMap;
 }
@@ -78,5 +142,6 @@ export interface ViewDashboardProps {
 export interface FuncionarioModalProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    funcionario: any;
+    funcionario: Funcionario | null;
 }
+

@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
     Table,
     TableBody,
@@ -23,13 +24,13 @@ import {
     Signature,
     Search,
     ArrowUpDown,
-    CheckCircle2,
     Send,
     FileCheck2,
     FileClock,
     FileWarning,
     X,
     MailCheck,
+    CheckSquare,
 } from "lucide-react";
 
 import {
@@ -60,6 +61,9 @@ export default function AssinaturaAsoPage() {
         coluna: "created_at",
         direcao: "desc",
     });
+
+    // Estado para seleção em massa
+    const [selecionadosEmMassa, setSelecionadosEmMassa] = useState<string[]>([]);
 
     const [tipoConfirmacao, setTipoConfirmacao] = useState<TipoConfirmacao>(null);
     const confirmModalOpen = tipoConfirmacao !== null;
@@ -110,6 +114,7 @@ export default function AssinaturaAsoPage() {
             toast.error("Erro ao carregar pacientes.");
         } else {
             setPacientes(data || []);
+            setSelecionadosEmMassa([]); // Reseta seleção
         }
         setLoading(false);
     }, [unidadeId]);
@@ -155,125 +160,6 @@ export default function AssinaturaAsoPage() {
         setItemSelecionado(null);
     };
 
-    async function enviarAcaoAso(
-        paciente: Pacientes,
-        acao: "ASSINADO" | "PENDENCIA" | "ENVIADO",
-        observacao?: string
-    ) {
-        if (acao === "ENVIADO") {
-            return;
-        }
-
-        const response = await fetch("/api/enviar-asos-concluidos", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                selecionados: [
-                    {
-                        paciente,
-                        acao,
-                        observacao: observacao || null,
-                    },
-                ],
-            }),
-        });
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error("Erro na API:", errorText);
-            throw new Error("Falha ao notificar a API");
-        }
-
-        return response.json();
-    }
-
-    const registrarAcao = async (
-        acao: "ASSINADO" | "PENDENCIA" | "ENVIADO",
-        observacao?: string
-    ) => {
-        if (!itemSelecionado?.id) return;
-
-        const payload: Partial<Pacientes> = { acao };
-        if (observacao) payload.observacao = observacao;
-
-        const { error } = await supabase
-            .from("pacientes_assinatura")
-            .update(payload)
-            .eq("id", itemSelecionado.id);
-
-        if (error) throw error;
-
-        setPacientes((prev) =>
-            prev.map((p) =>
-                p.id === itemSelecionado.id ? { ...p, ...payload } : p
-            )
-        );
-    };
-
-    const confirmarAcao = async () => {
-        if (!itemSelecionado?.id || !tipoConfirmacao) return;
-
-        const acao = tipoConfirmacao === "ASSINATURA" ? "ASSINADO" : "ENVIADO";
-
-        setEnviando(true);
-        try {
-            await enviarAcaoAso(itemSelecionado, acao);
-            await registrarAcao(acao);
-
-            toast.success(
-                acao === "ASSINADO"
-                    ? "ASO marcado como assinado."
-                    : "ASO marcado como enviado."
-            );
-            fecharConfirmModal();
-        } catch (err) {
-            console.error(err);
-            toast.error("Erro ao registrar a ação do ASO.");
-        } finally {
-            setEnviando(false);
-        }
-    };
-
-    const confirmarPendencia = async () => {
-        if (!itemSelecionado?.id) return;
-
-        if (!justificativa.trim()) {
-            toast.warning("Informe a justificativa da pendência.");
-            return;
-        }
-
-        setEnviando(true);
-        try {
-            await enviarAcaoAso(itemSelecionado, "PENDENCIA", justificativa.trim());
-            await registrarAcao("PENDENCIA", justificativa.trim());
-
-            toast.success("Pendência registrada.");
-            setPendenciaOpen(false);
-            setItemSelecionado(null);
-            setJustificativa("");
-        } catch (err) {
-            console.error(err);
-            toast.error("Erro ao registrar a pendência do ASO.");
-        } finally {
-            setEnviando(false);
-        }
-    };
-
-    const handleCopy = (text: string) => {
-        navigator.clipboard.writeText(text);
-        toast.success("Copiado!");
-    };
-
-    const handleSort = (coluna: keyof Pacientes) => {
-        setOrdenacao((prev) => ({
-            coluna,
-            direcao:
-                prev.coluna === coluna && prev.direcao === "asc" ? "desc" : "asc",
-        }));
-    };
-
     // Filtro e Ordenação combinados
     const dadosProcessados = useMemo(() => {
         let lista = [...pacientes];
@@ -310,6 +196,163 @@ export default function AssinaturaAsoPage() {
         });
     }, [pacientes, busca, filtroStatus, ordenacao]);
 
+    // Pacientes elegíveis para envio em massa na lista atual
+    const elegiveisParaEnvio = useMemo(() => {
+        return dadosProcessados.filter((p) => p.acao === "ASSINADO");
+    }, [dadosProcessados]);
+
+    // Lógica para Seleção em Massa
+    const toggleSelectAll = () => {
+        const idsElegiveis = elegiveisParaEnvio.map((p) => p.id);
+        const todosSelecionados = idsElegiveis.every((id: string | undefined) => selecionadosEmMassa.includes(id as string));
+
+        if (todosSelecionados) {
+            setSelecionadosEmMassa((prev: string[]) => prev.filter((id: string) => !idsElegiveis.includes(id)));
+        } else {
+            setSelecionadosEmMassa((prev: any) => Array.from(new Set([...prev, ...idsElegiveis])));
+        }
+    };
+
+    const toggleSelectItem = (id: string) => {
+        setSelecionadosEmMassa((prev: string[]) =>
+            prev.includes(id) ? prev.filter((i: string) => i !== id) : [...prev, id]
+        );
+    };
+
+    async function enviarAcaoAso(
+        pacientesParaEnviar: Pacientes[],
+        acao: "ASSINADO" | "PENDENCIA" | "ENVIADO",
+        observacao?: string
+    ) {
+        const response = await fetch("/api/enviar-asos-concluidos", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                selecionados: pacientesParaEnviar.map((p) => ({
+                    paciente: p,
+                    acao,
+                    observacao: observacao || null,
+                })),
+            }),
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error("Erro na API:", errorText);
+            throw new Error("Falha ao notificar a API");
+        }
+
+        return response.json();
+    }
+
+    const registrarAcao = async (
+        ids: string[],
+        acao: "ASSINADO" | "PENDENCIA" | "ENVIADO",
+        observacao?: string
+    ) => {
+        const payload: Partial<Pacientes> = { acao };
+        if (observacao) payload.observacao = observacao;
+
+        const { error } = await supabase
+            .from("pacientes_assinatura")
+            .update(payload)
+            .in("id", ids);
+
+        if (error) throw error;
+
+        setPacientes((prev: any) =>
+            prev.map((p: any) => (ids.includes(p.id) ? { ...p, ...payload } : p))
+        );
+    };
+
+    // Confirmar Ação Individual
+    const confirmarAcao = async () => {
+        if (!itemSelecionado?.id || !tipoConfirmacao) return;
+
+        const acao = tipoConfirmacao === "ASSINATURA" ? "ASSINADO" : "ENVIADO";
+
+        setEnviando(true);
+        try {
+            await enviarAcaoAso([itemSelecionado], acao);
+            await registrarAcao([itemSelecionado.id], acao);
+
+            toast.success(
+                acao === "ASSINADO"
+                    ? "ASO assinado!"
+                    : "ASO enviado!"
+            );
+            fecharConfirmModal();
+        } catch (err) {
+            console.error(err);
+            toast.error("Erro ao registrar a ação do ASO.");
+        } finally {
+            setEnviando(false);
+        }
+    };
+
+    // Confirmar Envio em Massa
+    const enviarEmMassa = async () => {
+        if (selecionadosEmMassa.length === 0) return;
+
+        const itensParaEnviar = pacientes.filter((p: any) =>
+            selecionadosEmMassa.includes(p.id)
+        );
+
+        setEnviando(true);
+        try {
+            await enviarAcaoAso(itensParaEnviar, "ENVIADO");
+            await registrarAcao(selecionadosEmMassa, "ENVIADO");
+
+            toast.success(`${selecionadosEmMassa.length} ASO(s) enviados com sucesso!`);
+            setSelecionadosEmMassa([]);
+        } catch (err) {
+            console.error(err);
+            toast.error("Erro ao realizar o envio em massa dos ASOs.");
+        } finally {
+            setEnviando(false);
+        }
+    };
+
+    const confirmarPendencia = async () => {
+        if (!itemSelecionado?.id) return;
+
+        if (!justificativa.trim()) {
+            toast.warning("Informe a justificativa da pendência.");
+            return;
+        }
+
+        setEnviando(true);
+        try {
+            await enviarAcaoAso([itemSelecionado], "PENDENCIA", justificativa.trim());
+            await registrarAcao([itemSelecionado.id], "PENDENCIA", justificativa.trim());
+
+            toast.success("Pendência registrada e empresa notificada!");
+            setPendenciaOpen(false);
+            setItemSelecionado(null);
+            setJustificativa("");
+        } catch (err) {
+            console.error(err);
+            toast.error("Erro ao registrar a pendência do ASO.");
+        } finally {
+            setEnviando(false);
+        }
+    };
+
+    const handleCopy = (text: string) => {
+        navigator.clipboard.writeText(text);
+        toast.success("Copiado!");
+    };
+
+    const handleSort = (coluna: keyof Pacientes) => {
+        setOrdenacao((prev) => ({
+            coluna,
+            direcao:
+                prev.coluna === coluna && prev.direcao === "asc" ? "desc" : "asc",
+        }));
+    };
+
     const ThOrdenavel = ({
         label,
         coluna,
@@ -321,9 +364,8 @@ export default function AssinaturaAsoPage() {
 
         return (
             <TableHead
-                className={`font-bold text-xs uppercase cursor-pointer select-none transition-colors ${
-                    isAtivo ? "text-blue-600" : ""
-                }`}
+                className={`font-bold text-xs uppercase cursor-pointer select-none transition-colors ${isAtivo ? "text-blue-600" : ""
+                    }`}
                 onClick={() => handleSort(coluna)}
             >
                 <div className="flex items-center gap-1">
@@ -352,6 +394,18 @@ export default function AssinaturaAsoPage() {
                         </p>
                     </div>
                 </div>
+
+                {/* BOTÃO DE ENVIO EM MASSA NO HEADER QUANDO HOUVER SELEÇÃO */}
+                {isOperador && selecionadosEmMassa.length > 0 && (
+                    <Button
+                        onClick={enviarEmMassa}
+                        disabled={enviando}
+                        className="bg-blue-600 hover:bg-blue-700 text-white font-semibold flex items-center gap-2 animate-in fade-in zoom-in duration-200"
+                    >
+                        <Send className="w-4 h-4" />
+                        <span>Enviar {selecionadosEmMassa.length} ASO(s) Selecionado(s)</span>
+                    </Button>
+                )}
             </header>
 
             <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 gap-1">
@@ -361,11 +415,10 @@ export default function AssinaturaAsoPage() {
                         {/* CARD 1: PARA ASSINAR */}
                         <div
                             onClick={() => toggleFiltro("ASSINAR")}
-                            className={`flex items-center justify-between p-3.5 rounded-xl border cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99] ${
-                                filtroStatus === "ASSINAR"
-                                    ? "bg-amber-500/10 border-amber-500 ring-2 ring-amber-500/20"
-                                    : "bg-slate-50/50 dark:bg-gray-800/50 border-gray-300 dark:border-gray-800 hover:border-amber-400"
-                            }`}
+                            className={`flex items-center justify-between p-3.5 rounded-xl border cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99] ${filtroStatus === "ASSINAR"
+                                ? "bg-amber-500/10 border-amber-500 ring-2 ring-amber-500/20"
+                                : "bg-slate-50/50 dark:bg-gray-800/50 border-gray-300 dark:border-gray-800 hover:border-amber-400"
+                                }`}
                         >
                             <div className="space-y-0.5">
                                 <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
@@ -383,11 +436,10 @@ export default function AssinaturaAsoPage() {
                         {/* CARD 2: PARA ENVIAR */}
                         <div
                             onClick={() => toggleFiltro("ENVIAR")}
-                            className={`flex items-center justify-between p-3.5 rounded-xl border cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99] ${
-                                filtroStatus === "ENVIAR"
-                                    ? "bg-blue-500/10 border-blue-500 ring-2 ring-blue-500/20"
-                                    : "bg-slate-50/50 dark:bg-gray-800/50 border-gray-300 dark:border-gray-800 hover:border-blue-400"
-                            }`}
+                            className={`flex items-center justify-between p-3.5 rounded-xl border cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99] ${filtroStatus === "ENVIAR"
+                                ? "bg-blue-500/10 border-blue-500 ring-2 ring-blue-500/20"
+                                : "bg-slate-50/50 dark:bg-gray-800/50 border-gray-300 dark:border-gray-800 hover:border-blue-400"
+                                }`}
                         >
                             <div className="space-y-0.5">
                                 <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
@@ -405,11 +457,10 @@ export default function AssinaturaAsoPage() {
                         {/* CARD 3: PENDÊNCIAS */}
                         <div
                             onClick={() => toggleFiltro("PENDENCIA")}
-                            className={`flex items-center justify-between p-3.5 rounded-xl border cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99] ${
-                                filtroStatus === "PENDENCIA"
-                                    ? "bg-red-500/10 border-red-500 ring-2 ring-red-500/20"
-                                    : "bg-slate-50/50 dark:bg-gray-800/50 border-gray-300 dark:border-gray-800 hover:border-red-400"
-                            }`}
+                            className={`flex items-center justify-between p-3.5 rounded-xl border cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99] ${filtroStatus === "PENDENCIA"
+                                ? "bg-red-500/10 border-red-500 ring-2 ring-red-500/20"
+                                : "bg-slate-50/50 dark:bg-gray-800/50 border-gray-300 dark:border-gray-800 hover:border-red-400"
+                                }`}
                         >
                             <div className="space-y-0.5">
                                 <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
@@ -427,11 +478,10 @@ export default function AssinaturaAsoPage() {
                         {/* CARD 4: ENVIADOS */}
                         <div
                             onClick={() => toggleFiltro("ENVIADO")}
-                            className={`flex items-center justify-between p-3.5 rounded-xl border cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99] ${
-                                filtroStatus === "ENVIADO"
-                                    ? "bg-green-500/10 border-green-500 ring-2 ring-green-500/20"
-                                    : "bg-slate-50/50 dark:bg-gray-800/50 border-gray-300 dark:border-gray-800 hover:border-green-400"
-                            }`}
+                            className={`flex items-center justify-between p-3.5 rounded-xl border cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99] ${filtroStatus === "ENVIADO"
+                                ? "bg-green-500/10 border-green-500 ring-2 ring-green-500/20"
+                                : "bg-slate-50/50 dark:bg-gray-800/50 border-gray-300 dark:border-gray-800 hover:border-green-400"
+                                }`}
                         >
                             <div className="space-y-0.5">
                                 <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
@@ -491,6 +541,21 @@ export default function AssinaturaAsoPage() {
                     <Table>
                         <TableHeader className="bg-slate-50 dark:bg-slate-800/50">
                             <TableRow>
+                                {/* CHECKBOX SELECIONAR TODOS OS ELEGÍVEIS */}
+                                {isOperador && (
+                                    <TableHead className="w-10 text-center">
+                                        <Checkbox
+                                            checked={
+                                                elegiveisParaEnvio.length > 0 &&
+                                                elegiveisParaEnvio.every((p: any) =>
+                                                    selecionadosEmMassa.includes(p.id)
+                                                )
+                                            }
+                                            onCheckedChange={toggleSelectAll}
+                                            disabled={elegiveisParaEnvio.length === 0}
+                                        />
+                                    </TableHead>
+                                )}
                                 <ThOrdenavel label="Nome" coluna="nome_paciente" />
                                 <ThOrdenavel label="Sequencial da Ficha" coluna="sequencial_ficha" />
                                 <ThOrdenavel label="Data de Liberação" coluna="created_at" />
@@ -506,21 +571,36 @@ export default function AssinaturaAsoPage() {
                             {dadosProcessados.length === 0 ? (
                                 <TableRow>
                                     <TableCell
-                                        colSpan={5}
+                                        colSpan={isOperador ? 6 : 5}
                                         className="text-center py-8 text-xs text-slate-400 font-mono"
                                     >
                                         Nenhum registro encontrado.
                                     </TableCell>
                                 </TableRow>
                             ) : (
-                                dadosProcessados.map((item) => {
+                                dadosProcessados.map((item: any) => {
                                     const badge = item.acao ? BADGE_CONFIG[item.acao] : null;
+                                    const canSelect = isOperador && item.acao === "ASSINADO";
+                                    const isSelected = selecionadosEmMassa.includes(item.id);
 
                                     return (
                                         <TableRow
                                             key={item.id}
-                                            className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all"
+                                            className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all ${isSelected ? "bg-blue-50/50 dark:bg-blue-900/10" : ""
+                                                }`}
                                         >
+                                            {/* CHECKBOX DA LINHA */}
+                                            {isOperador && (
+                                                <TableCell className="text-center">
+                                                    {canSelect && (
+                                                        <Checkbox
+                                                            checked={isSelected}
+                                                            onCheckedChange={() => toggleSelectItem(item.id)}
+                                                        />
+                                                    )}
+                                                </TableCell>
+                                            )}
+
                                             <TableCell
                                                 className="font-medium text-sm text-slate-800 dark:text-slate-200 cursor-pointer"
                                                 onClick={() => handleCopy(item.nome_paciente || "")}
@@ -616,7 +696,7 @@ export default function AssinaturaAsoPage() {
                 </CardContent>
             </Card>
 
-            {/* MODAL: CONFIRMAR ASSINATURA OU ENVIO */}
+            {/* MODAL: CONFIRMAR ASSINATURA OU ENVIO INDIVIDUAL */}
             <ConfirmarAcaoModal
                 open={confirmModalOpen}
                 tipoConfirmacao={tipoConfirmacao}
