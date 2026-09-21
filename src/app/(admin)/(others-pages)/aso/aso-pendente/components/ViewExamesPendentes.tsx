@@ -1,7 +1,6 @@
 "use client"
 
 import React, { useEffect, useState, useMemo } from "react";
-import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,9 +22,10 @@ import {
 } from "@/components/ui/select";
 import {
     AlertCircle,
-    CheckCircle2,
     Search,
     UserCheck,
+    Clock3,
+    CheckCircle2,
     ChevronLeft,
     ChevronRight,
     ArrowUp,
@@ -37,8 +37,9 @@ import { ViewExamesPendentesProps, PrazosMap } from "../types";
 import {
     classificarTipoExame,
     compararValores,
-    obterMaiorPrazo,
-    obterStatusVencimento,
+    normalizarNomeExame,
+    parseDateBR,
+    adicionarDiasUteis,
     calcularStatusVencimentoVisual,
 } from "../utils";
 
@@ -46,10 +47,10 @@ export function ViewExamesPendentes({
     analytics,
     todosFuncionarios,
     filtroTipoExame,
+    prazosMap,
 }: ViewExamesPendentesProps) {
     const pendencias = analytics?.funcionariosComExamesPendentes || [];
 
-    const [prazosMap, setPrazosMap] = useState<PrazosMap>({});
     const [selectedFuncionario, setSelectedFuncionario] = useState<any | null>(null);
     const [modalOpen, setModalOpen] = useState(false);
     const [busca, setBusca] = useState("");
@@ -61,30 +62,6 @@ export function ViewExamesPendentes({
     ============================================================ */
     const [paginaAtual, setPaginaAtual] = useState(1);
     const [itensPorPagina, setItensPorPagina] = useState(15);
-
-    /* ============================================================
-       CARREGA PRAZOS
-    ============================================================ */
-    useEffect(() => {
-        async function loadPrazos() {
-            const { data } = await supabase
-                .from("prazos_exames")
-                .select("nome_exame, prazo_dias");
-
-            if (!data) return;
-
-            const mapa: Record<string, number> = {};
-            data.forEach((p) => {
-                if (p.nome_exame) {
-                    mapa[p.nome_exame.trim().toLowerCase()] = p.prazo_dias;
-                }
-            });
-
-            setPrazosMap(mapa);
-        }
-
-        loadPrazos();
-    }, []);
 
     /* ============================================================
        ORDENAÇÃO
@@ -108,27 +85,10 @@ export function ViewExamesPendentes({
             const res = item.socResumo || item;
             if (!res) return;
 
-            const cpf = res.cpfFuncionario || res.cpf;
+            const cpf = res.cpfFuncionario || res.cpf || item.cpfFuncionario || item.cpf;
             if (!cpf) return;
 
-            map.set(cpf, {
-                nome: res.nomeFuncionario || res.nome,
-                cpf,
-                empresa: res.razaoSocial || res.empresa || "-",
-                codigoEmpresa: res.codigoEmpresa || "-",
-                codigoFuncionario: res.codigoFuncionario || "-",
-                dataAso: res.dataAso || res.dataPedido || null,
-                dataFicha: res.dataFicha || res.dataPedido || null,
-                resultadoAsoSoc: res.resultadoAsoSoc || "Pendente",
-                medico: res.medico || "Não informado",
-                crmMedico: res.crmMedico || "-",
-                totalExames: res.totalExames || 0,
-                examesPendentes: res.examesPendentes || 0,
-                examesConcluidos: res.examesConcluidos || 0,
-                sequencialFicha: res.sequencialFicha || "",
-                tipoAso: res.tipoAso || "",
-                listaExamesResumida: res.listaExamesResumida || [],
-            });
+            map.set(cpf, item);
         });
 
         return map;
@@ -144,44 +104,96 @@ export function ViewExamesPendentes({
 
         return pendencias.filter((item: any) => {
             const cpf = item.cpfFuncionario || item.cpf;
-            const funcionario = funcionariosMapeados.get(cpf);
+            const funcionario = funcionariosMapeados.get(cpf) || item;
 
-            if (!funcionario) return false;
-
-            return classificarTipoExame(funcionario) === filtroTipoExame;
+            return (
+                classificarTipoExame(funcionario, prazosMap) ===
+                filtroTipoExame
+            );
         });
-    }, [pendencias, funcionariosMapeados, filtroTipoExame]);
+    }, [
+        pendencias,
+        funcionariosMapeados,
+        filtroTipoExame,
+        prazosMap,
+    ]);
 
     /* ============================================================
-       PROCESSA + FILTRA + ORDENA
+       PROCESSA PENDÊNCIAS COM STATUS DE EXAME
+       (sem filtro de busca, para que indicadores fiquem estáveis)
     ============================================================ */
-    const pendenciasProcessadas = useMemo(() => {
-        const termo = busca.trim().toLowerCase();
-
-        const lista = pendenciasFiltradas.map((item: any) => {
+    const pendenciasComStatus = useMemo(() => {
+        return pendenciasFiltradas.map((item: any) => {
             const cpf = item.cpfFuncionario || item.cpf;
             const fDados = funcionariosMapeados.get(cpf);
 
             const nome =
                 item.nomeFuncionario ||
                 item.nome ||
+                fDados?.nomeFuncionario ||
                 fDados?.nome ||
                 "Não Informado";
 
             const empresa =
-                fDados?.empresa || item.empresa || item.unidade || "-";
+                fDados?.razaoSocial || fDados?.empresa || item.empresa || item.unidade || "-";
 
-            const dataFicha = fDados?.dataFicha || item.dataFicha || null;
+            const dataFicha = fDados?.aso?.dataFicha || fDados?.dataFicha || item.dataFicha || null;
 
+            const examesListOriginal: string[] = Array.isArray(item.examesPendentes)
+                ? item.examesPendentes
+                : [item.examesPendentes || ""];
+
+            // remove exames marcados para ignorar
             const examesList: string[] = Array.isArray(item.examesPendentes)
                 ? item.examesPendentes
                 : [item.examesPendentes || ""];
 
-            const maiorPrazo = obterMaiorPrazo(examesList, prazosMap);
-            const statusVencimento = calcularStatusVencimentoVisual(
-                dataFicha,
-                maiorPrazo
+            const temPendenciaReal = examesList.some(
+                (nomeExame) => !prazosMap[normalizarNomeExame(nomeExame)]?.ignorar_exame
             );
+
+            const listaCompletaExames: any[] =
+                fDados?.aso?.listaExamesResumida || fDados?.listaExamesResumida || [];
+
+            const examesDetalhados = examesList.map((nomeExame: string) => {
+                const nomeNormalizado = normalizarNomeExame(nomeExame);
+                const prazoConfig = prazosMap[nomeNormalizado];
+                const ignorado = Boolean(prazoConfig?.ignorar_exame);
+
+                const info = listaCompletaExames.find(
+                    (e: any) =>
+                        normalizarNomeExame(
+                            e?.descricaoExame || e?.nomeExame || e?.nome || ""
+                        ) === nomeNormalizado
+                );
+
+                const dataExame = info?.dataExame || null;
+                const temRelacao = info?.temRelacao ?? null;
+
+                let statusPrazoExame = null;
+
+                // Exame ignorado nunca entra no cálculo de prazo/vencimento,
+                // mas continua aparecendo como item.
+                if (dataExame && !ignorado && prazoConfig?.prazo_dias) {
+                    const dataBase = parseDateBR(dataExame);
+
+                    if (dataBase) {
+                        const dataLimite = adicionarDiasUteis(
+                            dataBase,
+                            Number(prazoConfig.prazo_dias)
+                        );
+                        statusPrazoExame = calcularStatusVencimentoVisual(dataLimite);
+                    }
+                }
+
+                return { nome: nomeExame, dataExame, temRelacao, statusPrazoExame, ignorado };
+            });
+
+            const medicoExaminador =
+                fDados?.aso?.medico || item.medico || "Não informado";
+
+            const sequencialFicha =
+                fDados?.aso?.sequencialFicha || item.sequencialFicha || "-";
 
             return {
                 ...item,
@@ -190,12 +202,26 @@ export function ViewExamesPendentes({
                 empresa,
                 dataFicha,
                 examesList,
-                maiorPrazo,
-                statusVencimento,
+                examesDetalhados,
+                medicoExaminador,
+                sequencialFicha,
+                temPendenciaReal
             };
         });
+    }, [
+        pendenciasFiltradas,
+        funcionariosMapeados,
+        prazosMap,
+    ]);
+    const pendenciasVisiveis = useMemo(
+        () => pendenciasComStatus.filter((item: any) => item.temPendenciaReal),
+        [pendenciasComStatus]
+    );
 
-        const filtrada = lista.filter((item: any) => {
+    const pendenciasProcessadas = useMemo(() => {
+        const termo = busca.trim().toLowerCase();
+
+        const filtrada = pendenciasVisiveis.filter((item: any) => {
             if (!termo) return true;
 
             return (
@@ -211,13 +237,38 @@ export function ViewExamesPendentes({
 
         return filtrada;
     }, [
-        pendenciasFiltradas,
-        funcionariosMapeados,
-        prazosMap,
+        pendenciasVisiveis,
         busca,
         sortKey,
         sortDirection,
     ]);
+
+    const indicadoresExamesPendentes = useMemo(() => {
+        let vencidos = 0;
+        let noPrazo = 0;
+
+        pendenciasVisiveis.forEach((item: any) => {
+            const examesComStatus = (item.examesDetalhados || []).filter(
+                (exame: any) => exame.statusPrazoExame
+            );
+
+            if (examesComStatus.length === 0) {
+                return;
+            }
+
+            const algumVencido = examesComStatus.some(
+                (exame: any) => exame.statusPrazoExame.estaVencido
+            );
+
+            if (algumVencido) {
+                vencidos++;
+            } else {
+                noPrazo++;
+            }
+        });
+
+        return { vencidos, noPrazo };
+    }, [pendenciasVisiveis]);
 
     /* ============================================================
        PAGINAÇÃO DOS RESULTADOS
@@ -238,7 +289,7 @@ export function ViewExamesPendentes({
     ============================================================ */
     useEffect(() => {
         setPaginaAtual(1);
-    }, [busca, filtroTipoExame, sortKey, sortDirection]);
+    }, [busca, filtroTipoExame, sortKey, sortDirection, prazosMap]);
 
     /* ============================================================
        GARANTE QUE A PÁGINA NÃO FIQUE INVÁLIDA
@@ -250,42 +301,9 @@ export function ViewExamesPendentes({
     }, [totalPaginas, paginaAtual]);
 
     /* ============================================================
-       INDICADORES DE ASO
-    ============================================================ */
-    const indicadoresAso = useMemo(() => {
-        let vencidos = 0;
-        let dentroDoPrazo = 0;
-
-        pendenciasFiltradas.forEach((item: any) => {
-            const cpf = item.cpfFuncionario || item.cpf;
-            const funcionario = funcionariosMapeados.get(cpf);
-            const dataFicha =
-                funcionario?.dataFicha || item.dataFicha || null;
-
-            const examesList: string[] = Array.isArray(item.examesPendentes)
-                ? item.examesPendentes
-                : [item.examesPendentes || ""];
-
-            const maiorPrazo = obterMaiorPrazo(examesList, prazosMap);
-            const status = obterStatusVencimento(dataFicha, maiorPrazo);
-
-            if (status === "vencido") {
-                vencidos++;
-            } else if (status === "no_prazo") {
-                dentroDoPrazo++;
-            }
-        });
-
-        return {
-            vencidos,
-            dentroDoPrazo,
-        };
-    }, [pendenciasFiltradas, funcionariosMapeados, prazosMap]);
-
-    /* ============================================================
        TOTAIS
     ============================================================ */
-    const totalFuncionariosPendentes = pendenciasFiltradas.length;
+    const totalFuncionariosPendentes = pendenciasVisiveis.length;
     const totalGeralFuncionarios =
         analytics?.totalFuncionarios || funcionariosMapeados.size;
     const totalFuncionariosConcluidos = Math.max(
@@ -303,24 +321,29 @@ export function ViewExamesPendentes({
             setSelectedFuncionario(fCompleto);
         } else {
             setSelectedFuncionario({
-                nome: itemPendente.nomeFuncionario || itemPendente.nome,
-                cpf: itemPendente.cpfFuncionario || itemPendente.cpf,
-                empresa: itemPendente.empresa || "-",
-                dataAso: itemPendente.dataAso || null,
-                dataFicha: itemPendente.dataFicha || null,
-                resultadoAsoSoc: "Pendente",
-                totalExames: itemPendente.examesPendentes?.length || 0,
-                examesPendentes: itemPendente.examesPendentes?.length || 0,
-                examesConcluidos: 0,
-                sequencialFicha: itemPendente.sequencialFicha,
-                tipoAso: itemPendente.tipoAso,
-                listaExamesResumida: (itemPendente.examesPendentes || []).map(
-                    (e: string) => ({
-                        descricaoExame: e,
-                        isPendente: true,
-                        dataExame: "-",
-                    })
-                ),
+                nomeFuncionario: itemPendente.nomeFuncionario || itemPendente.nome,
+                cpfFuncionario: itemPendente.cpfFuncionario || itemPendente.cpf,
+                razaoSocial: itemPendente.empresa || "-",
+                codigoEmpresa: itemPendente.codigoEmpresa || "-",
+                codigoFuncionario: itemPendente.codigoFuncionario || "-",
+                aso: {
+                    dataAso: itemPendente.dataAso || null,
+                    dataFicha: itemPendente.dataFicha || null,
+                    resultadoAsoSoc: "Pendente",
+                    totalExames: itemPendente.examesPendentes?.length || 0,
+                    examesPendentes: itemPendente.examesPendentes?.length || 0,
+                    examesConcluidos: 0,
+                    sequencialFicha: itemPendente.sequencialFicha,
+                    tipoAso: itemPendente.tipoAso,
+                    listaExamesResumida: (itemPendente.examesPendentes || []).map(
+                        (e: string) => ({
+                            descricaoExame: e,
+                            isPendente: true,
+                            dataExame: "-",
+                        })
+                    ),
+                },
+                documentosGed: [],
             });
         }
 
@@ -330,12 +353,17 @@ export function ViewExamesPendentes({
     /* ============================================================
        EMPTY STATE
     ============================================================ */
-    if (!analytics || pendenciasFiltradas.length === 0) {
+    if (!analytics || pendenciasVisiveis.length === 0) {
         return (
-            <div className="text-center py-20 text-xs font-mono text-slate-400 uppercase bg-white dark:bg-gray-900 rounded-xl border border-dashed border-gray-700">
-                {analytics
-                    ? "Nenhum funcionário com exames pendentes!"
-                    : "Importe uma planilha Excel para ver os exames pendentes."}
+            <div className="flex flex-col items-center justify-center gap-3 py-20 px-4 bg-white dark:bg-gray-900 rounded-2xl border border-dashed border-gray-300 dark:border-gray-700">
+                <div className="w-12 h-12 rounded-full bg-slate-500/10 flex items-center justify-center">
+                    <AlertCircle className="w-6 h-6 text-slate-400" />
+                </div>
+                <p className="text-sm font-bold text-slate-600 dark:text-slate-300 text-center">
+                    {analytics
+                        ? "Nenhum funcionário com exames pendentes!"
+                        : "Importe uma planilha Excel para ver os exames pendentes."}
+                </p>
             </div>
         );
     }
@@ -348,84 +376,87 @@ export function ViewExamesPendentes({
         sortKeyValue: string;
     }) => (
         <TableHead
-            className="font-bold text-xs uppercase text-slate-600 dark:text-slate-300 cursor-pointer select-none"
+            className="font-bold text-xs uppercase text-slate-600 dark:text-slate-300 cursor-pointer select-none whitespace-nowrap transition-colors hover:text-slate-900 dark:hover:text-white"
             onClick={() => handleSort(sortKeyValue)}
         >
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5">
                 {label}
                 {sortKey === sortKeyValue ? (
                     sortDirection === "asc" ? (
-                        <ArrowUp className="w-3 h-3" />
+                        <ArrowUp className="w-3 h-3 text-blue-500" />
                     ) : (
-                        <ArrowDown className="w-3 h-3" />
+                        <ArrowDown className="w-3 h-3 text-blue-500" />
                     )
                 ) : (
-                    <ArrowUpDown className="w-3 h-3 opacity-40" />
+                    <ArrowUpDown className="w-3 h-3 opacity-30" />
                 )}
             </div>
         </TableHead>
     );
 
     return (
-        <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm">
-            <CardHeader className="border-b border-gray-300 dark:border-gray-700 pb-3">
-                {/* TÍTULO + BUSCA */}
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-                    <CardTitle className="text-sm font-black uppercase text-slate-700 dark:text-slate-200 flex items-center gap-2">
-                        <AlertCircle className="w-4 h-4 text-red-500" />
-                        Funcionários com Exames Pendentes
-                        <Badge
-                            variant="outline"
-                            className="text-sm border-red-500/30 text-red-500 bg-red-500/5"
-                        >
-                            {pendenciasFiltradas.length}
-                        </Badge>
-                    </CardTitle>
-
-                    {/* INDICADORES DE ASO */}
-                    <div className="flex flex-row justify-center gap-3">
-                        {/* ASOS VENCIDOS */}
-                        <div className="flex items-center justify-between gap-3 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3">
-                            <div className="flex items-center gap-3">
-                                <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-red-500/10">
-                                    <AlertCircle className="w-5 h-5 text-red-500" />
-                                </div>
-                                <div>
-                                    <div className="text-[9px] uppercase font-bold tracking-wide text-slate-400">
-                                        ASOs Vencidos
-                                    </div>
-                                    <div className="text-[10px] text-slate-500 dark:text-slate-400">
-                                        Prazo expirado
-                                    </div>
-                                </div>
-                            </div>
-                            <span className="text-2xl font-black text-red-500">
-                                {indicadoresAso.vencidos}
+        <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm rounded-2xl overflow-hidden">
+            <CardHeader className="border-b border-gray-200 dark:border-gray-800 pb-4">
+                <div className="flex flex-col gap-4">
+                    {/* TÍTULO + INDICADORES */}
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                        <CardTitle className="text-sm font-black uppercase tracking-wide text-slate-700 dark:text-slate-200 flex items-center gap-2">
+                            <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-red-500/10">
+                                <AlertCircle className="w-4 h-4 text-red-500" />
                             </span>
-                        </div>
+                            Funcionários com Exames Pendentes
+                            <Badge
+                                variant="outline"
+                                className="text-sm border-red-500/30 text-red-500 bg-red-500/5"
+                            >
+                                {pendenciasVisiveis.length}
+                            </Badge>
+                        </CardTitle>
 
-                        {/* ASOS NO PRAZO */}
-                        <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
-                            <div className="flex items-center gap-3">
-                                <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-emerald-500/10">
-                                    <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-                                </div>
-                                <div>
-                                    <div className="text-[9px] uppercase font-bold tracking-wide text-slate-400">
-                                        ASOs no Prazo
+                        {/* INDICADORES DE VENCIMENTO POR ASO (FUNCIONÁRIO) */}
+                        <div className="flex flex-row justify-center gap-3">
+                            <div className="flex items-center justify-between gap-3 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-red-500/10">
+                                        <AlertCircle className="w-5 h-5 text-red-500" />
                                     </div>
-                                    <div className="text-[10px] text-slate-500 dark:text-slate-400">
-                                        Dentro do prazo
+                                    <div>
+                                        <div className="text-[9px] uppercase font-bold tracking-wide text-slate-400">
+                                            ASOs Vencidos
+                                        </div>
+                                        <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                                            Exame já realizado, prazo expirado
+                                        </div>
                                     </div>
                                 </div>
+                                <span className="text-2xl font-black text-red-500">
+                                    {indicadoresExamesPendentes.vencidos}
+                                </span>
                             </div>
-                            <span className="text-2xl font-black text-emerald-500">
-                                {indicadoresAso.dentroDoPrazo}
-                            </span>
+
+                            <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-emerald-500/10">
+                                        <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                                    </div>
+                                    <div>
+                                        <div className="text-[9px] uppercase font-bold tracking-wide text-slate-400">
+                                            ASOs no Prazo
+                                        </div>
+                                        <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                                            Exame já realizado, dentro do prazo
+                                        </div>
+                                    </div>
+                                </div>
+                                <span className="text-2xl font-black text-emerald-500">
+                                    {indicadoresExamesPendentes.noPrazo}
+                                </span>
+                            </div>
                         </div>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                    {/* BUSCA + PROGRESSO */}
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
                         <div className="relative w-full sm:w-72">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                             <Input
@@ -435,19 +466,6 @@ export function ViewExamesPendentes({
                                 className="pl-9 h-9 text-xs"
                             />
                         </div>
-
-                        {/* PROGRESSO */}
-                        <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 rounded-lg">
-                            <UserCheck className="w-4 h-4 text-emerald-500" />
-                            <div>
-                                <div className="text-[9px] uppercase font-bold text-slate-400">
-                                    Progresso
-                                </div>
-                                <div className="text-xs font-black text-emerald-600 dark:text-emerald-400">
-                                    {totalFuncionariosConcluidos} de {totalGeralFuncionarios} concluídos
-                                </div>
-                            </div>
-                        </div>
                     </div>
                 </div>
             </CardHeader>
@@ -455,37 +473,56 @@ export function ViewExamesPendentes({
             {/* TABELA */}
             <CardContent className="p-0 overflow-x-auto">
                 <Table>
-                    <TableHeader className="bg-slate-100 dark:bg-slate-800">
-                        <TableRow>
+                    <TableHeader className="bg-slate-50 dark:bg-slate-800/80">
+                        <TableRow className="hover:bg-transparent">
                             <SortHeader label="Funcionário" sortKeyValue="nome" />
                             <SortHeader label="Empresa / Unidade" sortKeyValue="empresa" />
+                            <SortHeader label="Médico Examinador" sortKeyValue="medicoExaminador" />
+                            <SortHeader label="Seq. Ficha" sortKeyValue="sequencialFicha" />
                             <SortHeader label="Data Ficha" sortKeyValue="dataFicha" />
                             <SortHeader label="Exames Pendentes" sortKeyValue="examesList" />
-                            <SortHeader label="Maior Prazo" sortKeyValue="maiorPrazo" />
-                            <SortHeader label="Status Vencimento" sortKeyValue="statusVencimento" />
                         </TableRow>
                     </TableHeader>
 
-                    <TableBody>
+                    <TableBody className="divide-y divide-slate-100 dark:divide-slate-800">
                         {pendenciasPaginadas.map((item: any, idx: number) => (
                             <TableRow
                                 key={`${item.cpf}-${idx}`}
-                                className="hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors"
+                                className="hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors"
                             >
                                 {/* FUNCIONÁRIO */}
-                                <TableCell className="font-bold text-xs text-blue-600 dark:text-blue-400 hover:underline cursor-pointer">
+                                <TableCell>
                                     <button
                                         type="button"
                                         onClick={() => handleRowClick(item.cpf, item)}
-                                        className="text-left font-bold flex items-center gap-1.5"
+                                        className="text-left group flex items-center gap-2.5"
                                     >
-                                        {item.nome}
+                                        <span className="w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-[10px] font-black bg-red-500/10 text-red-500">
+                                            {String(item.nome || "?").charAt(0).toUpperCase()}
+                                        </span>
+                                        <span className="font-bold text-xs text-blue-600 dark:text-blue-400 group-hover:underline">
+                                            {item.nome}
+                                        </span>
                                     </button>
                                 </TableCell>
 
                                 {/* EMPRESA */}
                                 <TableCell className="text-xs text-slate-600 dark:text-slate-400">
-                                    {item.empresa}
+                                    <div className="max-w-[220px] truncate" title={item.empresa}>
+                                        {item.empresa}
+                                    </div>
+                                </TableCell>
+
+                                {/* MÉDICO EXAMINADOR */}
+                                <TableCell className="text-xs text-slate-600 dark:text-slate-400">
+                                    <div className="max-w-[180px] truncate" title={item.medicoExaminador}>
+                                        {item.medicoExaminador}
+                                    </div>
+                                </TableCell>
+
+                                {/* SEQ. FICHA */}
+                                <TableCell className="text-xs font-mono text-slate-500">
+                                    {item.sequencialFicha}
                                 </TableCell>
 
                                 {/* DATA FICHA */}
@@ -494,50 +531,35 @@ export function ViewExamesPendentes({
                                 </TableCell>
 
                                 {/* EXAMES */}
-                                <TableCell>
-                                    <div className="flex flex-wrap gap-1">
-                                        {item.examesList.map((exame: string, eIdx: number) => {
-                                            const prazoExame =
-                                                prazosMap[exame.trim().toLowerCase()];
+                                <TableCell className="max-w-[280px]">
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {item.examesDetalhados.map((exame: any, eIdx: number) => {
+                                            const corBadge = exame.ignorado
+                                                ? "bg-slate-500/10 text-slate-400 border-slate-500/20 opacity-70"
+                                                : !exame.dataExame
+                                                    ? "bg-slate-500/10 text-slate-500 border-slate-500/20"
+                                                    : exame.statusPrazoExame?.estaVencido
+                                                        ? "bg-red-500/10 text-red-500 border-red-500/20"
+                                                        : "bg-amber-500/10 text-amber-600 border-amber-500/20";
 
                                             return (
                                                 <Badge
                                                     key={eIdx}
                                                     variant="outline"
-                                                    className="bg-red-500/10 text-red-500 border-red-500/20 text-[10px] gap-1"
+                                                    className={`flex flex-col items-start gap-0 leading-tight py-1 px-2.5 text-[10px] font-semibold rounded-full ${corBadge}`}
+                                                    title={
+                                                        exame.ignorado
+                                                            ? "Exame configurado para não entrar no cálculo de prazo/conclusão"
+                                                            : exame.dataExame
+                                                                ? `Exame realizado em ${exame.dataExame}${exame.temRelacao === false ? " — aguardando vínculo GED" : ""}`
+                                                                : "Exame ainda não realizado"
+                                                    }
                                                 >
-                                                    {exame}
-                                                    {prazoExame !== undefined && (
-                                                        <span className="text-[9px] font-bold text-amber-500">
-                                                            ({prazoExame}d)
-                                                        </span>
-                                                    )}
+                                                    <span>{exame.nome}{exame.ignorado ? " (ignorado)" : ""}</span>
                                                 </Badge>
                                             );
                                         })}
                                     </div>
-                                </TableCell>
-
-                                {/* MAIOR PRAZO */}
-                                <TableCell className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                                    {item.maiorPrazo !== null ? (
-                                        <Badge className="bg-amber-500/20 text-amber-400 border border-amber-500/30 font-bold text-[10px]">
-                                            {item.maiorPrazo} dia(s)
-                                        </Badge>
-                                    ) : (
-                                        <span className="text-slate-400 font-mono text-[10px]">
-                                            Não definido
-                                        </span>
-                                    )}
-                                </TableCell>
-
-                                {/* STATUS */}
-                                <TableCell>
-                                    <Badge
-                                        className={`font-bold text-[10px] border ${item.statusVencimento.color}`}
-                                    >
-                                        {item.statusVencimento.label}
-                                    </Badge>
                                 </TableCell>
                             </TableRow>
                         ))}

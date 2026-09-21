@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useState, useRef, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 
@@ -12,7 +12,7 @@ import { CardIndicador } from "@/components/atendimento/dashboards/CardIndicator
 // Icons
 import {
     Activity,
-    Upload,
+    RefreshCw,
     Users,
     AlertCircle,
     CheckCircle2,
@@ -21,7 +21,7 @@ import {
 
 // Types & Utils
 import { ViewType, FiltroTipoExame, PrazosMap } from "./types";
-import { classificarTipoExame } from "./utils";
+import { classificarTipoExame, asoEstaConcluido, asoEstaPendente, possuiAso, normalizarNomeExame } from "./utils";
 
 // Subcomponents
 import { ViewDashboard } from "./components/ViewDashboard";
@@ -29,16 +29,79 @@ import { ViewExamesPendentes } from "./components/ViewExamesPendentes";
 import { ViewExamesConcluidos } from "./components/ViewExamesConcluidos";
 
 export default function IndicadoresSocged() {
-    const fileInputRef = useRef<HTMLInputElement>(null);
-
     const [view, setView] = useState<ViewType>("geral");
     const [unidadeId, setUnidadeId] = useState("");
-    const [loading, setLoading] = useState(false);
+
     const [dadosRelatorio, setDadosRelatorio] = useState<any[]>([]);
     const [dadosGraficos, setDadosGraficos] = useState<any>(null);
+    const [loading, setLoading] = useState<boolean>(true);
+    const [atualizadoEm, setAtualizadoEm] = useState<string | null>(null);
+
     const [prazosMap, setPrazosMap] = useState<PrazosMap>({});
-    const [funcionariosSalvos, setFuncionariosSalvos] = useState<Set<string>>(new Set());
+
+    const [funcionariosSalvos, setFuncionariosSalvos] = useState<Set<string>>(() => {
+        if (typeof window === "undefined") return new Set();
+        const cachedStr = sessionStorage.getItem("aso_funcionarios_salvos");
+        if (cachedStr) {
+            try {
+                const parsed = JSON.parse(cachedStr);
+                if (Array.isArray(parsed)) return new Set(parsed);
+            } catch (e) { }
+        }
+        return new Set();
+    });
     const [filtroTipoExame, setFiltroTipoExame] = useState<FiltroTipoExame>("todos");
+
+    /* ============================================================
+       CONSULTA DA ÚLTIMA SINCRONIZAÇÃO
+    ============================================================ */
+    const carregarDados = useCallback(async () => {
+        setLoading(true);
+        try {
+            const res = await fetch("/api/consulta-asos", { cache: "no-store" });
+            if (!res.ok) {
+                toast.error("Não foi possível carregar os dados da sincronização.");
+                return;
+            }
+
+            const resposta = await res.json();
+
+            const resultado = Array.isArray(resposta)
+                ? resposta[0]
+                : resposta;
+
+            if (resultado?.status === "empty") {
+                setDadosRelatorio([]);
+                setDadosGraficos(null);
+                setAtualizadoEm(null);
+                toast.info("Ainda não existe uma sincronização concluída.");
+                return;
+            }
+
+            if (resultado?.status === "done") {
+                setDadosRelatorio(resultado.data?.funcionarios ?? []);
+                setDadosGraficos(resultado.data?.analytics ?? null);
+                setAtualizadoEm(resultado.processadoEm ?? null);
+                return;
+            }
+
+            // Fallback caso retorne diretamente o objeto data
+            if (resultado?.data?.funcionarios) {
+                setDadosRelatorio(resultado.data.funcionarios);
+                setDadosGraficos(resultado.data.analytics ?? null);
+                setAtualizadoEm(resultado.processadoEm ?? null);
+            }
+        } catch (error) {
+            console.error("Erro ao carregar dados da importação:", error);
+            toast.error("Não foi possível carregar os dados da sincronização.");
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        carregarDados();
+    }, [carregarDados]);
 
     /* ============================================================
        CONTEXTO DO USUÁRIO
@@ -69,154 +132,84 @@ export default function IndicadoresSocged() {
        CARREGA PRAZOS DOS EXAMES
     ============================================================ */
     useEffect(() => {
+        if (!unidadeId) return;
+
         async function loadPrazos() {
-            const { data } = await supabase
+            const { data, error } = await supabase
                 .from("prazos_exames")
-                .select("nome_exame, prazo_dias");
+                .select("nome_exame, prazo_dias, tipo_filtro, ignorar_exame")
+                .eq("unidade_id", unidadeId);
+
+            if (error) {
+                console.error("Erro ao carregar prazos:", error);
+                return;
+            }
 
             if (!data) return;
 
-            const mapa: Record<string, number> = {};
+            const mapa: PrazosMap = {};
+
             data.forEach((p) => {
                 if (!p.nome_exame) return;
-                mapa[p.nome_exame.trim().toLowerCase()] = p.prazo_dias;
+
+                const nomeNormalizado = normalizarNomeExame(p.nome_exame);
+
+                mapa[nomeNormalizado] = {
+                    prazo_dias: p.prazo_dias ?? 0,
+                    tipo_filtro: p.tipo_filtro || "",
+                    ignorar_exame: !!p.ignorar_exame,
+                };
             });
 
             setPrazosMap(mapa);
         }
 
         loadPrazos();
-    }, []);
+    }, [unidadeId]);
 
     /* ============================================================
        FILTRO POR TIPO DE EXAME
     ============================================================ */
+    const funcionariosComAso = useMemo(() => {
+        return dadosRelatorio.filter((item) => possuiAso(item));
+    }, [dadosRelatorio]);
+
     const funcionariosFiltradosTipo = useMemo(() => {
         if (filtroTipoExame === "todos") {
-            return dadosRelatorio;
+            return funcionariosComAso;
         }
 
-        return dadosRelatorio.filter((item) => {
-            const funcionario = item.socResumo || item;
-            return classificarTipoExame(funcionario) === filtroTipoExame;
+        return funcionariosComAso.filter((item) => {
+            return classificarTipoExame(item, prazosMap) === filtroTipoExame;
         });
-    }, [dadosRelatorio, filtroTipoExame]);
+    }, [funcionariosComAso, filtroTipoExame, prazosMap]);
 
     /* ============================================================
        MÉTRICAS PRINCIPAIS
     ============================================================ */
-    const totalFuncionarios = funcionariosFiltradosTipo.length;
-
     const funcionariosConcluidos = useMemo(() => {
-        return funcionariosFiltradosTipo.filter((item) => {
-            const res = item.socResumo || item;
-            const pendentes = Number(
-                Array.isArray(res.examesPendentes)
-                    ? res.examesPendentes.length
-                    : res.examesPendentes ?? 0
-            );
-            return pendentes === 0;
-        }).length;
-    }, [funcionariosFiltradosTipo]);
+        return funcionariosFiltradosTipo.filter((item) =>
+            asoEstaConcluido(item, prazosMap)
+        ).length;
+    }, [funcionariosFiltradosTipo, prazosMap]);
 
     const funcionariosPendentes = useMemo(() => {
-        return funcionariosFiltradosTipo.filter((item) => {
-            const res = item.socResumo || item;
-            const pendentes = Number(
-                Array.isArray(res.examesPendentes)
-                    ? res.examesPendentes.length
-                    : res.examesPendentes ?? 0
-            );
-            return pendentes > 0;
-        }).length;
-    }, [funcionariosFiltradosTipo]);
+        return funcionariosFiltradosTipo.filter((item) =>
+            asoEstaPendente(item, prazosMap)
+        ).length;
+    }, [funcionariosFiltradosTipo, prazosMap]);
 
-    /* ============================================================
-       UPLOAD DO EXCEL E POLLING
-    ============================================================ */
-    async function handleFileSubmit(event: React.ChangeEvent<HTMLInputElement>) {
-        const file = event.target.files?.[0];
-        if (!file) return;
+    const totalFuncionarios = funcionariosConcluidos + funcionariosPendentes;
 
-        setFuncionariosSalvos(new Set());
-        setLoading(true);
-
-        const formData = new FormData();
-        formData.append("file", file);
-        formData.append("unidadeId", unidadeId);
-
+    const dataSincronizacaoFormatada = useMemo(() => {
+        if (!atualizadoEm) return null;
         try {
-            const start = await fetch("/api/importar-excel-asos", {
-                method: "POST",
-                body: formData,
-            });
-
-            if (!start.ok) {
-                toast.error("Erro ao enviar arquivo Excel.");
-                setLoading(false);
-                return;
-            }
-
-            const data = await start.json();
-            const jobId = data.jobId;
-
-            if (!jobId) {
-                toast.error("Não foi possível iniciar o processamento.");
-                setLoading(false);
-                return;
-            }
-
-            toast.info("Arquivo enviado. Processando dados...");
-
-            let terminou = false;
-
-            while (!terminou) {
-                await new Promise((r) => setTimeout(r, 3000));
-
-                const status = await fetch(`/api/consulta-relatorios/?id=${jobId}`);
-                if (!status.ok) continue;
-
-                const resultado = await status.json();
-                const respostaBruta = Array.isArray(resultado)
-                    ? resultado[0]
-                    : resultado;
-                const resposta = respostaBruta.json ?? respostaBruta;
-
-                if (resposta.status === "processing") {
-                    continue;
-                }
-
-                if (resposta.status === "empty") {
-                    toast.warning("0 registros encontrados no Excel.");
-                    setDadosRelatorio([]);
-                    setDadosGraficos(null);
-                    terminou = true;
-                }
-
-                if (resposta.status === "done") {
-                    terminou = true;
-                    const analyticsData = resposta.data?.analytics || null;
-                    const funcionariosList = resposta.data?.funcionarios || [];
-                    console.log(funcionariosList)
-
-                    setDadosRelatorio(funcionariosList);
-                    setDadosGraficos(analyticsData);
-
-                    const total =
-                        analyticsData?.totalFuncionarios ?? funcionariosList.length;
-
-                    toast.success(`${total} funcionários processados com sucesso!`);
-                }
-            }
-        } catch (error) {
-            toast.error("Erro ao importar e processar o arquivo.");
-        } finally {
-            setLoading(false);
-            if (fileInputRef.current) {
-                fileInputRef.current.value = "";
-            }
+            const data = new Date(atualizadoEm);
+            return isNaN(data.getTime()) ? null : data.toLocaleString("pt-BR");
+        } catch {
+            return null;
         }
-    }
+    }, [atualizadoEm]);
 
     return (
         <div className="min-h-fit mt-2 bg-gray-500/20 rounded-xl p-2">
@@ -231,9 +224,11 @@ export default function IndicadoresSocged() {
                         <h1 className="text-lg font-black text-white uppercase tracking-tight">
                             Gestão de ASOs
                         </h1>
-                        <p className="text-xs text-slate-400 font-mono">
-                            Importe o relatório SOCGED para análise
-                        </p>
+                        {dataSincronizacaoFormatada && (
+                            <p className="text-xs text-slate-400 font-mono">
+                                Última sincronização: {dataSincronizacaoFormatada}
+                            </p>
+                        )}
                     </div>
                 </div>
 
@@ -262,7 +257,7 @@ export default function IndicadoresSocged() {
                     </div>
                 </div>
 
-                {/* TABS + IMPORTAR */}
+                {/* TABS + ATUALIZAR */}
                 <div className="flex flex-col lg:flex-row gap-4 items-center w-full lg:w-auto">
                     <Tabs
                         value={view}
@@ -292,36 +287,25 @@ export default function IndicadoresSocged() {
                     </Tabs>
 
                     <div className="flex flex-wrap gap-2 text-sm items-center w-full lg:w-auto justify-end">
-                        <input
-                            type="file"
-                            ref={fileInputRef}
-                            onChange={handleFileSubmit}
-                            accept=".xlsx, .xls, .csv"
-                            className="hidden"
-                        />
-
                         <Button
                             type="button"
-                            onClick={() => fileInputRef.current?.click()}
+                            onClick={() => carregarDados()}
                             disabled={loading}
-                            className="h-10 font-bold uppercase text-[10px] gap-2 tracking-wider bg-emerald-600 hover:bg-emerald-700 border border-emerald-500 text-white transition-all"
+                            className="h-10 font-bold uppercase text-[10px] gap-2 tracking-wider bg-blue-600 hover:bg-blue-700 border border-blue-500 text-white transition-all disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
                         >
-                            <Upload className="w-3.5 h-3.5" />
-                            {loading ? "Processando..." : "Importar Excel"}
+                            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+                            {loading ? "Atualizando..." : "Atualizar dados"}
                         </Button>
                     </div>
                 </div>
             </header>
 
-            {/* LOADING */}
-            {loading ? (
+            {/* LOADING INICIAL */}
+            {loading && dadosRelatorio.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-32 space-y-4">
                     <div className="w-9 h-9 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
                     <p className="text-xs font-mono text-slate-500 uppercase tracking-widest">
-                        Processando dados...
-                    </p>
-                    <p className="text-red-400 text-xs font-medium uppercase">
-                        Como estamos consultando o SOC, este processamento pode demorar um pouco. Por favor, aguarde!
+                        Carregando última sincronização...
                     </p>
                 </div>
             ) : (
@@ -365,6 +349,7 @@ export default function IndicadoresSocged() {
                             analytics={dadosGraficos}
                             todosFuncionarios={dadosRelatorio}
                             filtroTipoExame={filtroTipoExame}
+                            prazosMap={prazosMap}
                         />
                     )}
 
@@ -377,11 +362,24 @@ export default function IndicadoresSocged() {
                                 setFuncionariosSalvos((prev) => {
                                     const novoSet = new Set(prev);
                                     cpfs.forEach((cpf) => novoSet.add(cpf));
+
+                                    // Persiste no sessionStorage a seleção do usuário
+                                    const arr = Array.from(novoSet);
+                                    try {
+                                        sessionStorage.setItem(
+                                            "aso_funcionarios_salvos",
+                                            JSON.stringify(arr)
+                                        );
+                                    } catch (e) {
+                                        console.warn("sessionStorage quota excedida (salvos):", e);
+                                    }
+
                                     return novoSet;
                                 });
                             }}
                             filtroTipoExame={filtroTipoExame}
                             unidadeId={unidadeId}
+                            prazosMap={prazosMap}
                         />
                     )}
 

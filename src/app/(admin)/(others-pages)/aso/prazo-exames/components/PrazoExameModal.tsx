@@ -9,6 +9,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,9 +20,13 @@ interface PrazoExameModalProps {
     selectedItem: PrazoExame | null;
     nomeExame: string;
     prazoDias: number | "";
+    tipo_filtro: string;
+    ignorar_exame: boolean;
     saving: boolean;
     onNomeExameChange: (value: string) => void;
     onPrazoDiasChange: (value: number | "") => void;
+    onTipoFiltroChange: (value: string) => void;
+    onIgnorarExameChange: (value: boolean) => void;
     onClose: () => void;
     onSave: (e: React.FormEvent) => void;
 }
@@ -31,9 +36,13 @@ export function PrazoExameModal({
     selectedItem,
     nomeExame,
     prazoDias,
+    tipo_filtro,
+    ignorar_exame,
     saving,
     onNomeExameChange,
     onPrazoDiasChange,
+    onTipoFiltroChange,
+    onIgnorarExameChange,
     onClose,
     onSave,
 }: PrazoExameModalProps) {
@@ -81,6 +90,35 @@ export function PrazoExameModal({
                                     )
                                 }
                                 required
+                                className="h-9 text-xs"
+                            />
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label htmlFor="tipo_filtro" className="text-xs font-bold uppercase">
+                                Tipo de Filtro
+                            </Label>
+                            <Select
+                                value={tipo_filtro}
+                                onValueChange={onTipoFiltroChange}
+                            >
+                                <SelectTrigger className="w-full h-9 text-sm">
+                                    <SelectValue placeholder="Selecione o tipo de filtro" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="clinico">Clínico</SelectItem>
+                                    <SelectItem value="complementar">Complementar</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label htmlFor="ignorar_exame" className="text-xs font-bold uppercase">
+                                Ignorar Exame
+                            </Label>
+                            <Input
+                                id="ignorar_exame"
+                                type="checkbox"
+                                checked={ignorar_exame}
+                                onChange={(e) => onIgnorarExameChange(e.target.checked)}
                                 className="h-9 text-xs"
                             />
                         </div>
