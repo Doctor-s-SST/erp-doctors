@@ -36,7 +36,7 @@ import {
     ChevronRight,
 } from "lucide-react";
 import { FuncionarioModal } from "./FuncionarioModal";
-import { ViewExamesConcluidosProps, FuncionarioItem } from "../types";
+import { ViewExamesConcluidosProps, FuncionarioItem, StatusVencimentoVisual } from "../types";
 import {
     classificarTipoExame,
     possuiAsoMontado,
@@ -44,6 +44,11 @@ import {
     obterPrazoAso,
     calcularStatusVencimentoVisual,
 } from "../utils";
+
+type FuncionarioComPrazo = FuncionarioItem & {
+    prazoAso: { maiorPrazo: number; dataBase: Date; dataLimite: Date } | null;
+    statusPrazo: StatusVencimentoVisual;
+};
 
 export function ViewExamesConcluidos({
     todosFuncionarios,
@@ -264,21 +269,14 @@ export function ViewExamesConcluidos({
    PRAZO DO ASO
    Só existe para funcionários já concluídos.
    ============================================================ */
-    const funcionariosComPrazo = useMemo(() => {
-
+    const funcionariosComPrazo = useMemo<FuncionarioComPrazo[]>(() => {
         return funcionariosConcluidosFiltrados.map(
-            (funcionario) => {
+            (funcionario): FuncionarioComPrazo => {
+                const prazoAso = obterPrazoAso(funcionario, prazosMap);
 
-                const prazoAso =
-                    obterPrazoAso(
-                        funcionario,
-                        prazosMap
-                    );
-
-                const statusPrazo =
-                    calcularStatusVencimentoVisual(
-                        prazoAso?.dataLimite || null
-                    );
+                const statusPrazo = calcularStatusVencimentoVisual(
+                    prazoAso?.dataLimite || null
+                );
 
                 return {
                     ...funcionario,
@@ -287,11 +285,7 @@ export function ViewExamesConcluidos({
                 };
             }
         );
-
-    }, [
-        funcionariosConcluidosFiltrados,
-        prazosMap,
-    ]);
+    }, [funcionariosConcluidosFiltrados, prazosMap]);
 
     /* ============================================================
        INDICADORES DE VENCIMENTO DO ASO
