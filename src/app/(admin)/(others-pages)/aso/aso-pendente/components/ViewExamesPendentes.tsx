@@ -790,7 +790,7 @@ export function ViewExamesPendentes({
                                     )}
                                 </Button>
 
-                                <Button
+                                {/* <Button
                                     type="button"
                                     onClick={() => setAcaoParaConfirmar("enviar")}
                                     disabled={sendingAso || selectedCpfs.size === 0}
@@ -808,7 +808,7 @@ export function ViewExamesPendentes({
                                             {selectedCpfs.size > 0 && ` (${selectedCpfs.size})`}
                                         </>
                                     )}
-                                </Button>
+                                </Button> */}
                             </div>
                         )}
                     </div>
@@ -858,10 +858,10 @@ export function ViewExamesPendentes({
                                         className={`transition-colors ${enviadoDireto
                                             ? "bg-cyan-500/[0.08] hover:bg-cyan-500/[0.12]"
                                             : jaMontado
-                                            ? "bg-emerald-500/[0.05] hover:bg-emerald-500/[0.08]"
-                                            : isSelected
-                                                ? "bg-blue-500/[0.06] hover:bg-blue-500/[0.09]"
-                                                : "hover:bg-slate-50 dark:hover:bg-slate-800/60"
+                                                ? "bg-emerald-500/[0.05] hover:bg-emerald-500/[0.08]"
+                                                : isSelected
+                                                    ? "bg-blue-500/[0.06] hover:bg-blue-500/[0.09]"
+                                                    : "hover:bg-slate-50 dark:hover:bg-slate-800/60"
                                             }`}
                                     >
                                         <TableCell className="text-center">
