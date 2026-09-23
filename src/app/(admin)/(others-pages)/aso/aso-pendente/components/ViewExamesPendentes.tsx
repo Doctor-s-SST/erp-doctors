@@ -1,10 +1,12 @@
 "use client"
 
 import React, { useEffect, useState, useMemo } from "react";
+import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
     Table,
     TableBody,
@@ -23,7 +25,6 @@ import {
 import {
     AlertCircle,
     Search,
-    UserCheck,
     Clock3,
     CheckCircle2,
     ChevronLeft,
@@ -31,9 +32,12 @@ import {
     ArrowUp,
     ArrowDown,
     ArrowUpDown,
+    Save,
+    Send,
 } from "lucide-react";
 import { FuncionarioModal } from "./FuncionarioModal";
-import { ViewExamesPendentesProps, PrazosMap } from "../types";
+import { ConfirmarAcaoDialog } from "./ConfirmarAcaoDialog";
+import { ViewExamesPendentesProps } from "../types";
 import {
     classificarTipoExame,
     compararValores,
@@ -42,11 +46,16 @@ import {
     adicionarDiasUteis,
     calcularStatusVencimentoVisual,
 } from "../utils";
+import { toast } from "sonner";
+import { criarPacienteAssinatura, criarPayloadAcaoAso } from "@/lib/aso-assinatura";
 
 export function ViewExamesPendentes({
     analytics,
     todosFuncionarios,
+    funcionariosSalvos,
+    onFuncionariosSalvos,
     filtroTipoExame,
+    unidadeId,
     prazosMap,
 }: ViewExamesPendentesProps) {
     const pendencias = analytics?.funcionariosComExamesPendentes || [];
@@ -56,6 +65,17 @@ export function ViewExamesPendentes({
     const [busca, setBusca] = useState("");
     const [sortKey, setSortKey] = useState<string>("nome");
     const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+    const [selectedCpfs, setSelectedCpfs] = useState<Set<string>>(new Set());
+    const [cpfsEnviadosDireto, setCpfsEnviadosDireto] = useState<Set<string>>(new Set());
+
+    // Aba ativa: "pendentes" (ainda não montados) ou "montados" (já salvos/montados)
+    const [abaAtiva, setAbaAtiva] = useState<"pendentes" | "montados">("pendentes");
+
+    const [filtroMedico, setFiltroMedico] = useState("todos");
+    const [filtroExameEspecifico, setFiltroExameEspecifico] = useState("todos");
+    const [saving, setSaving] = useState(false);
+    const [sendingAso, setSendingAso] = useState(false);
+    const [acaoParaConfirmar, setAcaoParaConfirmar] = useState<"salvar" | "enviar" | null>(null);
 
     /* ============================================================
        PAGINAÇÃO
@@ -106,17 +126,9 @@ export function ViewExamesPendentes({
             const cpf = item.cpfFuncionario || item.cpf;
             const funcionario = funcionariosMapeados.get(cpf) || item;
 
-            return (
-                classificarTipoExame(funcionario, prazosMap) ===
-                filtroTipoExame
-            );
+            return classificarTipoExame(funcionario, prazosMap) === filtroTipoExame;
         });
-    }, [
-        pendencias,
-        funcionariosMapeados,
-        filtroTipoExame,
-        prazosMap,
-    ]);
+    }, [pendencias, funcionariosMapeados, filtroTipoExame, prazosMap]);
 
     /* ============================================================
        PROCESSA PENDÊNCIAS COM STATUS DE EXAME
@@ -136,18 +148,19 @@ export function ViewExamesPendentes({
 
             const empresa =
                 fDados?.razaoSocial || fDados?.empresa || item.empresa || item.unidade || "-";
-
+            const codigoEmpresa =
+                fDados?.codigoEmpresa || fDados?.codigo_empresa || item.codigoEmpresa || item.codigo_empresa;
+            const codigoGed = fDados?.aso?.codigoGed || fDados?.codigo_ged || item.codigoGed || item.codigo_ged;
+            const dataCriacaoGed = fDados?.aso?.dataCriacaoGed || fDados?.codigo_ged || item.codigoGed || item.codigo_ged;
             const dataFicha = fDados?.aso?.dataFicha || fDados?.dataFicha || item.dataFicha || null;
 
-            const examesListOriginal: string[] = Array.isArray(item.examesPendentes)
-                ? item.examesPendentes
-                : [item.examesPendentes || ""];
-
-            // remove exames marcados para ignorar
+            // Exames pendentes reportados para este funcionário
             const examesList: string[] = Array.isArray(item.examesPendentes)
                 ? item.examesPendentes
                 : [item.examesPendentes || ""];
 
+            // Só é considerado "pendência real" se houver ao menos um exame
+            // que não esteja marcado para ser ignorado no cálculo
             const temPendenciaReal = examesList.some(
                 (nomeExame) => !prazosMap[normalizarNomeExame(nomeExame)]?.ignorar_exame
             );
@@ -162,9 +175,8 @@ export function ViewExamesPendentes({
 
                 const info = listaCompletaExames.find(
                     (e: any) =>
-                        normalizarNomeExame(
-                            e?.descricaoExame || e?.nomeExame || e?.nome || ""
-                        ) === nomeNormalizado
+                        normalizarNomeExame(e?.descricaoExame || e?.nomeExame || e?.nome || "") ===
+                        nomeNormalizado
                 );
 
                 const dataExame = info?.dataExame || null;
@@ -178,10 +190,7 @@ export function ViewExamesPendentes({
                     const dataBase = parseDateBR(dataExame);
 
                     if (dataBase) {
-                        const dataLimite = adicionarDiasUteis(
-                            dataBase,
-                            Number(prazoConfig.prazo_dias)
-                        );
+                        const dataLimite = adicionarDiasUteis(dataBase, Number(prazoConfig.prazo_dias));
                         statusPrazoExame = calcularStatusVencimentoVisual(dataLimite);
                     }
                 }
@@ -189,44 +198,118 @@ export function ViewExamesPendentes({
                 return { nome: nomeExame, dataExame, temRelacao, statusPrazoExame, ignorado };
             });
 
-            const medicoExaminador =
-                fDados?.aso?.medico || item.medico || "Não informado";
-
-            const sequencialFicha =
-                fDados?.aso?.sequencialFicha || item.sequencialFicha || "-";
+            const medicoExaminador = fDados?.aso?.medico || item.medico || "Não informado";
+            const sequencialFicha = fDados?.aso?.sequencialFicha || item.sequencialFicha || "-";
 
             return {
                 ...item,
                 cpf,
                 nome,
                 empresa,
+                codigoEmpresa,
+                codigoGed,
+                dataCriacaoGed,
                 dataFicha,
                 examesList,
                 examesDetalhados,
                 medicoExaminador,
                 sequencialFicha,
-                temPendenciaReal
+                temPendenciaReal,
             };
         });
-    }, [
-        pendenciasFiltradas,
-        funcionariosMapeados,
-        prazosMap,
-    ]);
+    }, [pendenciasFiltradas, funcionariosMapeados, prazosMap]);
+
     const pendenciasVisiveis = useMemo(
         () => pendenciasComStatus.filter((item: any) => item.temPendenciaReal),
         [pendenciasComStatus]
     );
 
+    /* ============================================================
+       HELPER: FUNCIONÁRIO JÁ MONTADO/SALVO
+    ============================================================ */
+    const isFuncionarioMontado = (funcionario: any) => {
+        if (!funcionario) return false;
+        const cpf = funcionario.cpf || funcionario.cpfFuncionario;
+        return funcionariosSalvos?.has(cpf) || false;
+    };
+
+    /* ============================================================
+       LISTAS PARA OS FILTROS (MÉDICO / EXAME)
+    ============================================================ */
+    const listaMedicosPendentes = useMemo(() => {
+        const setM = new Set<string>();
+
+        pendenciasVisiveis.forEach((f: any) => {
+            if (f.medicoExaminador) setM.add(f.medicoExaminador);
+        });
+
+        return Array.from(setM).sort();
+    }, [pendenciasVisiveis]);
+
+    const listaExamesPendentes = useMemo(() => {
+        const setE = new Set<string>();
+
+        pendenciasVisiveis.forEach((f: any) => {
+            (f.examesDetalhados || []).forEach((e: any) => {
+                if (e?.nome) setE.add(e.nome);
+            });
+        });
+
+        return Array.from(setE).sort();
+    }, [pendenciasVisiveis]);
+
+    /* ============================================================
+       FILTROS DE MÉDICO / EXAME ESPECÍFICO
+       (sem busca e sem aba, para que os contadores das abas
+       fiquem estáveis)
+    ============================================================ */
+    const pendenciasComFiltros = useMemo(() => {
+        return pendenciasVisiveis.filter((item: any) => {
+            if (filtroMedico !== "todos" && item.medicoExaminador !== filtroMedico) {
+                return false;
+            }
+
+            if (filtroExameEspecifico !== "todos") {
+                const possuiExame = (item.examesDetalhados || []).some(
+                    (exame: any) =>
+                        String(exame.nome || "").toLowerCase() === filtroExameEspecifico.toLowerCase()
+                );
+
+                if (!possuiExame) return false;
+            }
+
+            return true;
+        });
+    }, [pendenciasVisiveis, filtroMedico, filtroExameEspecifico]);
+
+    /* ============================================================
+       CONTADORES DAS ABAS
+    ============================================================ */
+    const quantidadeMontados = useMemo(
+        () => pendenciasComFiltros.filter((f: any) => isFuncionarioMontado(f)).length,
+        [pendenciasComFiltros, funcionariosSalvos]
+    );
+
+    const quantidadePendentesAba = pendenciasComFiltros.length - quantidadeMontados;
+
+    /* ============================================================
+       BUSCA + ABA + ORDENAÇÃO
+    ============================================================ */
     const pendenciasProcessadas = useMemo(() => {
         const termo = busca.trim().toLowerCase();
 
-        const filtrada = pendenciasVisiveis.filter((item: any) => {
+        const filtrada = pendenciasComFiltros.filter((item: any) => {
+            const jaMontado = isFuncionarioMontado(item);
+
+            if (abaAtiva === "pendentes" && jaMontado) return false;
+            if (abaAtiva === "montados" && !jaMontado) return false;
+
             if (!termo) return true;
 
             return (
                 String(item.nome).toLowerCase().includes(termo) ||
-                String(item.empresa).toLowerCase().includes(termo)
+                String(item.empresa).toLowerCase().includes(termo) ||
+                String(item.cpf || "").includes(termo)
             );
         });
 
@@ -236,12 +319,7 @@ export function ViewExamesPendentes({
         });
 
         return filtrada;
-    }, [
-        pendenciasVisiveis,
-        busca,
-        sortKey,
-        sortDirection,
-    ]);
+    }, [pendenciasComFiltros, busca, abaAtiva, sortKey, sortDirection, funcionariosSalvos]);
 
     const indicadoresExamesPendentes = useMemo(() => {
         let vencidos = 0;
@@ -252,9 +330,7 @@ export function ViewExamesPendentes({
                 (exame: any) => exame.statusPrazoExame
             );
 
-            if (examesComStatus.length === 0) {
-                return;
-            }
+            if (examesComStatus.length === 0) return;
 
             const algumVencido = examesComStatus.some(
                 (exame: any) => exame.statusPrazoExame.estaVencido
@@ -273,23 +349,18 @@ export function ViewExamesPendentes({
     /* ============================================================
        PAGINAÇÃO DOS RESULTADOS
     ============================================================ */
-    const totalPaginas = Math.ceil(
-        pendenciasProcessadas.length / itensPorPagina
-    );
+    const totalPaginas = Math.ceil(pendenciasProcessadas.length / itensPorPagina);
 
     const indiceInicial = (paginaAtual - 1) * itensPorPagina;
     const indiceFinal = indiceInicial + itensPorPagina;
-    const pendenciasPaginadas = pendenciasProcessadas.slice(
-        indiceInicial,
-        indiceFinal
-    );
+    const pendenciasPaginadas = pendenciasProcessadas.slice(indiceInicial, indiceFinal);
 
     /* ============================================================
        RESET DA PAGINAÇÃO
     ============================================================ */
     useEffect(() => {
         setPaginaAtual(1);
-    }, [busca, filtroTipoExame, sortKey, sortDirection, prazosMap]);
+    }, [busca, filtroTipoExame, filtroMedico, filtroExameEspecifico, abaAtiva, sortKey, sortDirection, prazosMap]);
 
     /* ============================================================
        GARANTE QUE A PÁGINA NÃO FIQUE INVÁLIDA
@@ -301,15 +372,163 @@ export function ViewExamesPendentes({
     }, [totalPaginas, paginaAtual]);
 
     /* ============================================================
-       TOTAIS
+       SELEÇÃO
     ============================================================ */
-    const totalFuncionariosPendentes = pendenciasVisiveis.length;
-    const totalGeralFuncionarios =
-        analytics?.totalFuncionarios || funcionariosMapeados.size;
-    const totalFuncionariosConcluidos = Math.max(
-        0,
-        totalGeralFuncionarios - totalFuncionariosPendentes
-    );
+    const cpfsSelecionaveis = pendenciasProcessadas
+        .filter((f: any) => !isFuncionarioMontado(f) && !cpfsEnviadosDireto.has(f.cpf))
+        .map((f: any) => f.cpf)
+        .filter(Boolean);
+
+    const allChecked =
+        cpfsSelecionaveis.length > 0 &&
+        cpfsSelecionaveis.every((cpf: string) => selectedCpfs.has(cpf));
+
+    const disponiveisNaAba = cpfsSelecionaveis.length;
+
+    const handleSelectAll = (checked: boolean) => {
+        if (!checked) {
+            setSelectedCpfs(new Set());
+            return;
+        }
+
+        setSelectedCpfs(new Set(cpfsSelecionaveis));
+    };
+
+    const handleSelectOne = (cpf: string, checked: boolean) => {
+        const funcionario = pendenciasVisiveis.find((f: any) => f.cpf === cpf);
+
+        if (!funcionario || isFuncionarioMontado(funcionario) || cpfsEnviadosDireto.has(cpf)) return;
+
+        setSelectedCpfs((prev) => {
+            const novoSet = new Set(prev);
+            if (checked) {
+                novoSet.add(cpf);
+            } else {
+                novoSet.delete(cpf);
+            }
+            return novoSet;
+        });
+    };
+
+    /* ============================================================
+       SALVAR EM LOTE
+    ============================================================ */
+    const handleSaveSelection = async () => {
+        if (selectedCpfs.size === 0) {
+            toast.warning("Selecione ao menos um funcionário para salvar.");
+            return;
+        }
+
+        setSaving(true);
+
+        try {
+            const selecionados = pendenciasVisiveis.filter(
+                (f: any) => selectedCpfs.has(f.cpf) && !isFuncionarioMontado(f)
+            );
+
+            if (selecionados.length === 0) {
+                toast.warning("Nenhum funcionário válido foi selecionado.");
+                return;
+            }
+
+            const pacientes = selecionados.map((f: any) => ({
+                ...criarPacienteAssinatura(funcionariosMapeados.get(f.cpf) || f, unidadeId),
+                observacao: "ASO montado",
+            }));
+
+            const response = await fetch("/api/enviar-asos-concluidos", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(criarPayloadAcaoAso(pacientes, "LIBERAR", "ASO montado")),
+            });
+
+            if (!response.ok) {
+                throw new Error("Erro ao enviar funcionários.");
+            }
+
+            const saveBd = await supabase.from("pacientes_assinatura").insert(pacientes);
+
+            if (saveBd.error) {
+                toast.error("Erro ao salvar funcionários.");
+                return;
+            }
+
+            await response.json();
+
+            const cpfsSalvos = selecionados.map((f: any) => f.cpf);
+            onFuncionariosSalvos(cpfsSalvos);
+
+            setSelectedCpfs((prev) => {
+                const novo = new Set(prev);
+                cpfsSalvos.forEach((cpf: any) => novo.delete(cpf));
+                return novo;
+            });
+
+            toast.success(`${selecionados.length} funcionário(s) salvo(s) com sucesso!`);
+        } catch {
+            toast.error("Não foi possível salvar os funcionários selecionados.");
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleEnviarAso = async () => {
+        if (selectedCpfs.size === 0) {
+            toast.warning("Selecione ao menos um funcionário para enviar o ASO.");
+            return;
+        }
+
+        setSendingAso(true);
+
+        try {
+            const selecionados = pendenciasVisiveis
+                .filter((f: any) => selectedCpfs.has(f.cpf))
+                .map((f: any) => {
+                    /*
+                     * Preferimos o funcionário completo vindo de
+                     * todosFuncionarios. Isso mantém o mesmo formato
+                     * usado pela ViewExamesConcluidos.
+                     */
+                    const completo = funcionariosMapeados.get(f.cpf);
+                    return completo || f;
+                });
+
+            if (!selecionados.length) {
+                toast.warning("Nenhum funcionário válido foi selecionado.");
+                return;
+            }
+
+            const pacientes = selecionados.map((f: any) => ({
+                ...criarPacienteAssinatura(f, unidadeId),
+                acao: "ENVIADO_DIRETO" as const,
+                observacao: "Enviado direto",
+            }));
+
+            const response = await fetch("/api/enviar-asos-concluidos", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(criarPayloadAcaoAso(pacientes, "LIBERAR-ENVIAR")),
+            });
+
+            if (!response.ok) {
+                throw new Error("Erro ao enviar ASO.");
+            }
+
+            const saveBd = await supabase.from("pacientes_assinatura").insert(pacientes);
+            if (saveBd.error) throw saveBd.error;
+
+            const cpfsEnviados = selecionados.map((f: any) => f.cpf || f.cpfFuncionario).filter(Boolean);
+            setCpfsEnviadosDireto((prev) => new Set([...prev, ...cpfsEnviados]));
+
+            toast.success(`${selecionados.length} ASO(s) enviado(s) com sucesso!`);
+            setSelectedCpfs(new Set());
+        } catch (error) {
+            console.error("Erro ao enviar ASOs:", error);
+            toast.error("Não foi possível enviar os ASOs selecionados.");
+        } finally {
+            setSendingAso(false);
+        }
+    };
 
     /* ============================================================
        MODAL
@@ -335,13 +554,11 @@ export function ViewExamesPendentes({
                     examesConcluidos: 0,
                     sequencialFicha: itemPendente.sequencialFicha,
                     tipoAso: itemPendente.tipoAso,
-                    listaExamesResumida: (itemPendente.examesPendentes || []).map(
-                        (e: string) => ({
-                            descricaoExame: e,
-                            isPendente: true,
-                            dataExame: "-",
-                        })
-                    ),
+                    listaExamesResumida: (itemPendente.examesPendentes || []).map((e: string) => ({
+                        descricaoExame: e,
+                        isPendente: true,
+                        dataExame: "-",
+                    })),
                 },
                 documentosGed: [],
             });
@@ -351,7 +568,7 @@ export function ViewExamesPendentes({
     };
 
     /* ============================================================
-       EMPTY STATE
+       EMPTY STATE (nenhuma pendência real em toda a lista)
     ============================================================ */
     if (!analytics || pendenciasVisiveis.length === 0) {
         return (
@@ -368,13 +585,7 @@ export function ViewExamesPendentes({
         );
     }
 
-    const SortHeader = ({
-        label,
-        sortKeyValue,
-    }: {
-        label: string;
-        sortKeyValue: string;
-    }) => (
+    const SortHeader = ({ label, sortKeyValue }: { label: string; sortKeyValue: string }) => (
         <TableHead
             className="font-bold text-xs uppercase text-slate-600 dark:text-slate-300 cursor-pointer select-none whitespace-nowrap transition-colors hover:text-slate-900 dark:hover:text-white"
             onClick={() => handleSort(sortKeyValue)}
@@ -396,76 +607,210 @@ export function ViewExamesPendentes({
 
     return (
         <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm rounded-2xl overflow-hidden">
-            <CardHeader className="border-b border-gray-200 dark:border-gray-800 pb-4">
-                <div className="flex flex-col gap-4">
-                    {/* TÍTULO + INDICADORES */}
-                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-                        <CardTitle className="text-sm font-black uppercase tracking-wide text-slate-700 dark:text-slate-200 flex items-center gap-2">
-                            <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-red-500/10">
-                                <AlertCircle className="w-4 h-4 text-red-500" />
-                            </span>
-                            Funcionários com Exames Pendentes
-                            <Badge
-                                variant="outline"
-                                className="text-sm border-red-500/30 text-red-500 bg-red-500/5"
-                            >
-                                {pendenciasVisiveis.length}
-                            </Badge>
-                        </CardTitle>
+            <CardHeader className="border-b border-gray-200 dark:border-gray-700 p-5">
+                <div className="flex flex-col gap-5">
 
-                        {/* INDICADORES DE VENCIMENTO POR ASO (FUNCIONÁRIO) */}
-                        <div className="flex flex-row justify-center gap-3">
-                            <div className="flex items-center justify-between gap-3 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3">
-                                <div className="flex items-center gap-3">
-                                    <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-red-500/10">
-                                        <AlertCircle className="w-5 h-5 text-red-500" />
+                    {/* FAIXA 1 — TÍTULO + ABAS */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                            <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-red-500/10 shrink-0">
+                                <AlertCircle className="w-4.5 h-4.5 text-red-500" />
+                            </span>
+
+                            <CardTitle className="text-sm font-black uppercase tracking-wide text-slate-700 dark:text-slate-200">
+                                ASO's com Exames Pendentes
+                            </CardTitle>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="flex items-center gap-3 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3">
+                                <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-red-500/10 shrink-0">
+                                    <AlertCircle className="w-5 h-5 text-red-500" />
+                                </div>
+
+                                <div className="min-w-0">
+                                    <div className="text-[9px] uppercase font-bold tracking-wide text-slate-400">
+                                        ASOs Vencidos
                                     </div>
-                                    <div>
-                                        <div className="text-[9px] uppercase font-bold tracking-wide text-slate-400">
-                                            ASOs Vencidos
-                                        </div>
-                                        <div className="text-[10px] text-slate-500 dark:text-slate-400">
-                                            Exame já realizado, prazo expirado
-                                        </div>
+                                    <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                                        Prazo expirado
                                     </div>
                                 </div>
-                                <span className="text-2xl font-black text-red-500">
+
+                                <span className="ml-auto text-2xl font-black text-red-500">
                                     {indicadoresExamesPendentes.vencidos}
                                 </span>
                             </div>
 
-                            <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
-                                <div className="flex items-center gap-3">
-                                    <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-emerald-500/10">
-                                        <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                            <div className="flex items-center gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
+                                <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-emerald-500/10 shrink-0">
+                                    <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                                </div>
+
+                                <div className="min-w-0">
+                                    <div className="text-[9px] uppercase font-bold tracking-wide text-slate-400">
+                                        ASOs no Prazo
                                     </div>
-                                    <div>
-                                        <div className="text-[9px] uppercase font-bold tracking-wide text-slate-400">
-                                            ASOs no Prazo
-                                        </div>
-                                        <div className="text-[10px] text-slate-500 dark:text-slate-400">
-                                            Exame já realizado, dentro do prazo
-                                        </div>
+                                    <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                                        Dentro do prazo
                                     </div>
                                 </div>
-                                <span className="text-2xl font-black text-emerald-500">
+
+                                <span className="ml-auto text-2xl font-black text-emerald-500">
                                     {indicadoresExamesPendentes.noPrazo}
                                 </span>
                             </div>
                         </div>
+
+                        <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 self-start sm:self-auto">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setAbaAtiva("pendentes");
+                                    setSelectedCpfs(new Set());
+                                    setPaginaAtual(1);
+                                }}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black uppercase transition-all ${abaAtiva === "pendentes"
+                                    ? "bg-white dark:bg-gray-900 text-red-600 shadow-sm"
+                                    : "text-slate-500 hover:text-slate-700"
+                                    }`}
+                            >
+                                <Clock3 className="w-3.5 h-3.5" />
+                                Pendentes
+                                <span className="px-1.5 py-0.5 rounded-full bg-red-500/10">
+                                    {quantidadePendentesAba}
+                                </span>
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setAbaAtiva("montados");
+                                    setSelectedCpfs(new Set());
+                                    setPaginaAtual(1);
+                                }}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black uppercase transition-all ${abaAtiva === "montados"
+                                    ? "bg-white dark:bg-gray-900 text-emerald-600 shadow-sm"
+                                    : "text-slate-500 hover:text-slate-700"
+                                    }`}
+                            >
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                Montados
+                                <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/10">
+                                    {quantidadeMontados}
+                                </span>
+                            </button>
+                        </div>
                     </div>
 
-                    {/* BUSCA + PROGRESSO */}
-                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-                        <div className="relative w-full sm:w-72">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                            <Input
-                                value={busca}
-                                onChange={(e) => setBusca(e.target.value)}
-                                placeholder="Buscar funcionário ou empresa..."
-                                className="pl-9 h-9 text-xs"
-                            />
+
+                    {/* FAIXA 3 — BUSCA + FILTROS + AÇÕES */}
+                    <div className="flex flex-col lg:flex-row lg:items-center gap-3 pt-1 border-t border-slate-100 dark:border-slate-800">
+                        <div className="flex flex-col sm:flex-row gap-2 flex-1 min-w-0">
+                            {/* BUSCA */}
+                            <div className="relative w-full sm:w-64 shrink-0">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                <Input
+                                    value={busca}
+                                    onChange={(e) => setBusca(e.target.value)}
+                                    placeholder="Buscar por nome, empresa..."
+                                    className="h-9 pl-9 pr-9 text-xs bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+                                />
+
+                                {busca && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setBusca("")}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                    >
+                                        ×
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* MÉDICO */}
+                            <Select value={filtroMedico} onValueChange={setFiltroMedico}>
+                                <SelectTrigger className="h-9 w-full sm:w-48 text-xs">
+                                    <SelectValue placeholder="Médico Examinador" />
+                                </SelectTrigger>
+
+                                <SelectContent>
+                                    <SelectItem value="todos">Todos os médicos</SelectItem>
+                                    {listaMedicosPendentes.map((med) => (
+                                        <SelectItem key={med} value={med}>
+                                            {med}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+
+                            {/* EXAME */}
+                            <Select value={filtroExameEspecifico} onValueChange={setFiltroExameEspecifico}>
+                                <SelectTrigger className="h-9 w-full sm:w-48 text-xs">
+                                    <SelectValue placeholder="Filtrar por Exame" />
+                                </SelectTrigger>
+
+                                <SelectContent>
+                                    <SelectItem value="todos">Todos os exames</SelectItem>
+                                    {listaExamesPendentes.map((exame) => (
+                                        <SelectItem key={exame} value={exame}>
+                                            {exame}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+
+                            {busca && (
+                                <div className="flex items-center px-1 text-[10px] text-slate-400 whitespace-nowrap">
+                                    {pendenciasProcessadas.length} resultado(s)
+                                </div>
+                            )}
                         </div>
+
+                        {/* AÇÕES (apenas na aba Pendentes) */}
+                        {abaAtiva === "pendentes" && (
+                            <div className="flex gap-2 shrink-0">
+                                <Button
+                                    type="button"
+                                    onClick={() => setAcaoParaConfirmar("salvar")}
+                                    disabled={saving || selectedCpfs.size === 0}
+                                    className="h-9 px-4 text-[10px] font-black uppercase tracking-wide gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white"
+                                >
+                                    {saving ? (
+                                        <>
+                                            <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                                            Liberando...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Save className="w-3.5 h-3.5" />
+                                            Liberar ASO
+                                            {selectedCpfs.size > 0 && ` (${selectedCpfs.size})`}
+                                        </>
+                                    )}
+                                </Button>
+
+                                <Button
+                                    type="button"
+                                    onClick={() => setAcaoParaConfirmar("enviar")}
+                                    disabled={sendingAso || selectedCpfs.size === 0}
+                                    className="h-9 px-4 text-[10px] font-black uppercase tracking-wide gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white"
+                                >
+                                    {sendingAso ? (
+                                        <>
+                                            <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                                            Enviando...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Send className="w-3.5 h-3.5" />
+                                            Enviar ASO
+                                            {selectedCpfs.size > 0 && ` (${selectedCpfs.size})`}
+                                        </>
+                                    )}
+                                </Button>
+                            </div>
+                        )}
                     </div>
                 </div>
             </CardHeader>
@@ -475,6 +820,14 @@ export function ViewExamesPendentes({
                 <Table>
                     <TableHeader className="bg-slate-50 dark:bg-slate-800/80">
                         <TableRow className="hover:bg-transparent">
+                            <TableHead className="w-12 text-center">
+                                <Checkbox
+                                    checked={allChecked}
+                                    onCheckedChange={(checked) => handleSelectAll(!!checked)}
+                                    disabled={disponiveisNaAba === 0}
+                                />
+                            </TableHead>
+
                             <SortHeader label="Funcionário" sortKeyValue="nome" />
                             <SortHeader label="Empresa / Unidade" sortKeyValue="empresa" />
                             <SortHeader label="Médico Examinador" sortKeyValue="medicoExaminador" />
@@ -485,84 +838,150 @@ export function ViewExamesPendentes({
                     </TableHeader>
 
                     <TableBody className="divide-y divide-slate-100 dark:divide-slate-800">
-                        {pendenciasPaginadas.map((item: any, idx: number) => (
-                            <TableRow
-                                key={`${item.cpf}-${idx}`}
-                                className="hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors"
-                            >
-                                {/* FUNCIONÁRIO */}
-                                <TableCell>
-                                    <button
-                                        type="button"
-                                        onClick={() => handleRowClick(item.cpf, item)}
-                                        className="text-left group flex items-center gap-2.5"
-                                    >
-                                        <span className="w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-[10px] font-black bg-red-500/10 text-red-500">
-                                            {String(item.nome || "?").charAt(0).toUpperCase()}
-                                        </span>
-                                        <span className="font-bold text-xs text-blue-600 dark:text-blue-400 group-hover:underline">
-                                            {item.nome}
-                                        </span>
-                                    </button>
-                                </TableCell>
-
-                                {/* EMPRESA */}
-                                <TableCell className="text-xs text-slate-600 dark:text-slate-400">
-                                    <div className="max-w-[220px] truncate" title={item.empresa}>
-                                        {item.empresa}
-                                    </div>
-                                </TableCell>
-
-                                {/* MÉDICO EXAMINADOR */}
-                                <TableCell className="text-xs text-slate-600 dark:text-slate-400">
-                                    <div className="max-w-[180px] truncate" title={item.medicoExaminador}>
-                                        {item.medicoExaminador}
-                                    </div>
-                                </TableCell>
-
-                                {/* SEQ. FICHA */}
-                                <TableCell className="text-xs font-mono text-slate-500">
-                                    {item.sequencialFicha}
-                                </TableCell>
-
-                                {/* DATA FICHA */}
-                                <TableCell className="text-xs text-slate-600 dark:text-slate-400 font-mono">
-                                    {item.dataFicha || "-"}
-                                </TableCell>
-
-                                {/* EXAMES */}
-                                <TableCell className="max-w-[280px]">
-                                    <div className="flex flex-wrap gap-1.5">
-                                        {item.examesDetalhados.map((exame: any, eIdx: number) => {
-                                            const corBadge = exame.ignorado
-                                                ? "bg-slate-500/10 text-slate-400 border-slate-500/20 opacity-70"
-                                                : !exame.dataExame
-                                                    ? "bg-slate-500/10 text-slate-500 border-slate-500/20"
-                                                    : exame.statusPrazoExame?.estaVencido
-                                                        ? "bg-red-500/10 text-red-500 border-red-500/20"
-                                                        : "bg-amber-500/10 text-amber-600 border-amber-500/20";
-
-                                            return (
-                                                <Badge
-                                                    key={eIdx}
-                                                    variant="outline"
-                                                    className={`flex flex-col items-start gap-0 leading-tight py-1 px-2.5 text-[10px] font-semibold rounded-full ${corBadge}`}
-                                                    title={
-                                                        exame.ignorado
-                                                            ? "Exame configurado para não entrar no cálculo de prazo/conclusão"
-                                                            : exame.dataExame
-                                                                ? `Exame realizado em ${exame.dataExame}${exame.temRelacao === false ? " — aguardando vínculo GED" : ""}`
-                                                                : "Exame ainda não realizado"
-                                                    }
-                                                >
-                                                    <span>{exame.nome}{exame.ignorado ? " (ignorado)" : ""}</span>
-                                                </Badge>
-                                            );
-                                        })}
-                                    </div>
+                        {pendenciasPaginadas.length === 0 ? (
+                            <TableRow>
+                                <TableCell colSpan={7} className="text-center py-8 text-xs text-slate-400">
+                                    {abaAtiva === "pendentes"
+                                        ? "Nenhum funcionário pendente para montagem."
+                                        : "Nenhum funcionário salvo ou com ASO montado nesta lista."}
                                 </TableCell>
                             </TableRow>
-                        ))}
+                        ) : (
+                            pendenciasPaginadas.map((item: any, idx: number) => {
+                                const jaMontado = isFuncionarioMontado(item);
+                                const isSelected = selectedCpfs.has(item.cpf);
+                                const enviadoDireto = cpfsEnviadosDireto.has(item.cpf);
+
+                                return (
+                                    <TableRow
+                                        key={`${item.cpf}-${idx}`}
+                                        className={`transition-colors ${enviadoDireto
+                                            ? "bg-cyan-500/[0.08] hover:bg-cyan-500/[0.12]"
+                                            : jaMontado
+                                            ? "bg-emerald-500/[0.05] hover:bg-emerald-500/[0.08]"
+                                            : isSelected
+                                                ? "bg-blue-500/[0.06] hover:bg-blue-500/[0.09]"
+                                                : "hover:bg-slate-50 dark:hover:bg-slate-800/60"
+                                            }`}
+                                    >
+                                        <TableCell className="text-center">
+                                            {enviadoDireto ? (
+                                                <div className="mx-auto flex items-center justify-center w-5 h-5 rounded-full bg-cyan-500/15" title="Enviado direto">
+                                                    <Send className="w-3.5 h-3.5 text-cyan-600" />
+                                                </div>
+                                            ) : jaMontado ? (
+                                                <div
+                                                    className="mx-auto flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500/15"
+                                                    title="ASO já montado"
+                                                >
+                                                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                                                </div>
+                                            ) : (
+                                                <Checkbox
+                                                    checked={isSelected}
+                                                    onCheckedChange={(checked) =>
+                                                        handleSelectOne(item.cpf, !!checked)
+                                                    }
+                                                />
+                                            )}
+                                        </TableCell>
+
+                                        {/* FUNCIONÁRIO */}
+                                        <TableCell>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleRowClick(item.cpf, item)}
+                                                className="text-left group flex items-center gap-2.5"
+                                            >
+                                                <span
+                                                    className={`w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-[10px] font-black ${jaMontado
+                                                        ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                                                        : "bg-red-500/10 text-red-500"
+                                                        }`}
+                                                >
+                                                    {jaMontado ? (
+                                                        <CheckCircle2 className="w-4 h-4" />
+                                                    ) : (
+                                                        String(item.nome || "?").charAt(0).toUpperCase()
+                                                    )}
+                                                </span>
+                                                <span
+                                                    className={`font-bold text-xs group-hover:underline ${jaMontado
+                                                        ? "text-emerald-700 dark:text-emerald-400"
+                                                        : "text-blue-600 dark:text-blue-400"
+                                                        }`}
+                                                >
+                                                    {item.nome}
+                                                </span>
+                                                {enviadoDireto && (
+                                                    <Badge className="bg-cyan-600 text-white text-[9px]">Enviado direto</Badge>
+                                                )}
+                                            </button>
+                                        </TableCell>
+
+                                        {/* EMPRESA */}
+                                        <TableCell className="text-xs text-slate-600 dark:text-slate-400">
+                                            <div className="max-w-[220px] truncate" title={item.empresa}>
+                                                {item.empresa}
+                                            </div>
+                                        </TableCell>
+
+                                        {/* MÉDICO EXAMINADOR */}
+                                        <TableCell className="text-xs text-slate-600 dark:text-slate-400">
+                                            <div className="max-w-[180px] truncate" title={item.medicoExaminador}>
+                                                {item.medicoExaminador}
+                                            </div>
+                                        </TableCell>
+
+                                        {/* SEQ. FICHA */}
+                                        <TableCell className="text-xs font-mono text-slate-500">
+                                            {item.sequencialFicha}
+                                        </TableCell>
+
+                                        {/* DATA FICHA */}
+                                        <TableCell className="text-xs text-slate-600 dark:text-slate-400 font-mono">
+                                            {item.dataFicha || "-"}
+                                        </TableCell>
+
+                                        {/* EXAMES */}
+                                        <TableCell className="max-w-[280px]">
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {item.examesDetalhados.map((exame: any, eIdx: number) => {
+                                                    const corBadge = exame.ignorado
+                                                        ? "bg-slate-500/10 text-slate-400 border-slate-500/20 opacity-70"
+                                                        : !exame.dataExame
+                                                            ? "bg-slate-500/10 text-slate-500 border-slate-500/20"
+                                                            : exame.statusPrazoExame?.estaVencido
+                                                                ? "bg-red-500/10 text-red-500 border-red-500/20"
+                                                                : "bg-amber-500/10 text-amber-600 border-amber-500/20";
+
+                                                    return (
+                                                        <Badge
+                                                            key={eIdx}
+                                                            variant="outline"
+                                                            className={`flex flex-col items-start gap-0 leading-tight py-1 px-2.5 text-[10px] font-semibold rounded-full ${corBadge}`}
+                                                            title={
+                                                                exame.ignorado
+                                                                    ? "Exame configurado para não entrar no cálculo de prazo/conclusão"
+                                                                    : exame.dataExame
+                                                                        ? `Exame realizado em ${exame.dataExame}${exame.temRelacao === false ? " — aguardando vínculo GED" : ""
+                                                                        }`
+                                                                        : "Exame ainda não realizado"
+                                                            }
+                                                        >
+                                                            <span>
+                                                                {exame.nome}
+                                                                {exame.ignorado ? " (ignorado)" : ""}
+                                                            </span>
+                                                        </Badge>
+                                                    );
+                                                })}
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                );
+                            })
+                        )}
                     </TableBody>
                 </Table>
             </CardContent>
@@ -610,9 +1029,7 @@ export function ViewExamesPendentes({
                         variant="outline"
                         size="sm"
                         disabled={paginaAtual === 1}
-                        onClick={() =>
-                            setPaginaAtual((prev) => Math.max(1, prev - 1))
-                        }
+                        onClick={() => setPaginaAtual((prev) => Math.max(1, prev - 1))}
                         className="h-7 px-2 text-[10px] gap-1"
                     >
                         <ChevronLeft className="w-3.5 h-3.5" />
@@ -623,31 +1040,20 @@ export function ViewExamesPendentes({
                     {Array.from({ length: totalPaginas }, (_, index) => index + 1)
                         .filter((pagina) => {
                             if (totalPaginas <= 7) return true;
-                            return (
-                                pagina === 1 ||
-                                pagina === totalPaginas ||
-                                Math.abs(pagina - paginaAtual) <= 1
-                            );
+                            return pagina === 1 || pagina === totalPaginas || Math.abs(pagina - paginaAtual) <= 1;
                         })
                         .map((pagina, index, array) => {
                             const paginaAnterior = array[index - 1];
-                            const mostrarReticencias =
-                                paginaAnterior && pagina - paginaAnterior > 1;
+                            const mostrarReticencias = paginaAnterior && pagina - paginaAnterior > 1;
 
                             return (
                                 <React.Fragment key={pagina}>
                                     {mostrarReticencias && (
-                                        <span className="px-1 text-[10px] text-slate-400">
-                                            ...
-                                        </span>
+                                        <span className="px-1 text-[10px] text-slate-400">...</span>
                                     )}
                                     <Button
                                         type="button"
-                                        variant={
-                                            paginaAtual === pagina
-                                                ? "default"
-                                                : "outline"
-                                        }
+                                        variant={paginaAtual === pagina ? "default" : "outline"}
                                         size="sm"
                                         onClick={() => setPaginaAtual(pagina)}
                                         className="h-7 min-w-7 px-2 text-[10px] font-bold"
@@ -663,11 +1069,7 @@ export function ViewExamesPendentes({
                         variant="outline"
                         size="sm"
                         disabled={paginaAtual === totalPaginas}
-                        onClick={() =>
-                            setPaginaAtual((prev) =>
-                                Math.min(totalPaginas, prev + 1)
-                            )
-                        }
+                        onClick={() => setPaginaAtual((prev) => Math.min(totalPaginas, prev + 1))}
                         className="h-7 px-2 text-[10px] gap-1"
                     >
                         <span className="hidden sm:inline">Próxima</span>
@@ -677,10 +1079,17 @@ export function ViewExamesPendentes({
             </div>
 
             {/* MODAL */}
-            <FuncionarioModal
-                open={modalOpen}
-                onOpenChange={setModalOpen}
-                funcionario={selectedFuncionario}
+            <FuncionarioModal open={modalOpen} onOpenChange={setModalOpen} funcionario={selectedFuncionario} />
+            <ConfirmarAcaoDialog
+                acao={acaoParaConfirmar}
+                quantidade={selectedCpfs.size}
+                onOpenChange={(open) => !open && setAcaoParaConfirmar(null)}
+                onConfirmar={() => {
+                    const acao = acaoParaConfirmar;
+                    setAcaoParaConfirmar(null);
+                    if (acao === "salvar") void handleSaveSelection();
+                    if (acao === "enviar") void handleEnviarAso();
+                }}
             />
         </Card>
     );

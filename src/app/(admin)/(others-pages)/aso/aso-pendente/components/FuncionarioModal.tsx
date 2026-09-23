@@ -20,12 +20,35 @@ import {
     Stethoscope,
     FileSearch,
     FolderArchive,
-    Download,
     Loader2,
     FileCheck,
     Eye,
 } from "lucide-react";
 import { FuncionarioModalProps, DocumentoGed, ArquivoGed } from "../types";
+
+interface InfoItemProps {
+    label: string;
+    value?: React.ReactNode;
+    mono?: boolean;
+}
+
+function InfoItem({ label, value, mono = false }: InfoItemProps) {
+    const conteudo = value || "-";
+
+    return (
+        <div className="min-w-0">
+            <span className="block text-[9px] uppercase tracking-wider font-bold text-slate-400 dark:text-slate-500 mb-1">
+                {label}
+            </span>
+            <span
+                className={`block truncate text-[11px] font-semibold text-slate-700 dark:text-slate-200 ${mono ? "font-mono" : ""}`}
+                title={typeof conteudo === "string" || typeof conteudo === "number" ? String(conteudo) : "-"}
+            >
+                {conteudo}
+            </span>
+        </div>
+    );
+}
 
 export function FuncionarioModal({
     open,
@@ -221,29 +244,6 @@ export function FuncionarioModal({
             setDownloadingGedId(null);
         }
     };
-
-    const InfoItem = ({
-        label,
-        value,
-        mono = false,
-    }: {
-        label: string;
-        value?: any;
-        mono?: boolean;
-    }) => (
-        <div className="min-w-0">
-            <span className="block text-[9px] uppercase tracking-wider font-bold text-slate-400 dark:text-slate-500 mb-1">
-                {label}
-            </span>
-            <span
-                className={`block truncate text-[11px] font-semibold text-slate-700 dark:text-slate-200 ${mono ? "font-mono" : ""
-                    }`}
-                title={value || "-"}
-            >
-                {value || "-"}
-            </span>
-        </div>
-    );
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>

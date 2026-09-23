@@ -18,6 +18,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const payloadValido = selecionados.every(
+      (item) => item?.paciente && typeof item?.acao === "string"
+    );
+
+    if (!payloadValido) {
+      return NextResponse.json(
+        { error: "Formato inválido. Cada item deve conter paciente e ação." },
+        { status: 400 }
+      );
+    }
+
     const n8nResponse = await fetch(process.env.N8N_WEBHOOK_ENVIAR_ASOS_CONCLUIDOS_URL!, {
       method: "POST",
       headers: {

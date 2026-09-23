@@ -116,11 +116,13 @@ export type PrazosMap = Record<
 >;
 
 export interface ViewExamesPendentesProps {
-    analytics: Analytics | null | undefined;
-    todosFuncionarios: Funcionario[];
+    analytics: any;
+    todosFuncionarios: any[];
+    funcionariosSalvos: Set<string>;
+    onFuncionariosSalvos: (cpfs: string[]) => void;
     filtroTipoExame: FiltroTipoExame;
+    unidadeId: string;
     prazosMap: PrazosMap;
-
 }
 
 export interface ViewExamesConcluidosProps {
