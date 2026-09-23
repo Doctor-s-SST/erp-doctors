@@ -71,6 +71,12 @@ export const compararValores = (
     if (key === "statusVencimento") {
         valA = a.statusVencimento?.label || "";
         valB = b.statusVencimento?.label || "";
+    } else if (key === "dataFicha") {
+        valA = parseDateBR(a.dataFicha)?.getTime() ?? Date.parse(a.dataFicha || "");
+        valB = parseDateBR(b.dataFicha)?.getTime() ?? Date.parse(b.dataFicha || "");
+
+        if (Number.isNaN(valA)) valA = null;
+        if (Number.isNaN(valB)) valB = null;
     } else if (key === "examesList") {
         valA = Array.isArray(a.examesList)
             ? a.examesList.join(", ")

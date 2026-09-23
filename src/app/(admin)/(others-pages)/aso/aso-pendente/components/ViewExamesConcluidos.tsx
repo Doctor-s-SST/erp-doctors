@@ -45,6 +45,7 @@ import {
     asoEstaConcluido,
     obterPrazoAso,
     calcularStatusVencimentoVisual,
+    parseDateBR,
 } from "../utils";
 import { criarPacienteAssinatura, criarPayloadAcaoAso } from "@/lib/aso-assinatura";
 
@@ -373,17 +374,39 @@ export function ViewExamesConcluidos({
             );
         });
 
-        lista.sort((a: any, b: any) => {
-            const av = a[sortKey] ?? "";
-            const bv = b[sortKey] ?? "";
+        lista.sort((a, b) => {
+            let resultado: number;
 
-            const resultado =
-                typeof av === "number" && typeof bv === "number"
+            if (sortKey === "dataFicha") {
+                const dataA = parseDateBR(a.dataFicha || null)?.getTime() ?? Date.parse(a.dataFicha || "");
+                const dataB = parseDateBR(b.dataFicha || null)?.getTime() ?? Date.parse(b.dataFicha || "");
+                const valorA = Number.isNaN(dataA) ? Number.POSITIVE_INFINITY : dataA;
+                const valorB = Number.isNaN(dataB) ? Number.POSITIVE_INFINITY : dataB;
+                resultado = valorA - valorB;
+            } else if (sortKey === "prazoAso") {
+                resultado = (a.prazoAso?.maiorPrazo ?? Number.POSITIVE_INFINITY) -
+                    (b.prazoAso?.maiorPrazo ?? Number.POSITIVE_INFINITY);
+            } else if (sortKey === "statusPrazo") {
+                const rankStatus = (item: FuncionarioComPrazo) => {
+                    if (!item.prazoAso) return 2;
+                    return item.statusPrazo.estaVencido ? 0 : 1;
+                };
+                resultado = rankStatus(a) - rankStatus(b);
+
+                if (resultado === 0) {
+                    resultado = (a.prazoAso?.dataLimite.getTime() ?? Number.POSITIVE_INFINITY) -
+                        (b.prazoAso?.dataLimite.getTime() ?? Number.POSITIVE_INFINITY);
+                }
+            } else {
+                const av = a[sortKey] ?? "";
+                const bv = b[sortKey] ?? "";
+                resultado = typeof av === "number" && typeof bv === "number"
                     ? av - bv
                     : String(av).localeCompare(String(bv), "pt-BR", {
                         numeric: true,
                         sensitivity: "base",
                     });
+            }
 
             return sortDirection === "asc" ? resultado : -resultado;
         });
@@ -866,7 +889,7 @@ export function ViewExamesConcluidos({
 
                             <SortHeader
                                 label="Vencimento"
-                                sortKeyValue="dataLimite"
+                                sortKeyValue="statusPrazo"
                             />
 
                             <SortHeader label="Observação" sortKeyValue="observacao" />

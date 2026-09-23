@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { useEffect, useState, useRef, useMemo } from "react";
+import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -14,6 +14,11 @@ interface Chamada {
   updated_at: string;
 }
 
+interface Sala {
+  numero: string | number;
+  andar: number;
+}
+
 export default function PainelTV() {
   const [ultimaChamada, setUltimaChamada] = useState<Chamada | null>(null);
   const [historico, setHistorico] = useState<Chamada[]>([]);
@@ -21,9 +26,10 @@ export default function PainelTV() {
   const [processando, setProcessando] = useState(false);
   const [unidadeId, setUnidadeId] = useState<string | null>(null);
   const [ativado, setAtivado] = useState(false);
-  const [salas, setSalas] = useState<any[]>([]);
+  const [salas, setSalas] = useState<Sala[]>([]);
   const [unidadeLogo, setUnidadeLogo] = useState<string>("");
   const [falaAndar, setFalaAndar] = useState(false);
+  const [falaTerreo, setFalaTerreo] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -79,9 +85,8 @@ export default function PainelTV() {
 
       const senhaSoletreada = (chamada.senha_codigo || "").split('').join(' ');
       const identificador = chamada.nome_paciente ? `${chamada.nome_paciente}` : `Senha, ${senhaSoletreada}`;
-      // const andar = salasAndar[chamada.guiche as keyof typeof salasAndar];
       const andar = falaAndar
-        ? obterAndarSala(chamada.guiche)
+        ? obterAndarSala(chamada.guiche, falaTerreo)
         : "";
 
       const destino = chamada.origem === 'RECEPCAO'
@@ -142,36 +147,6 @@ export default function PainelTV() {
 
     carregarSalas();
 
-    // const fetchDados = async () => {
-    //   try {
-    //     const { data: rec } = await supabase.from('atendimentos').select('id, senha_codigo, guiche, updated_at, pacientes(nome)').eq('status', 'EM_FILA').eq('unidade_id', unidadeId).order('updated_at', { ascending: true });
-    //     const { data: exm } = await supabase.from('atendimento_exames').select(`id, num_sala, atendimentos!inner(senha_codigo, updated_at, unidade_id, pacientes(nome))`).eq('status', 'EM_FILA').eq('atendimentos.unidade_id', unidadeId).order('atendimentos(updated_at)', { ascending: true });
-
-    //     const lRec: Chamada[] = rec?.map(r => ({ id: r.id, senha_codigo: r.senha_codigo, nome_paciente: (r.pacientes as any)?.nome, guiche: r.guiche, origem: 'RECEPCAO', updated_at: r.updated_at })) || [];
-    //     const lExm: Chamada[] = exm?.map(e => {
-    //       const a = Array.isArray(e.atendimentos) ? e.atendimentos[0] : (e.atendimentos as any);
-    //       return { id: e.id, senha_codigo: a.senha_codigo, nome_paciente: a.pacientes?.nome, guiche: e.num_sala, origem: 'EXAME', updated_at: a.updated_at };
-    //     }) || [];
-
-    //     const intercalados: Chamada[] = [];
-    //     const max = Math.max(lRec.length, lExm.length);
-    //     for (let i = 0; i < max; i++) {
-    //       if (lRec[i]) intercalados.push(lRec[i]);
-    //       if (lExm[i]) intercalados.push(lExm[i]);
-    //     }
-
-    //     if (intercalados.length > 0) {
-    //       setFila(prev => {
-    //         const ids = new Set(prev.map(p => p.id));
-    //         return [...prev, ...intercalados.filter(n => !ids.has(n.id))];
-    //       });
-    //     }
-    //   } catch (e) { console.error(e); }
-    // };
-
-    // fetchDados();
-    // const inv = setInterval(fetchDados, 4000);
-    // return () => clearInterval(inv);
   }, [unidadeId]);
 
   useEffect(() => {
@@ -202,11 +177,12 @@ export default function PainelTV() {
 
       const { data: config } = await supabase
         .from("painel_config")
-        .select("fala_andar")
+        .select("fala_andar, fala_terreo")
         .eq("unidade_id", profile.unidade_id)
         .single();
 
       setFalaAndar(config?.fala_andar ?? false);
+      setFalaTerreo(config?.fala_terreo ?? false);
     };
 
     carregarDados();
@@ -267,7 +243,7 @@ export default function PainelTV() {
 
   }, [unidadeId]);
 
-  function obterAndarSala(numeroSala: string | number) {
+  function obterAndarSala(numeroSala: string | number, incluirTerreo = true) {
     if (!falaAndar) return "";
 
     const sala = salas.find(
@@ -277,7 +253,7 @@ export default function PainelTV() {
     if (!sala) return "";
 
     if (Number(sala.andar) === 0) {
-      return "térreo";
+      return incluirTerreo ? "térreo" : "";
     }
 
     return `${sala.andar}º andar`;
@@ -294,7 +270,7 @@ export default function PainelTV() {
             className="h-24 mb-10"
           />
         )}
-        <h1 className="text-4xl font-bold mb-4">Painel de Chamada Doctor's</h1>
+        <h1 className="text-4xl font-bold mb-4">Painel de Chamada Doctor&apos;s</h1>
         <button
           onClick={() => setAtivado(true)}
           className="px-12 py-6 bg-white text-[#3498db] rounded-full font-black text-3xl shadow-2xl hover:scale-110 active:scale-95 transition-all mb-6"
