@@ -46,7 +46,7 @@ export default function IndicadoresSocged() {
             try {
                 const parsed = JSON.parse(cachedStr);
                 if (Array.isArray(parsed)) return new Set(parsed);
-            } catch (e) { }
+            } catch { }
         }
         return new Set();
     });
@@ -328,15 +328,15 @@ export default function IndicadoresSocged() {
 
                         {/* CONCLUÍDOS */}
                         <CardIndicador
-                            titulo="ASO's Concluídos"
+                            titulo="ASO's Pendentes Liberação"
                             valor={funcionariosConcluidos}
-                            subtitulo="Prontos para montagem"
+                            subtitulo="Prontos para liberar"
                             icon={<CheckCircle2 size={24} className="text-emerald-500" />}
                         />
 
                         {/* PENDENTES */}
                         <CardIndicador
-                            titulo="ASO's Pendentes"
+                            titulo="ASO's Exames Pendentes"
                             valor={funcionariosPendentes}
                             subtitulo="Possuem exames pendentes"
                             icon={<AlertCircle size={24} className="text-amber-500" />}
@@ -349,6 +349,28 @@ export default function IndicadoresSocged() {
                             analytics={dadosGraficos}
                             todosFuncionarios={dadosRelatorio}
                             filtroTipoExame={filtroTipoExame}
+                            funcionariosSalvos={funcionariosSalvos}
+                            onFuncionariosSalvos={(cpfs) => {
+                                setFuncionariosSalvos((prev) => {
+                                    const novoSet = new Set(prev);
+                                    cpfs.forEach((cpf) => novoSet.add(cpf));
+
+                                    // Persiste no localStorage a seleção do usuário
+                                    const arr = Array.from(novoSet);
+                                    try {
+                                        localStorage.setItem(
+                                            "aso_funcionarios_salvos",
+                                            JSON.stringify(arr)
+                                        );
+                                    } catch (e) {
+                                        console.warn("sessionStorage quota excedida (salvos):", e);
+                                    }
+
+                                    return novoSet;
+                                });
+                            }}
+
+                            unidadeId={unidadeId}
                             prazosMap={prazosMap}
                         />
                     )}

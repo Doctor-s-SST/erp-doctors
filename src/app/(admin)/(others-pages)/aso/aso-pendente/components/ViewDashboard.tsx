@@ -36,6 +36,8 @@ import {
     obterStatusPrazoPendente,
     possuiAso,
     formatPercent,
+    exameEstaConcluido,
+    normalizarNomeExame,
 } from "../utils";
 
 export function ViewDashboard({
@@ -71,19 +73,7 @@ export function ViewDashboard({
         );
     }
 
-    /* ============================================================
-       INDICADORES PRINCIPAIS
-       (Conclusão determinada pelas regras reais dos exames:
-       Clínico -> dataExame | Complementar -> dataExame + temRelacao)
-    ============================================================ */
     const total = funcionarios.length;
-
-    const concluidos = funcionarios.filter((item) =>
-        asoEstaConcluido(item)
-    ).length;
-
-    const pendentes = total - concluidos;
-
     /* ============================================================
        TIPO DE EXAME
     ============================================================ */
@@ -122,10 +112,16 @@ export function ViewDashboard({
                 ];
 
     /* ============================================================
-       MAPA DOS EXAMES
-    ============================================================ */
+        MAPA DOS EXAMES — GERAL (usado só pra média por funcionário)
+     ============================================================ */
     const examesClinicosMap: Record<string, number> = {};
     const examesComplementaresMap: Record<string, number> = {};
+
+    /* ============================================================
+       MAPA DOS EXAMES — SOMENTE PENDENTES (usado nos gráficos)
+    ============================================================ */
+    const examesClinicosPendentesMap: Record<string, number> = {};
+    const examesComplementaresPendentesMap: Record<string, number> = {};
 
     funcionarios.forEach((item) => {
         const aso = item.aso || item.socResumo || item;
@@ -145,12 +141,7 @@ export function ViewDashboard({
                 ""
             ).trim();
 
-            const nomeNormalizado = nomeExibicao
-                .normalize("NFD")
-                .replace(/[\u0300-\u036f]/g, "")
-                .replace(/\./g, "")
-                .trim()
-                .toLowerCase();
+            const nomeNormalizado = normalizarNomeExame(nomeExibicao);
 
             if (!nomeNormalizado) return;
 
@@ -158,23 +149,56 @@ export function ViewDashboard({
 
             if (!prazo || prazo.ignorar_exame) return;
 
+            // contagem geral (todos os exames, usada só na média)
             if (prazo.tipo_filtro === "clinico") {
                 examesClinicosMap[nomeExibicao] =
                     (examesClinicosMap[nomeExibicao] || 0) + 1;
             }
-
             if (prazo.tipo_filtro === "complementar") {
                 examesComplementaresMap[nomeExibicao] =
                     (examesComplementaresMap[nomeExibicao] || 0) + 1;
             }
+
+            // contagem só de exames pendentes (usada nos gráficos)
+            const exameEstaPendente =
+                exame?.isPendente === true || !exameEstaConcluido(exame);
+
+            if (!exameEstaPendente) return;
+
+            if (prazo.tipo_filtro === "clinico") {
+                examesClinicosPendentesMap[nomeExibicao] =
+                    (examesClinicosPendentesMap[nomeExibicao] || 0) + 1;
+            }
+            if (prazo.tipo_filtro === "complementar") {
+                examesComplementaresPendentesMap[nomeExibicao] =
+                    (examesComplementaresPendentesMap[nomeExibicao] || 0) + 1;
+            }
         });
     });
 
-    const examesClinicosData = Object.entries(examesClinicosMap)
+    // ============================================================
+    // AGORA OS TOTAIS SÃO CALCULADOS APÓS O LOOP PREENCHER OS MAPAS
+    // ============================================================
+    const totalExamesClinicosPendentes = Object.values(examesClinicosPendentesMap)
+        .reduce((acc, v) => acc + v, 0);
+
+    const totalExamesComplementaresPendentes = Object.values(examesComplementaresPendentesMap)
+        .reduce((acc, v) => acc + v, 0);
+
+    const quantidadeExamesPendentesData =
+        filtroTipoExame === "clinico"
+            ? [{ tipo: "Clínicos", total: totalExamesClinicosPendentes }]
+            : filtroTipoExame === "complementar"
+                ? [{ tipo: "Complementares", total: totalExamesComplementaresPendentes }]
+                : [
+                    { tipo: "Clínicos", total: totalExamesClinicosPendentes },
+                    { tipo: "Complementares", total: totalExamesComplementaresPendentes },
+                ];
+    const examesClinicosData = Object.entries(examesClinicosPendentesMap)
         .map(([nome, total]) => ({ nome, total }))
         .sort((a, b) => b.total - a.total);
 
-    const examesComplementaresData = Object.entries(examesComplementaresMap)
+    const examesComplementaresData = Object.entries(examesComplementaresPendentesMap)
         .map(([nome, total]) => ({ nome, total }))
         .sort((a, b) => b.total - a.total);
 
@@ -224,9 +248,10 @@ export function ViewDashboard({
     let vencidos = 0;
     let noPrazo = 0;
     let semPrazo = 0;
+    const funcionariosVencidos: any[] = [];
 
     funcionarios.forEach((item) => {
-        if (asoEstaConcluido(item)) {
+        if (asoEstaConcluido(item, prazosMap)) {
             const prazoAso = obterPrazoAso(item, prazosMap);
 
             if (!prazoAso) {
@@ -234,12 +259,11 @@ export function ViewDashboard({
                 return;
             }
 
-            const status = calcularStatusVencimentoVisual(
-                prazoAso.dataLimite
-            );
+            const status = calcularStatusVencimentoVisual(prazoAso.dataLimite);
 
             if (status.estaVencido) {
                 vencidos++;
+                funcionariosVencidos.push(item); // <- novo
             } else {
                 noPrazo++;
             }
@@ -247,31 +271,23 @@ export function ViewDashboard({
             return;
         }
 
-        // Funcionário ainda com exames pendentes:
-        // avalia SOMENTE os exames que estão pendentes.
         if (!possuiAso(item)) {
             semPrazo++;
             return;
         }
 
         const cpf = String(
-            item.cpfFuncionario ||
-            item.cpf ||
-            item.aso?.cpfFuncionario ||
-            ""
+            item.cpfFuncionario || item.cpf || item.aso?.cpfFuncionario || ""
         ).trim();
 
         const examesPendentesNomes = pendenciasMap.get(cpf);
-        const statusPendente = obterStatusPrazoPendente(
-            item,
-            prazosMap,
-            examesPendentesNomes
-        );
+        const statusPendente = obterStatusPrazoPendente(item, prazosMap, examesPendentesNomes);
 
         if (!statusPendente.temStatus) {
             semPrazo++;
         } else if (statusPendente.estaVencido) {
             vencidos++;
+            funcionariosVencidos.push(item); // <- novo
         } else {
             noPrazo++;
         }
@@ -299,37 +315,28 @@ export function ViewDashboard({
         },
     ];
 
-    /* ============================================================
-       TIPO DE ASO
-    ============================================================ */
-    const tipoAsoMap: Record<string, number> = {};
+    const tipoAsoVencidosMap: Record<string, number> = {};
 
-    funcionarios.forEach((item) => {
+    funcionariosVencidos.forEach((item) => {
         const tipoAso = String(
             item.aso?.tipoAso || item.tipoAso || "Não informado"
         ).trim();
 
         const nomeTipo = tipoAso || "Não informado";
-        tipoAsoMap[nomeTipo] = (tipoAsoMap[nomeTipo] || 0) + 1;
+        tipoAsoVencidosMap[nomeTipo] = (tipoAsoVencidosMap[nomeTipo] || 0) + 1;
     });
 
-    const tipoAsoData = Object.entries(tipoAsoMap)
+    const tipoAsoVencidosData = Object.entries(tipoAsoVencidosMap)
         .map(([name, total]) => ({
             name,
             total,
-            percentual: total > 0 ? (total / (funcionarios.length || 1)) * 100 : 0,
+            percentual: total > 0 ? (total / (funcionariosVencidos.length || 1)) * 100 : 0,
         }))
         .sort((a, b) => b.total - a.total);
 
     /* ============================================================
        CÁLCULOS AUXILIARES
     ============================================================ */
-    const totalExames =
-        examesClinicosData.reduce((acc, item) => acc + item.total, 0) +
-        examesComplementaresData.reduce((acc, item) => acc + item.total, 0);
-
-    const mediaExamesPorFuncionario = total > 0 ? totalExames / total : 0;
-
     const maxClinico =
         topClinicos.length > 0
             ? Math.max(...topClinicos.map((d) => d.total))
@@ -340,33 +347,32 @@ export function ViewDashboard({
             ? Math.max(...topComplementares.map((d) => d.total))
             : 10;
 
+    let totalDiasAtraso = 0;
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+
+    funcionariosVencidos.forEach((item) => {
+        // Lógica simplificada pegando o limite já calculado ou estimado
+        const prazoAso = obterPrazoAso(item, prazosMap);
+        if (prazoAso && prazoAso.dataLimite) {
+            const limite = new Date(prazoAso.dataLimite);
+            limite.setHours(0, 0, 0, 0);
+            const diffTime = hoje.getTime() - limite.getTime();
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            if (diffDays > 0) {
+                totalDiasAtraso += diffDays;
+            }
+        }
+    });
+
+    const mediaDiasVencidos = vencidos > 0 ? Math.round(totalDiasAtraso / vencidos) : 0;
+
     return (
         <div className="space-y-5">
             {/* =====================================================
                 RESUMO PRINCIPAL
             ===================================================== */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {/* ASOS VENCIDOS */}
-                <Card className="border-red-200 bg-white shadow-sm dark:border-red-900/40 dark:bg-gray-900">
-                    <CardContent className="p-4">
-                        <div className="flex items-start justify-between">
-                            <div>
-                                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                                    ASOs vencidos
-                                </p>
-                                <p className="mt-1 text-3xl font-black tracking-tight text-red-500">
-                                    {vencidos}
-                                </p>
-                                <p className="mt-1 text-[10px] font-bold text-red-500">
-                                    {percentualVencidos.toFixed(1)}% do total
-                                </p>
-                            </div>
-                            <div className="rounded-xl bg-red-500/10 p-2.5">
-                                <AlertTriangle className="h-5 w-5 text-red-500" />
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
 
                 {/* ASOS NO PRAZO */}
                 <Card className="border-emerald-200 bg-white shadow-sm dark:border-emerald-900/40 dark:bg-gray-900">
@@ -393,23 +399,45 @@ export function ViewDashboard({
                     </CardContent>
                 </Card>
 
-                {/* MÉDIA DE EXAMES */}
-                <Card className="border-violet-200 bg-white shadow-sm dark:border-violet-900/40 dark:bg-gray-900">
+                {/* ASOS VENCIDOS */}
+                <Card className="border-red-200 bg-white shadow-sm dark:border-red-900/40 dark:bg-gray-900">
                     <CardContent className="p-4">
                         <div className="flex items-start justify-between">
                             <div>
                                 <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                                    Média de exames por pessoa
+                                    ASO's vencidos
                                 </p>
-                                <p className="mt-1 text-3xl font-black tracking-tight">
-                                    {Math.round(mediaExamesPorFuncionario)}
+                                <p className="mt-1 text-3xl font-black tracking-tight text-red-500">
+                                    {vencidos}
                                 </p>
-                                <p className="mt-1 text-[10px] text-slate-400">
-                                    Exames por funcionário
+                                <p className="mt-1 text-[10px] font-bold text-red-500">
+                                    {percentualVencidos.toFixed(1)}% do total
                                 </p>
                             </div>
-                            <div className="rounded-xl bg-violet-500/10 p-2.5">
-                                <Activity className="h-5 w-5 text-violet-500" />
+                            <div className="rounded-xl bg-red-500/10 p-2.5">
+                                <AlertTriangle className="h-5 w-5 text-red-500" />
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* MÉDIA DE DIAS DOS ASOS VENCIDOS */}
+                <Card className="border-violet-200 bg-white shadow-sm dark:border-red-900/40 dark:bg-gray-900">
+                    <CardContent className="p-4">
+                        <div className="flex items-start justify-between">
+                            <div>
+                                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                                    Média de atraso (vencidos)
+                                </p>
+                                <p className="mt-1 text-3xl font-black tracking-tight text-red-500">
+                                    {mediaDiasVencidos} <span className="text-sm font-bold">dias</span>
+                                </p>
+                                <p className="mt-1 text-[11px] text-slate-400">
+                                    Tempo médio de vencimento
+                                </p>
+                            </div>
+                            <div className="rounded-xl bg-red-500/10 p-2.5">
+                                <Activity className="h-5 w-5 text-red-500" />
                             </div>
                         </div>
                     </CardContent>
@@ -420,6 +448,205 @@ export function ViewDashboard({
                 SEGUNDA LINHA — VENCIMENTO + DISTRIBUIÇÃO
             ===================================================== */}
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+
+                {/* TIPO DE ASOS VENCIDOS  */}
+                <Card className="border-slate-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                    <CardHeader className="border-b border-slate-200 px-5 py-3 dark:border-gray-700">
+                        <CardTitle className="flex items-center gap-2 text-xs font-black uppercase text-slate-700 dark:text-slate-200">
+                            <AlertTriangle className="h-4 w-4 text-red-500" />
+                            Distribuição por tipo de ASO (vencidos)
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="h-[390px] pt-4">
+                        {tipoAsoVencidosData.length === 0 ? (
+                            <div className="flex h-full items-center justify-center text-xs font-mono uppercase text-slate-400">
+                                Nenhum ASO vencido encontrado.
+                            </div>
+                        ) : (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie
+                                        data={tipoAsoVencidosData}
+                                        dataKey="total"
+                                        nameKey="name"
+                                        cx="50%"
+                                        cy="45%"
+                                        innerRadius={62}
+                                        outerRadius={100}
+                                        paddingAngle={3}
+                                        label={({ name, total: t, percent }: any) =>
+                                            `${name}: ${t} (${(percent * 100).toFixed(1)}%)`
+                                        }
+                                        labelLine
+                                    >
+                                        {tipoAsoVencidosData.map((entry, index) => (
+                                            <Cell
+                                                key={`${entry.name}-${index}`}
+                                                fill={CORES_TIPO_ASO[index % CORES_TIPO_ASO.length]}
+                                            />
+                                        ))}
+                                    </Pie>
+                                    <text
+                                        x="50%"
+                                        y="43%"
+                                        textAnchor="middle"
+                                        dominantBaseline="middle"
+                                        className="fill-slate-800 dark:fill-slate-100"
+                                    >
+                                        <tspan x="50%" dy="-2" fontSize="24" fontWeight="900">
+                                            {vencidos}
+                                        </tspan>
+                                        <tspan x="50%" dy="20" fontSize="9" fontWeight="700">
+                                            VENCIDOS
+                                        </tspan>
+                                    </text>
+                                    <Tooltip
+                                        contentStyle={{
+                                            background: THEME_COLORS.legendBackground,
+                                            border: "none",
+                                            color: "#fff",
+                                            borderRadius: 8,
+                                        }}
+                                    />
+                                    <Legend verticalAlign="bottom" wrapperStyle={{ fontSize: "10px" }} />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        )}
+                    </CardContent>
+                </Card>
+
+                {/* CLÍNICO X COMPLEMENTAR */}
+                <Card className="border-slate-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                    <CardHeader className="border-b border-slate-200 px-5 py-3 dark:border-gray-700">
+                        <CardTitle className="flex items-center gap-2 text-xs font-black uppercase text-slate-700 dark:text-slate-200">
+                            <Layers className="h-4 w-4 text-orange-500" />
+                            Distribuição por tipo de exame
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="h-[330px] pt-4">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart
+                                data={comparacaoTipoData}
+                                margin={{
+                                    top: 35,
+                                    right: 25,
+                                    left: 10,
+                                    bottom: 20,
+                                }}
+                            >
+                                <CartesianGrid strokeDasharray="3 3" opacity={0.12} />
+                                <XAxis dataKey="tipo" tick={{ fontSize: 10 }} />
+                                <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
+                                <Bar
+                                    dataKey="total"
+                                    name="Quantidade"
+                                    radius={[6, 6, 0, 0]}
+                                    barSize={60}
+                                >
+                                    <Cell fill={THEME_COLORS.primary} />
+                                    <Cell fill={THEME_COLORS.secondary} />
+                                    <LabelList
+                                        dataKey="total"
+                                        position="top"
+                                        offset={8}
+                                        style={{
+                                            fontSize: 12,
+                                            fontWeight: "800",
+                                            fill: "currentColor",
+                                        }}
+                                    />
+                                </Bar>
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </CardContent>
+                </Card>
+            </div>
+
+            {/* =====================================================
+                TIPO ASO
+            ===================================================== */}
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                {/* <Card className="border-slate-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                    <CardHeader className="border-b border-slate-200 px-5 py-3 dark:border-gray-700">
+                        <CardTitle className="flex items-center gap-2 text-xs font-black uppercase text-slate-700 dark:text-slate-200">
+                            <Activity className="h-4 w-4 text-violet-500" />
+                            Distribuição por tipo de ASO
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="h-[390px] pt-4">
+                        {tipoAsoData.length === 0 ? (
+                            <div className="flex h-full items-center justify-center text-xs font-mono uppercase text-slate-400">
+                                Nenhum tipo de ASO encontrado.
+                            </div>
+                        ) : (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie
+                                        data={tipoAsoData}
+                                        dataKey="total"
+                                        nameKey="name"
+                                        cx="50%"
+                                        cy="45%"
+                                        innerRadius={62}
+                                        outerRadius={100}
+                                        paddingAngle={3}
+                                        label={({ name, total: t, percent }: any) =>
+                                            `${name}: ${t} (${(percent * 100).toFixed(1)}%)`
+                                        }
+                                        labelLine
+                                    >
+                                        {tipoAsoData.map((entry, index) => (
+                                            <Cell
+                                                key={`${entry.name}-${index}`}
+                                                fill={
+                                                    CORES_TIPO_ASO[
+                                                    index % CORES_TIPO_ASO.length
+                                                    ]
+                                                }
+                                            />
+                                        ))}
+                                    </Pie>
+                                    <text
+                                        x="50%"
+                                        y="43%"
+                                        textAnchor="middle"
+                                        dominantBaseline="middle"
+                                        className="fill-slate-800 dark:fill-slate-100"
+                                    >
+                                        <tspan
+                                            x="50%"
+                                            dy="-2"
+                                            fontSize="24"
+                                            fontWeight="900"
+                                        >
+                                            {total}
+                                        </tspan>
+                                        <tspan
+                                            x="50%"
+                                            dy="20"
+                                            fontSize="9"
+                                            fontWeight="700"
+                                        >
+                                            ASO'S
+                                        </tspan>
+                                    </text>
+                                    <Tooltip
+                                        contentStyle={{
+                                            background: THEME_COLORS.legendBackground,
+                                            border: "none",
+                                            color: "#fff",
+                                            borderRadius: 8,
+                                        }}
+                                    />
+                                    <Legend
+                                        verticalAlign="bottom"
+                                        wrapperStyle={{ fontSize: "10px" }}
+                                    />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        )}
+                    </CardContent>
+                </Card> */}
                 {/* VENCIMENTO */}
                 <Card className="border-slate-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
                     <CardHeader className="border-b border-slate-200 px-5 py-3 dark:border-gray-700">
@@ -505,45 +732,31 @@ export function ViewDashboard({
                     </CardContent>
                 </Card>
 
-                {/* CLÍNICO X COMPLEMENTAR */}
+                {/* Qt exames pendentes */}
                 <Card className="border-slate-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
                     <CardHeader className="border-b border-slate-200 px-5 py-3 dark:border-gray-700">
                         <CardTitle className="flex items-center gap-2 text-xs font-black uppercase text-slate-700 dark:text-slate-200">
-                            <Layers className="h-4 w-4 text-orange-500" />
-                            Distribuição por tipo de exame
+                            <Clock className="h-4 w-4 text-amber-500" />
+                            Quantidade de exames pendentes por tipo
                         </CardTitle>
                     </CardHeader>
                     <CardContent className="h-[330px] pt-4">
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart
-                                data={comparacaoTipoData}
-                                margin={{
-                                    top: 35,
-                                    right: 25,
-                                    left: 10,
-                                    bottom: 20,
-                                }}
+                                data={quantidadeExamesPendentesData}
+                                margin={{ top: 35, right: 25, left: 10, bottom: 20 }}
                             >
                                 <CartesianGrid strokeDasharray="3 3" opacity={0.12} />
                                 <XAxis dataKey="tipo" tick={{ fontSize: 10 }} />
                                 <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
-                                <Bar
-                                    dataKey="total"
-                                    name="Quantidade"
-                                    radius={[6, 6, 0, 0]}
-                                    barSize={60}
-                                >
-                                    <Cell fill={THEME_COLORS.primary} />
+                                <Bar dataKey="total" name="Quantidade" radius={[6, 6, 0, 0]} barSize={60}>
                                     <Cell fill={THEME_COLORS.secondary} />
+                                    <Cell fill={THEME_COLORS.primary} />
                                     <LabelList
                                         dataKey="total"
                                         position="top"
                                         offset={8}
-                                        style={{
-                                            fontSize: 12,
-                                            fontWeight: "800",
-                                            fill: "currentColor",
-                                        }}
+                                        style={{ fontSize: 12, fontWeight: "800", fill: "currentColor" }}
                                     />
                                 </Bar>
                             </BarChart>
@@ -553,94 +766,7 @@ export function ViewDashboard({
             </div>
 
             {/* =====================================================
-                TIPO ASO
-            ===================================================== */}
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                <Card className="border-slate-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
-                    <CardHeader className="border-b border-slate-200 px-5 py-3 dark:border-gray-700">
-                        <CardTitle className="flex items-center gap-2 text-xs font-black uppercase text-slate-700 dark:text-slate-200">
-                            <Activity className="h-4 w-4 text-violet-500" />
-                            Distribuição por tipo de ASO
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="h-[390px] pt-4">
-                        {tipoAsoData.length === 0 ? (
-                            <div className="flex h-full items-center justify-center text-xs font-mono uppercase text-slate-400">
-                                Nenhum tipo de ASO encontrado.
-                            </div>
-                        ) : (
-                            <ResponsiveContainer width="100%" height="100%">
-                                <PieChart>
-                                    <Pie
-                                        data={tipoAsoData}
-                                        dataKey="total"
-                                        nameKey="name"
-                                        cx="50%"
-                                        cy="45%"
-                                        innerRadius={62}
-                                        outerRadius={100}
-                                        paddingAngle={3}
-                                        label={({ name, total: t, percent }: any) =>
-                                            `${name}: ${t} (${(percent * 100).toFixed(1)}%)`
-                                        }
-                                        labelLine
-                                    >
-                                        {tipoAsoData.map((entry, index) => (
-                                            <Cell
-                                                key={`${entry.name}-${index}`}
-                                                fill={
-                                                    CORES_TIPO_ASO[
-                                                    index % CORES_TIPO_ASO.length
-                                                    ]
-                                                }
-                                            />
-                                        ))}
-                                    </Pie>
-                                    <text
-                                        x="50%"
-                                        y="43%"
-                                        textAnchor="middle"
-                                        dominantBaseline="middle"
-                                        className="fill-slate-800 dark:fill-slate-100"
-                                    >
-                                        <tspan
-                                            x="50%"
-                                            dy="-2"
-                                            fontSize="24"
-                                            fontWeight="900"
-                                        >
-                                            {total}
-                                        </tspan>
-                                        <tspan
-                                            x="50%"
-                                            dy="20"
-                                            fontSize="9"
-                                            fontWeight="700"
-                                        >
-                                            ASO'S
-                                        </tspan>
-                                    </text>
-                                    <Tooltip
-                                        contentStyle={{
-                                            background: THEME_COLORS.legendBackground,
-                                            border: "none",
-                                            color: "#fff",
-                                            borderRadius: 8,
-                                        }}
-                                    />
-                                    <Legend
-                                        verticalAlign="bottom"
-                                        wrapperStyle={{ fontSize: "10px" }}
-                                    />
-                                </PieChart>
-                            </ResponsiveContainer>
-                        )}
-                    </CardContent>
-                </Card>
-            </div>
-
-            {/* =====================================================
-                PRINCIPAIS EXAMES
+                PRINCIPAIS EXAMES PENDENTES
             ===================================================== */}
             <div
                 className={
@@ -655,14 +781,14 @@ export function ViewDashboard({
                         <CardHeader className="border-b border-slate-200 px-5 py-3 dark:border-gray-700">
                             <CardTitle className="flex items-center gap-2 text-xs font-black uppercase text-slate-700 dark:text-slate-200">
                                 <Stethoscope className="h-4 w-4 text-blue-500" />
-                                Principais exames clínicos
+                                Principais exames clínicos pendentes
                             </CardTitle>
                         </CardHeader>
 
                         <CardContent className="h-[390px] pt-4">
                             {topClinicos.length === 0 ? (
                                 <div className="flex h-full items-center justify-center text-xs font-mono uppercase text-slate-400">
-                                    Nenhum exame clínico encontrado.
+                                    Nenhum exame clínico pendente encontrado.
                                 </div>
                             ) : (
                                 <ResponsiveContainer width="100%" height="100%">
@@ -742,14 +868,14 @@ export function ViewDashboard({
                             <CardHeader className="border-b border-slate-200 px-5 py-3 dark:border-gray-700">
                                 <CardTitle className="flex items-center gap-2 text-xs font-black uppercase text-slate-700 dark:text-slate-200">
                                     <Microscope className="h-4 w-4 text-orange-500" />
-                                    Principais exames complementares
+                                    Principais exames complementares pendentes
                                 </CardTitle>
                             </CardHeader>
 
                             <CardContent className="h-[390px] pt-4">
                                 {topComplementares.length === 0 ? (
                                     <div className="flex h-full items-center justify-center text-xs font-mono uppercase text-slate-400">
-                                        Nenhum exame complementar encontrado.
+                                        Nenhum exame complementar pendente encontrado.
                                     </div>
                                 ) : (
                                     <ResponsiveContainer width="100%" height="100%">

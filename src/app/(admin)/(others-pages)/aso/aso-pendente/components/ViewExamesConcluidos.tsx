@@ -29,6 +29,7 @@ import {
     Clock3,
     Search,
     Save,
+    Send,
     ArrowUp,
     ArrowDown,
     ArrowUpDown,
@@ -36,6 +37,7 @@ import {
     ChevronRight,
 } from "lucide-react";
 import { FuncionarioModal } from "./FuncionarioModal";
+import { ConfirmarAcaoDialog } from "./ConfirmarAcaoDialog";
 import { ViewExamesConcluidosProps, FuncionarioItem, StatusVencimentoVisual } from "../types";
 import {
     classificarTipoExame,
@@ -44,6 +46,7 @@ import {
     obterPrazoAso,
     calcularStatusVencimentoVisual,
 } from "../utils";
+import { criarPacienteAssinatura, criarPayloadAcaoAso } from "@/lib/aso-assinatura";
 
 type FuncionarioComPrazo = FuncionarioItem & {
     prazoAso: { maiorPrazo: number; dataBase: Date; dataLimite: Date } | null;
@@ -61,6 +64,7 @@ export function ViewExamesConcluidos({
     const [selectedFuncionario, setSelectedFuncionario] = useState<any | null>(null);
     const [modalOpen, setModalOpen] = useState(false);
     const [selectedCpfs, setSelectedCpfs] = useState<Set<string>>(new Set());
+    const [cpfsEnviadosDireto, setCpfsEnviadosDireto] = useState<Set<string>>(new Set());
     const [saving, setSaving] = useState(false);
 
     // Aba Ativa: "pendentes" (disponíveis para montagem) ou "salvos" (montados/salvos)
@@ -75,6 +79,11 @@ export function ViewExamesConcluidos({
     ============================================================ */
     const [paginaAtual, setPaginaAtual] = useState(1);
     const [itensPorPagina, setItensPorPagina] = useState(15);
+
+    const [filtroMedico, setFiltroMedico] = useState("todos");
+    const [filtroExameEspecifico, setFiltroExameEspecifico] = useState("todos");
+    const [sendingAso, setSendingAso] = useState(false);
+    const [acaoParaConfirmar, setAcaoParaConfirmar] = useState<"salvar" | "enviar" | null>(null);
 
     /* ============================================================
    FUNCIONÁRIOS CONCLUÍDOS
@@ -248,22 +257,40 @@ export function ViewExamesConcluidos({
 
     }, [todosFuncionarios, prazosMap]);
 
-    const funcionariosConcluidosFiltrados = useMemo(() => {
-        if (filtroTipoExame === "todos") {
-            return funcionariosConcluidos;
-        }
+    const listaMedicosConcluidos = useMemo(() => {
+        const setM = new Set<string>();
+        funcionariosConcluidos.forEach((f) => { if (f.medico) setM.add(f.medico); });
+        return Array.from(setM).sort();
+    }, [funcionariosConcluidos]);
 
-        return funcionariosConcluidos.filter((funcionario) => {
-            return (
-                classificarTipoExame(funcionario, prazosMap) ===
-                filtroTipoExame
-            );
+    const listaExamesConcluidos = useMemo(() => {
+        const setE = new Set<string>();
+        funcionariosConcluidos.forEach((f) => {
+            const lista = f.aso?.listaExamesResumida || f.listaExamesResumida || [];
+            lista.forEach((e: any) => {
+                const nomeEx = e?.descricaoExame || e?.nomeExame || e?.nome;
+                if (nomeEx) setE.add(nomeEx);
+            });
         });
-    }, [
-        funcionariosConcluidos,
-        filtroTipoExame,
-        prazosMap,
-    ]);
+        return Array.from(setE).sort();
+    }, [funcionariosConcluidos]);
+
+    const funcionariosConcluidosFiltrados = useMemo(() => {
+        return funcionariosConcluidos.filter((funcionario) => {
+            if (filtroTipoExame !== "todos" && classificarTipoExame(funcionario, prazosMap) !== filtroTipoExame) {
+                return false;
+            }
+            if (filtroMedico !== "todos" && funcionario.medico !== filtroMedico) {
+                return false;
+            }
+            if (filtroExameEspecifico !== "todos") {
+                const lista = funcionario.aso?.listaExamesResumida || funcionario.listaExamesResumida || [];
+                const possui = lista.some((e: any) => (e?.descricaoExame || e?.nomeExame || e?.nome || "").toLowerCase() === filtroExameEspecifico.toLowerCase());
+                if (!possui) return false;
+            }
+            return true;
+        });
+    }, [funcionariosConcluidos, filtroTipoExame, filtroMedico, filtroExameEspecifico, prazosMap]);
 
     /* ============================================================
    PRAZO DO ASO
@@ -415,7 +442,7 @@ export function ViewExamesConcluidos({
        SELEÇÃO
     ============================================================ */
     const cpfsSelecionaveis = funcionariosFiltrados
-        .filter((f) => !isFuncionarioMontado(f))
+        .filter((f) => !isFuncionarioMontado(f) && !cpfsEnviadosDireto.has(f.cpf!))
         .map((f) => f.cpf!);
 
     const allChecked =
@@ -439,7 +466,7 @@ export function ViewExamesConcluidos({
         }
 
         const disponiveis = funcionariosFiltrados
-            .filter((f) => !isFuncionarioMontado(f))
+            .filter((f) => !isFuncionarioMontado(f) && !cpfsEnviadosDireto.has(f.cpf!))
             .map((f) => f.cpf!);
 
         setSelectedCpfs(new Set(disponiveis));
@@ -450,7 +477,7 @@ export function ViewExamesConcluidos({
             (f) => f.cpf === cpf
         );
 
-        if (!funcionario || isFuncionarioMontado(funcionario)) {
+        if (!funcionario || isFuncionarioMontado(funcionario) || cpfsEnviadosDireto.has(cpf)) {
             return;
         }
 
@@ -486,33 +513,26 @@ export function ViewExamesConcluidos({
                 return;
             }
 
+            const pacientes = selecionados.map((f) => ({
+                ...criarPacienteAssinatura(f, unidadeId),
+                observacao: "ASO montado",
+            }));
+
             const response = await fetch("/api/enviar-asos-concluidos", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify({
-                    selecionados,
-                }),
+                body: JSON.stringify(criarPayloadAcaoAso(pacientes, "LIBERAR", "ASO montado")),
             });
 
             if (!response.ok) {
                 throw new Error("Erro ao enviar funcionários.");
             }
 
-            // Inserção em lote no Supabase com novo schema e fallbacks
-            const dadosParaInserir = selecionados.map((f) => ({
-                nome_paciente: f.nomeFuncionario || f.nome,
-                sequencial_ficha: f.aso?.sequencialFicha || f.sequencial_ficha,
-                codigo_empresa_soc: f.codigoEmpresa,
-                codigo_ged_soc: f.aso?.codigoGed || f.codigoGed,
-                data_criacao_ged_soc: f.aso?.dataCriacaoGed || f.dataCriacaoGed,
-                unidade_id: unidadeId,
-            }));
-
             const saveBd = await supabase
                 .from("pacientes_assinatura")
-                .insert(dadosParaInserir);
+                .insert(pacientes);
 
             if (saveBd.error) {
                 toast.error("Erro ao salvar funcionários.");
@@ -533,12 +553,48 @@ export function ViewExamesConcluidos({
             toast.success(
                 `${selecionados.length} funcionário(s) salvo(s) com sucesso!`
             );
-        } catch (error) {
+        } catch {
             toast.error(
                 "Não foi possível salvar os funcionários selecionados."
             );
         } finally {
             setSaving(false);
+        }
+    };
+
+    const handleEnviarAso = async () => {
+        if (selectedCpfs.size === 0) {
+            toast.warning("Selecione ao menos um funcionário para enviar o ASO.");
+            return;
+        }
+        setSendingAso(true);
+        try {
+            const selecionados = funcionariosConcluidosFiltrados.filter((f) => selectedCpfs.has(f.cpf!));
+            const pacientes = selecionados.map((f) => ({
+                ...criarPacienteAssinatura(f, unidadeId),
+                acao: "ENVIADO_DIRETO" as const,
+                observacao: "Enviado direto",
+            }));
+            const response = await fetch("/api/enviar-asos-concluidos", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(criarPayloadAcaoAso(pacientes, "LIBERAR-ENVIAR")),
+            });
+
+            if (!response.ok) throw new Error("Erro ao enviar ASO.");
+
+            const saveBd = await supabase.from("pacientes_assinatura").insert(pacientes);
+            if (saveBd.error) throw saveBd.error;
+
+            const cpfsEnviados = selecionados.map((f) => f.cpf!).filter(Boolean);
+            setCpfsEnviadosDireto((prev) => new Set([...prev, ...cpfsEnviados]));
+
+            toast.success(`${selecionados.length} ASO(s) enviado(s) com sucesso!`);
+            setSelectedCpfs(new Set());
+        } catch {
+            toast.error("Não foi possível enviar os ASOs selecionados.");
+        } finally {
+            setSendingAso(false);
         }
     };
 
@@ -592,112 +648,106 @@ export function ViewExamesConcluidos({
     return (
         <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm rounded-2xl overflow-hidden">
             {/* HEADER */}
-            <CardHeader className="border-b border-gray-200 dark:border-gray-700 p-4">
-                <div className="flex flex-col gap-4">
-                    {/* TÍTULO + INDICADORES */}
-                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-                        <div>
-                            <CardTitle className="text-sm font-black uppercase tracking-wide text-slate-700 dark:text-slate-200 flex items-center gap-2">
-                                <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-500/10">
-                                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                                </span>
-                                Funcionários Concluídos
+            <CardHeader className="border-b border-gray-200 dark:border-gray-700 p-5">
+                <div className="flex flex-col gap-5">
+
+                    {/* FAIXA 1 — TÍTULO + ABAS */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                            <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-emerald-500/10 shrink-0">
+                                <CheckCircle2 className="w-4.5 h-4.5 text-emerald-500" />
+                            </span>
+                            <CardTitle className="text-sm font-black uppercase tracking-wide text-slate-700 dark:text-slate-200">
+                                ASO's Pendentes para Liberação
                             </CardTitle>
-
-                            {/* ABAS */}
-                            <div className="mt-3 flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 shrink-0">
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setAbaAtiva("pendentes");
-                                        setSelectedCpfs(new Set());
-                                        setPaginaAtual(1);
-                                    }}
-                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black uppercase transition-all ${abaAtiva === "pendentes"
-                                        ? "bg-white dark:bg-gray-900 text-blue-600 shadow-sm"
-                                        : "text-slate-500 hover:text-slate-700"
-                                        }`}
-                                >
-                                    <Clock3 className="w-3.5 h-3.5" />
-                                    Pendentes
-                                    <span className="px-1.5 py-0.5 rounded-full bg-blue-500/10">
-                                        {quantidadePendentes}
-                                    </span>
-                                </button>
-
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setAbaAtiva("salvos");
-                                        setSelectedCpfs(new Set());
-                                        setPaginaAtual(1);
-                                    }}
-                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black uppercase transition-all ${abaAtiva === "salvos"
-                                        ? "bg-white dark:bg-gray-900 text-emerald-600 shadow-sm"
-                                        : "text-slate-500 hover:text-slate-700"
-                                        }`}
-                                >
-                                    <CheckCircle2 className="w-3.5 h-3.5" />
-                                    Montados
-                                    <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/10">
-                                        {quantidadeSalvos}
-                                    </span>
-                                </button>
-                            </div>
                         </div>
 
-                        {/* INDICADORES DE VENCIMENTO DO ASO */}
-                        <div className="flex flex-row justify-center gap-3">
-                            {/* ASOS VENCIDOS */}
-                            <div className="flex items-center justify-between gap-3 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3">
-                                <div className="flex items-center gap-3">
-                                    <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-red-500/10">
-                                        <AlertCircle className="w-5 h-5 text-red-500" />
+                        <div className="grid grid-cols-2 gap-3 mx-auto">
+                            <div className="flex items-center gap-3 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3">
+                                <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-red-500/10 shrink-0">
+                                    <AlertCircle className="w-5 h-5 text-red-500" />
+                                </div>
+                                <div className="min-w-0">
+                                    <div className="text-[9px] uppercase font-bold tracking-wide text-slate-400">
+                                        ASOs Vencidos
                                     </div>
-                                    <div>
-                                        <div className="text-[9px] uppercase font-bold tracking-wide text-slate-400">
-                                            ASOs Vencidos
-                                        </div>
-                                        <div className="text-[10px] text-slate-500 dark:text-slate-400">
-                                            Prazo expirado
-                                        </div>
+                                    <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                                        Prazo expirado
                                     </div>
                                 </div>
-                                <span className="text-2xl font-black text-red-500">
+                                <span className="ml-auto text-2xl font-black text-red-500">
                                     {indicadoresVencimento.vencidos}
                                 </span>
                             </div>
 
-                            {/* ASOS NO PRAZO */}
-                            <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
-                                <div className="flex items-center gap-3">
-                                    <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-emerald-500/10">
-                                        <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                            <div className="flex items-center gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
+                                <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-emerald-500/10 shrink-0">
+                                    <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                                </div>
+                                <div className="min-w-0">
+                                    <div className="text-[9px] uppercase font-bold tracking-wide text-slate-400">
+                                        ASOs no Prazo
                                     </div>
-                                    <div>
-                                        <div className="text-[9px] uppercase font-bold tracking-wide text-slate-400">
-                                            ASOs no Prazo
-                                        </div>
-                                        <div className="text-[10px] text-slate-500 dark:text-slate-400">
-                                            Dentro do prazo
-                                        </div>
+                                    <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                                        Dentro do prazo
                                     </div>
                                 </div>
-                                <span className="text-2xl font-black text-emerald-500">
+                                <span className="ml-auto text-2xl font-black text-emerald-500">
                                     {indicadoresVencimento.noPrazo}
                                 </span>
                             </div>
                         </div>
 
-                        {/* LINHA DE AÇÕES */}
-                        <div className="flex flex-col sm:flex-row gap-2">
-                            {/* BUSCA */}
-                            <div className="relative">
+                        <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 self-start sm:self-auto">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setAbaAtiva("pendentes");
+                                    setSelectedCpfs(new Set());
+                                    setPaginaAtual(1);
+                                }}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black uppercase transition-all ${abaAtiva === "pendentes"
+                                    ? "bg-white dark:bg-gray-900 text-blue-600 shadow-sm"
+                                    : "text-slate-500 hover:text-slate-700"
+                                    }`}
+                            >
+                                <Clock3 className="w-3.5 h-3.5" />
+                                Pendentes
+                                <span className="px-1.5 py-0.5 rounded-full bg-blue-500/10">
+                                    {quantidadePendentes}
+                                </span>
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setAbaAtiva("salvos");
+                                    setSelectedCpfs(new Set());
+                                    setPaginaAtual(1);
+                                }}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black uppercase transition-all ${abaAtiva === "salvos"
+                                    ? "bg-white dark:bg-gray-900 text-emerald-600 shadow-sm"
+                                    : "text-slate-500 hover:text-slate-700"
+                                    }`}
+                            >
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                Montados
+                                <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/10">
+                                    {quantidadeSalvos}
+                                </span>
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* FAIXA 3 — BUSCA + FILTROS + AÇÕES */}
+                    <div className="flex flex-col lg:flex-row lg:items-center gap-3 pt-1 border-t border-slate-100 dark:border-slate-800">
+                        <div className="flex flex-col sm:flex-row gap-2 flex-1 min-w-0">
+                            <div className="relative w-full sm:w-64 shrink-0">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                 <Input
                                     value={busca}
                                     onChange={(e) => setBusca(e.target.value)}
-                                    placeholder="Buscar por nome, empresa ou CPF..."
+                                    placeholder="Buscar por nome, empresa..."
                                     className="h-9 pl-9 pr-9 text-xs bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700"
                                 />
                                 {busca && (
@@ -711,42 +761,80 @@ export function ViewExamesConcluidos({
                                 )}
                             </div>
 
+                            <Select value={filtroMedico} onValueChange={setFiltroMedico}>
+                                <SelectTrigger className="h-9 w-full sm:w-48 text-xs">
+                                    <SelectValue placeholder="Médico Examinador" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="todos">Todos os médicos</SelectItem>
+                                    {listaMedicosConcluidos.map((med) => (
+                                        <SelectItem key={med} value={med}>{med}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+
+                            <Select value={filtroExameEspecifico} onValueChange={setFiltroExameEspecifico}>
+                                <SelectTrigger className="h-9 w-full sm:w-48 text-xs">
+                                    <SelectValue placeholder="Filtrar por Exame" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="todos">Todos os exames</SelectItem>
+                                    {listaExamesConcluidos.map((ex) => (
+                                        <SelectItem key={ex} value={ex}>{ex}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+
                             {busca && (
-                                <div className="flex items-center px-2 text-[10px] text-slate-400">
+                                <div className="flex items-center px-1 text-[10px] text-slate-400 whitespace-nowrap">
                                     {funcionariosFiltrados.length} resultado(s)
                                 </div>
                             )}
+                        </div>
 
-                            {/* SALVAR SELECIONADOS */}
-                            {abaAtiva === "pendentes" && (
+                        {abaAtiva === "pendentes" && (
+                            <div className="flex gap-2 shrink-0">
                                 <Button
                                     type="button"
-                                    onClick={handleSaveSelection}
+                                    onClick={() => setAcaoParaConfirmar("salvar")}
                                     disabled={saving || selectedCpfs.size === 0}
-                                    className="h-9 px-4 text-[10px] font-black uppercase tracking-wide gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 shrink-0 text-white"
+                                    className="h-9 px-4 text-[10px] font-black uppercase tracking-wide gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white"
                                 >
                                     {saving ? (
                                         <>
                                             <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                                            Salvando...
+                                            Liberando...
                                         </>
                                     ) : (
                                         <>
                                             <Save className="w-3.5 h-3.5" />
-                                            Salvar
-                                            {selectedCpfs.size > 0 &&
-                                                ` (${selectedCpfs.size})`}
+                                            Liberar ASO
+                                            {selectedCpfs.size > 0 && ` (${selectedCpfs.size})`}
                                         </>
                                     )}
                                 </Button>
-                            )}
-                        </div>
-                    </div>
 
-                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-
-
-
+                                <Button
+                                    type="button"
+                                    onClick={() => setAcaoParaConfirmar("enviar")}
+                                    disabled={sendingAso || selectedCpfs.size === 0}
+                                    className="h-9 px-4 text-[10px] font-black uppercase tracking-wide gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white"
+                                >
+                                    {sendingAso ? (
+                                        <>
+                                            <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                                            Enviando...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Send className="w-3.5 h-3.5" />
+                                            Enviar ASO
+                                            {selectedCpfs.size > 0 && ` (${selectedCpfs.size})`}
+                                        </>
+                                    )}
+                                </Button>
+                            </div>
+                        )}
                     </div>
                 </div>
             </CardHeader>
@@ -781,9 +869,7 @@ export function ViewExamesConcluidos({
                                 sortKeyValue="dataLimite"
                             />
 
-                            {/* <SortHeader label="Exames" sortKeyValue="examesConcluidos" /> */}
                             <SortHeader label="Observação" sortKeyValue="observacao" />
-                            <SortHeader label="Status" sortKeyValue="resultadoAsoSoc" />
                         </TableRow>
                     </TableHeader>
 
@@ -791,7 +877,7 @@ export function ViewExamesConcluidos({
                         {funcionariosPaginados.length === 0 ? (
                             <TableRow>
                                 <TableCell
-                                    colSpan={11}
+                                    colSpan={9}
                                     className="text-center py-8 text-xs text-slate-400"
                                 >
                                     {abaAtiva === "pendentes"
@@ -803,11 +889,14 @@ export function ViewExamesConcluidos({
                             funcionariosPaginados.map((item) => {
                                 const isSelected = selectedCpfs.has(item.cpf!);
                                 const jaMontado = isFuncionarioMontado(item);
+                                const enviadoDireto = cpfsEnviadosDireto.has(item.cpf!);
 
                                 return (
                                     <TableRow
                                         key={item.cpf}
-                                        className={`transition-colors ${jaMontado
+                                        className={`transition-colors ${enviadoDireto
+                                            ? "bg-cyan-500/[0.08] hover:bg-cyan-500/[0.12]"
+                                            : jaMontado
                                             ? "bg-emerald-500/[0.05] hover:bg-emerald-500/[0.08]"
                                             : isSelected
                                                 ? "bg-blue-500/[0.06] hover:bg-blue-500/[0.09]"
@@ -816,7 +905,11 @@ export function ViewExamesConcluidos({
                                     >
                                         {/* CHECKBOX */}
                                         <TableCell className="text-center">
-                                            {jaMontado ? (
+                                            {enviadoDireto ? (
+                                                <div className="mx-auto flex items-center justify-center w-5 h-5 rounded-full bg-cyan-500/15" title="Enviado direto">
+                                                    <Send className="w-3.5 h-3.5 text-cyan-600" />
+                                                </div>
+                                            ) : jaMontado ? (
                                                 <div
                                                     className="mx-auto flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500/15"
                                                     title="ASO já montado"
@@ -869,6 +962,9 @@ export function ViewExamesConcluidos({
                                                         >
                                                             {item.nome}
                                                         </div>
+                                                        {enviadoDireto && (
+                                                            <Badge className="mt-1 bg-cyan-600 text-white text-[9px]">Enviado direto</Badge>
+                                                        )}
                                                         <div className="text-[9px] text-slate-400 mt-0.5">
                                                             Clique para visualizar detalhes
                                                         </div>
@@ -934,82 +1030,30 @@ export function ViewExamesConcluidos({
 
                                         {/* VENCIMENTO */}
                                         <TableCell>
-                                            <Badge
-                                                variant="outline"
-                                                className={`text-[10px] font-bold gap-1 rounded-full ${item.statusPrazo.color}`}
-                                            >
-                                                {item.statusPrazo.estaVencido ? (
-                                                    <Clock3 className="w-3 h-3" />
-                                                ) : (
-                                                    <CheckCircle2 className="w-3 h-3" />
-                                                )}
-
-                                                {item.statusPrazo.label}
-                                            </Badge>
-
-                                            {item.prazoAso && (
-                                                <div className="text-[9px] text-slate-400 mt-1">
-                                                    Limite:{" "}
-                                                    {item.prazoAso.dataLimite.toLocaleDateString(
-                                                        "pt-BR"
-                                                    )}
-                                                </div>
-                                            )}
-                                        </TableCell>
-
-                                        {/* EXAMES */}
-                                        {/* <TableCell>
-                                            <div
-                                                className="flex items-center gap-1.5"
-                                                title={(item.aso?.listaExamesResumida || item.listaExamesResumida || [])
-                                                    .map(
-                                                        (e: any) =>
-                                                            `${e?.descricaoExame || e?.nomeExame || e?.nome || "Exame"}: ${e?.dataExame || "-"
-                                                            }`
-                                                    )
-                                                    .join("\n")}
-                                            >
-                                                <span
-                                                    className={`text-xs font-bold ${jaMontado
-                                                        ? "text-emerald-600 dark:text-emerald-400"
-                                                        : "text-slate-600 dark:text-slate-300"
-                                                        }`}
+                                            <div className="flex flex-col gap-1">
+                                                <Badge
+                                                    variant="outline"
+                                                    className={`w-fit text-[10px] font-bold gap-1 rounded-full ${item.statusPrazo.color}`}
                                                 >
-                                                    {item.examesConcluidos}
-                                                </span>
-                                                <span className="text-[10px] text-slate-400">
-                                                    / {item.totalExames}
-                                                </span>
-                                                {jaMontado && (
-                                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 ml-1" />
+                                                    {item.statusPrazo.estaVencido ? (
+                                                        <Clock3 className="w-3 h-3" />
+                                                    ) : (
+                                                        <CheckCircle2 className="w-3 h-3" />
+                                                    )}
+                                                    {item.statusPrazo.label}
+                                                </Badge>
+
+                                                {item.prazoAso && (
+                                                    <span className="text-[9px] text-slate-400">
+                                                        Limite: {item.prazoAso.dataLimite.toLocaleDateString("pt-BR")}
+                                                    </span>
                                                 )}
                                             </div>
-                                        </TableCell> */}
+                                        </TableCell>
 
                                         {/* OBSERVAÇÃO */}
                                         <TableCell className="text-xs">
                                             {item.observacao || ""}
-                                        </TableCell>
-
-                                        {/* STATUS */}
-                                        <TableCell>
-                                            {jaMontado ? (
-                                                <Badge
-                                                    variant="outline"
-                                                    className="text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 gap-1 rounded-full"
-                                                >
-                                                    <CheckCircle2 className="w-3 h-3" />
-                                                    ASO MONTADO
-                                                </Badge>
-                                            ) : (
-                                                <Badge
-                                                    variant="outline"
-                                                    className="text-[10px] font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 gap-1 rounded-full"
-                                                >
-                                                    <Clock3 className="w-3 h-3" />
-                                                    PRONTO
-                                                </Badge>
-                                            )}
                                         </TableCell>
                                     </TableRow>
                                 );
@@ -1133,6 +1177,17 @@ export function ViewExamesConcluidos({
                 open={modalOpen}
                 onOpenChange={setModalOpen}
                 funcionario={selectedFuncionario}
+            />
+            <ConfirmarAcaoDialog
+                acao={acaoParaConfirmar}
+                quantidade={selectedCpfs.size}
+                onOpenChange={(open) => !open && setAcaoParaConfirmar(null)}
+                onConfirmar={() => {
+                    const acao = acaoParaConfirmar;
+                    setAcaoParaConfirmar(null);
+                    if (acao === "salvar") void handleSaveSelection();
+                    if (acao === "enviar") void handleEnviarAso();
+                }}
             />
         </Card>
     );

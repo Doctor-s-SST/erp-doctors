@@ -296,9 +296,14 @@ export default function PrazosAsoPage() {
             // REMOVE A LINHA AUXILIAR ANTES DO ENVIO AO SUPABASE
             // ============================================================
 
-            const payload = payloadBruto.map(
-                ({ linhaExcel, ...item }) => item
-            );
+            const payload = payloadBruto.map((item) => ({
+                unidade_id: item.unidade_id,
+                nome_exame: item.nome_exame,
+                prazo_dias: item.prazo_dias,
+                tipo_filtro: item.tipo_filtro,
+                ignorar_exame: item.ignorar_exame,
+                updated_at: item.updated_at,
+            }));
 
             if (payload.length === 0) {
                 toast.error(

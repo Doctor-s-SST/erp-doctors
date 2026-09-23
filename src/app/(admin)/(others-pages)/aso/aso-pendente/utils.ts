@@ -558,7 +558,7 @@ export function contarDiasUteisEntre(
             ? 1
             : -1;
 
-    let atual = new Date(inicio);
+    const atual = new Date(inicio);
     let count = 0;
 
     while (

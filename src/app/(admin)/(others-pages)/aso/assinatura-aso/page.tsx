@@ -42,11 +42,15 @@ import {
 } from "./types";
 import { ConfirmarAcaoModal } from "./components/ConfirmarAcaoModal";
 import { RegistrarPendenciaModal } from "./components/RegistrarPendenciaModal";
+import { EnviarPendenciasModal } from "./components/EnviarPendenciasModal";
+import { criarPayloadAcaoAso, criarPayloadAcoesAso } from "@/lib/aso-assinatura";
 
 const BADGE_CONFIG: Record<string, { label: string; className: string }> = {
     ASSINADO: { label: "Assinado", className: "bg-blue-600 text-white" },
     PENDENCIA: { label: "Pendência", className: "bg-red-600 text-white" },
     ENVIADO: { label: "Enviado", className: "bg-green-600 text-white" },
+    ENVIADO_DIRETO: { label: "Enviado direto", className: "bg-cyan-600 text-white" },
+    PENDENCIA_ENVIADA: { label: "Pendência enviada", className: "bg-violet-600 text-white" },
 };
 
 export default function AssinaturaAsoPage() {
@@ -70,6 +74,9 @@ export default function AssinaturaAsoPage() {
 
     const [pendenciaOpen, setPendenciaOpen] = useState(false);
     const [justificativa, setJustificativa] = useState("");
+    const [pendenciasParaEnviar, setPendenciasParaEnviar] = useState<Pacientes[]>([]);
+    const [observacoesEnvioPendencia, setObservacoesEnvioPendencia] = useState<Record<string, string>>({});
+    const [modoPendencia, setModoPendencia] = useState<"REGISTRAR" | "ENVIAR">("ENVIAR");
 
     const [itemSelecionado, setItemSelecionado] = useState<Pacientes | null>(null);
     const [enviando, setEnviando] = useState(false);
@@ -77,7 +84,7 @@ export default function AssinaturaAsoPage() {
     // Permissões
     const isAdmin = role === "admin";
     const isEspecialista = role === "especialista" || isAdmin;
-    const isOperador = role === "operador" || isAdmin;
+    const isOperador = role === "operador" || role === "recepcao" || isAdmin;
 
     useEffect(() => {
         const fetchUserContext = async () => {
@@ -128,9 +135,9 @@ export default function AssinaturaAsoPage() {
     // Cálculos dos contadores
     const contadores: ContadoresStatus = useMemo(() => {
         const paraAssinar = pacientes.filter((p) => !p.acao).length;
-        const paraEnviar = pacientes.filter((p) => p.acao === "ASSINADO").length;
-        const pendencias = pacientes.filter((p) => p.acao === "PENDENCIA").length;
-        const enviados = pacientes.filter((p) => p.acao === "ENVIADO").length;
+        const paraEnviar = pacientes.filter((p) => p.acao === "ASSINADO" || p.acao === "PENDENCIA").length;
+        const pendencias = pacientes.filter((p) => p.acao === "PENDENCIA_ENVIADA").length;
+        const enviados = pacientes.filter((p) => p.acao === "ENVIADO" || p.acao === "ENVIADO_DIRETO").length;
 
         return { paraAssinar, paraEnviar, pendencias, enviados };
     }, [pacientes]);
@@ -147,6 +154,21 @@ export default function AssinaturaAsoPage() {
     const abrirConfirmarEnvio = (item: Pacientes) => {
         setItemSelecionado(item);
         setTipoConfirmacao("ENVIO");
+    };
+
+    const abrirPendencias = (itens: Pacientes[], modo: "REGISTRAR" | "ENVIAR") => {
+        setModoPendencia(modo);
+        setPendenciasParaEnviar(itens);
+        setObservacoesEnvioPendencia(Object.fromEntries(
+            itens.flatMap((item) => item.id ? [[item.id, item.observacao || ""]] : [])
+        ));
+    };
+
+    const abrirEnvioPendencias = (itens: Pacientes[]) => abrirPendencias(itens, "ENVIAR");
+
+    const fecharEnvioPendencias = () => {
+        setPendenciasParaEnviar([]);
+        setObservacoesEnvioPendencia({});
     };
 
     const abrirPendencia = (item: Pacientes) => {
@@ -167,11 +189,11 @@ export default function AssinaturaAsoPage() {
         if (filtroStatus === "ASSINAR") {
             lista = lista.filter((p) => !p.acao);
         } else if (filtroStatus === "ENVIAR") {
-            lista = lista.filter((p) => p.acao === "ASSINADO");
+            lista = lista.filter((p) => p.acao === "ASSINADO" || p.acao === "PENDENCIA");
         } else if (filtroStatus === "PENDENCIA") {
-            lista = lista.filter((p) => p.acao === "PENDENCIA");
+            lista = lista.filter((p) => p.acao === "PENDENCIA_ENVIADA");
         } else if (filtroStatus === "ENVIADO") {
-            lista = lista.filter((p) => p.acao === "ENVIADO");
+            lista = lista.filter((p) => p.acao === "ENVIADO" || p.acao === "ENVIADO_DIRETO");
         }
 
         if (busca.trim()) {
@@ -197,13 +219,28 @@ export default function AssinaturaAsoPage() {
     }, [pacientes, busca, filtroStatus, ordenacao]);
 
     // Pacientes elegíveis para envio em massa na lista atual
-    const elegiveisParaEnvio = useMemo(() => {
-        return dadosProcessados.filter((p) => p.acao === "ASSINADO");
-    }, [dadosProcessados]);
+    const elegiveisParaAcao = useMemo(() => {
+        if (filtroStatus === "ASSINAR" && isEspecialista) {
+            return dadosProcessados.filter((p) => !p.acao);
+        }
+        if (filtroStatus === "ENVIAR" && isOperador) {
+            return dadosProcessados.filter((p) => p.acao === "ASSINADO" || p.acao === "PENDENCIA");
+        }
+        return [];
+    }, [dadosProcessados, filtroStatus, isEspecialista, isOperador]);
+
+    const quantidadeSelecionadaPorTipo = useMemo(() => ({
+        aso: pacientes.filter((p) => p.id && selecionadosEmMassa.includes(p.id) && p.acao === "ASSINADO").length,
+        pendencia: pacientes.filter((p) => p.id && selecionadosEmMassa.includes(p.id) && p.acao === "PENDENCIA").length,
+    }), [pacientes, selecionadosEmMassa]);
+
+    const quantidadeSelecionadaParaAssinar = pacientes.filter(
+        (p) => p.id && selecionadosEmMassa.includes(p.id) && !p.acao
+    ).length;
 
     // Lógica para Seleção em Massa
     const toggleSelectAll = () => {
-        const idsElegiveis = elegiveisParaEnvio.map((p) => p.id);
+        const idsElegiveis = elegiveisParaAcao.map((p) => p.id);
         const todosSelecionados = idsElegiveis.every((id: string | undefined) => selecionadosEmMassa.includes(id as string));
 
         if (todosSelecionados) {
@@ -229,13 +266,7 @@ export default function AssinaturaAsoPage() {
             headers: {
                 "Content-Type": "application/json",
             },
-            body: JSON.stringify({
-                selecionados: pacientesParaEnviar.map((p) => ({
-                    paciente: p,
-                    acao,
-                    observacao: observacao || null,
-                })),
-            }),
+            body: JSON.stringify(criarPayloadAcaoAso(pacientesParaEnviar, acao, observacao)),
         });
 
         if (!response.ok) {
@@ -249,7 +280,7 @@ export default function AssinaturaAsoPage() {
 
     const registrarAcao = async (
         ids: string[],
-        acao: "ASSINADO" | "PENDENCIA" | "ENVIADO",
+        acao: "ASSINADO" | "PENDENCIA" | "ENVIADO" | "PENDENCIA_ENVIADA",
         observacao?: string
     ) => {
         const payload: Partial<Pacientes> = { acao };
@@ -293,23 +324,108 @@ export default function AssinaturaAsoPage() {
     };
 
     // Confirmar Envio em Massa
-    const enviarEmMassa = async () => {
-        if (selecionadosEmMassa.length === 0) return;
-
-        const itensParaEnviar = pacientes.filter((p: any) =>
-            selecionadosEmMassa.includes(p.id)
-        );
+    const enviarEmMassa = async (tipo: "ASO" | "PENDENCIA") => {
+        const acaoAtual = tipo === "ASO" ? "ASSINADO" : "PENDENCIA";
+        const itensParaEnviar = pacientes.filter((p) => p.id && selecionadosEmMassa.includes(p.id) && p.acao === acaoAtual);
+        const ids = itensParaEnviar.flatMap((p) => p.id ? [p.id] : []);
+        if (!itensParaEnviar.length) return;
+        if (tipo === "PENDENCIA") {
+            abrirEnvioPendencias(itensParaEnviar);
+            return;
+        }
 
         setEnviando(true);
         try {
             await enviarAcaoAso(itensParaEnviar, "ENVIADO");
-            await registrarAcao(selecionadosEmMassa, "ENVIADO");
+            await registrarAcao(ids, "ENVIADO");
 
-            toast.success(`${selecionadosEmMassa.length} ASO(s) enviados com sucesso!`);
-            setSelecionadosEmMassa([]);
+            toast.success(`${itensParaEnviar.length} ASO(s) enviados com sucesso!`);
+            setSelecionadosEmMassa((prev) => prev.filter((id) => !ids.includes(id)));
         } catch (err) {
             console.error(err);
             toast.error("Erro ao realizar o envio em massa dos ASOs.");
+        } finally {
+            setEnviando(false);
+        }
+    };
+
+    const assinarEmMassa = async () => {
+        const itens = pacientes.filter(
+            (p) => p.id && selecionadosEmMassa.includes(p.id) && !p.acao
+        );
+        const ids = itens.flatMap((p) => p.id ? [p.id] : []);
+        if (!itens.length) return;
+
+        setEnviando(true);
+        try {
+            await enviarAcaoAso(itens, "ASSINADO");
+            await registrarAcao(ids, "ASSINADO");
+            setSelecionadosEmMassa((prev) => prev.filter((id) => !ids.includes(id)));
+            toast.success(`${itens.length} ASO(s) marcado(s) como assinado(s)!`);
+        } catch (error) {
+            console.error(error);
+            toast.error("Erro ao registrar as assinaturas em massa.");
+        } finally {
+            setEnviando(false);
+        }
+    };
+
+    const abrirPendenciasEmMassa = () => {
+        const itens = pacientes.filter(
+            (p) => p.id && selecionadosEmMassa.includes(p.id) && !p.acao
+        );
+        if (itens.length) abrirPendencias(itens, "REGISTRAR");
+    };
+
+    const confirmarEnvioPendencias = async () => {
+        const itens = pendenciasParaEnviar.filter((item) => item.id);
+        if (itens.some((item) => !observacoesEnvioPendencia[item.id!]?.trim())) {
+            toast.warning("Informe a justificativa de todos os pacientes.");
+            return;
+        }
+
+        setEnviando(true);
+        try {
+            const registrando = modoPendencia === "REGISTRAR";
+            const response = await fetch("/api/enviar-asos-concluidos", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(criarPayloadAcoesAso(itens.map((paciente) => ({
+                    paciente,
+                    acao: registrando ? "PENDENCIA" : "ENVIAR-PENDENCIA",
+                    observacao: observacoesEnvioPendencia[paciente.id!].trim(),
+                })))),
+            });
+            if (!response.ok) throw new Error("Falha ao enviar pendências");
+
+            const resultados = await Promise.all(itens.map((paciente) => supabase
+                .from("pacientes_assinatura")
+                .update({
+                    acao: registrando ? "PENDENCIA" : "PENDENCIA_ENVIADA",
+                    observacao: observacoesEnvioPendencia[paciente.id!].trim(),
+                })
+                .eq("id", paciente.id!)));
+            const erro = resultados.find((resultado) => resultado.error)?.error;
+            if (erro) throw erro;
+
+            const ids = itens.map((item) => item.id!);
+            setPacientes((prev) => prev.map((paciente) => paciente.id && ids.includes(paciente.id)
+                ? {
+                    ...paciente,
+                    acao: registrando ? "PENDENCIA" as const : "PENDENCIA_ENVIADA" as const,
+                    observacao: observacoesEnvioPendencia[paciente.id].trim(),
+                }
+                : paciente));
+            setSelecionadosEmMassa((prev) => prev.filter((id) => !ids.includes(id)));
+            toast.success(
+                registrando
+                    ? `${itens.length} pendência(s) registrada(s) com sucesso!`
+                    : `${itens.length} pendência(s) enviada(s) com sucesso!`
+            );
+            fecharEnvioPendencias();
+        } catch (error) {
+            console.error(error);
+            toast.error("Erro ao enviar as pendências.");
         } finally {
             setEnviando(false);
         }
@@ -395,16 +511,33 @@ export default function AssinaturaAsoPage() {
                     </div>
                 </div>
 
+                {isEspecialista && filtroStatus === "ASSINAR" && quantidadeSelecionadaParaAssinar > 0 && (
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Button onClick={assinarEmMassa} disabled={enviando} className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2">
+                            <FilePenLine className="w-4 h-4" />
+                            Assinar {quantidadeSelecionadaParaAssinar} ASO(s)
+                        </Button>
+                        <Button onClick={abrirPendenciasEmMassa} disabled={enviando} className="bg-red-600 hover:bg-red-700 text-white gap-2">
+                            <MessageCircleWarning className="w-4 h-4" />
+                            Registrar {quantidadeSelecionadaParaAssinar} pendência(s)
+                        </Button>
+                    </div>
+                )}
+
                 {/* BOTÃO DE ENVIO EM MASSA NO HEADER QUANDO HOUVER SELEÇÃO */}
-                {isOperador && selecionadosEmMassa.length > 0 && (
-                    <Button
-                        onClick={enviarEmMassa}
-                        disabled={enviando}
-                        className="bg-blue-600 hover:bg-blue-700 text-white font-semibold flex items-center gap-2 animate-in fade-in zoom-in duration-200"
-                    >
-                        <Send className="w-4 h-4" />
-                        <span>Enviar {selecionadosEmMassa.length} ASO(s) Selecionado(s)</span>
-                    </Button>
+                {isOperador && filtroStatus === "ENVIAR" && selecionadosEmMassa.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-2">
+                        {quantidadeSelecionadaPorTipo.aso > 0 && (
+                            <Button onClick={() => enviarEmMassa("ASO")} disabled={enviando} className="bg-blue-600 hover:bg-blue-700 text-white gap-2">
+                                <Send className="w-4 h-4" /> Enviar {quantidadeSelecionadaPorTipo.aso} ASO(s)
+                            </Button>
+                        )}
+                        {quantidadeSelecionadaPorTipo.pendencia > 0 && (
+                            <Button onClick={() => enviarEmMassa("PENDENCIA")} disabled={enviando} className="bg-red-600 hover:bg-red-700 text-white gap-2">
+                                <MessageCircleWarning className="w-4 h-4" /> Enviar {quantidadeSelecionadaPorTipo.pendencia} pendência(s)
+                            </Button>
+                        )}
+                    </div>
                 )}
             </header>
 
@@ -485,7 +618,7 @@ export default function AssinaturaAsoPage() {
                         >
                             <div className="space-y-0.5">
                                 <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                                    Enviados
+                                    ASO enviado
                                 </p>
                                 <p className="text-2xl font-black text-green-600 dark:text-green-400">
                                     {contadores.enviados}
@@ -542,17 +675,17 @@ export default function AssinaturaAsoPage() {
                         <TableHeader className="bg-slate-50 dark:bg-slate-800/50">
                             <TableRow>
                                 {/* CHECKBOX SELECIONAR TODOS OS ELEGÍVEIS */}
-                                {isOperador && (
+                                {(isOperador || isEspecialista) && (
                                     <TableHead className="w-10 text-center">
                                         <Checkbox
                                             checked={
-                                                elegiveisParaEnvio.length > 0 &&
-                                                elegiveisParaEnvio.every((p: any) =>
+                                                elegiveisParaAcao.length > 0 &&
+                                                elegiveisParaAcao.every((p: any) =>
                                                     selecionadosEmMassa.includes(p.id)
                                                 )
                                             }
                                             onCheckedChange={toggleSelectAll}
-                                            disabled={elegiveisParaEnvio.length === 0}
+                                            disabled={elegiveisParaAcao.length === 0}
                                         />
                                     </TableHead>
                                 )}
@@ -571,7 +704,7 @@ export default function AssinaturaAsoPage() {
                             {dadosProcessados.length === 0 ? (
                                 <TableRow>
                                     <TableCell
-                                        colSpan={isOperador ? 6 : 5}
+                                        colSpan={isOperador || isEspecialista ? 6 : 5}
                                         className="text-center py-8 text-xs text-slate-400 font-mono"
                                     >
                                         Nenhum registro encontrado.
@@ -580,7 +713,9 @@ export default function AssinaturaAsoPage() {
                             ) : (
                                 dadosProcessados.map((item: any) => {
                                     const badge = item.acao ? BADGE_CONFIG[item.acao] : null;
-                                    const canSelect = isOperador && item.acao === "ASSINADO";
+                                    const canSelect =
+                                        (isEspecialista && filtroStatus === "ASSINAR" && !item.acao) ||
+                                        (isOperador && filtroStatus === "ENVIAR" && (item.acao === "ASSINADO" || item.acao === "PENDENCIA"));
                                     const isSelected = selecionadosEmMassa.includes(item.id);
 
                                     return (
@@ -590,7 +725,7 @@ export default function AssinaturaAsoPage() {
                                                 }`}
                                         >
                                             {/* CHECKBOX DA LINHA */}
-                                            {isOperador && (
+                                            {(isOperador || isEspecialista) && (
                                                 <TableCell className="text-center">
                                                     {canSelect && (
                                                         <Checkbox
@@ -627,7 +762,7 @@ export default function AssinaturaAsoPage() {
 
                                             <TableCell className="text-right">
                                                 <div className="flex flex-row items-center justify-end gap-2">
-                                                    {isEspecialista && !item.acao && (
+                                                    {isEspecialista && filtroStatus === "ASSINAR" && !item.acao && (
                                                         <>
                                                             <Button
                                                                 variant="ghost"
@@ -650,7 +785,7 @@ export default function AssinaturaAsoPage() {
                                                         </>
                                                     )}
 
-                                                    {isOperador && item.acao === "ASSINADO" && (
+                                                    {isOperador && filtroStatus === "ENVIAR" && item.acao === "ASSINADO" && (
                                                         <Button
                                                             variant="ghost"
                                                             size="sm"
@@ -662,7 +797,14 @@ export default function AssinaturaAsoPage() {
                                                         </Button>
                                                     )}
 
-                                                    {item.acao === "ENVIADO" && badge && (
+                                                    {isOperador && filtroStatus === "ENVIAR" && item.acao === "PENDENCIA" && (
+                                                        <Button variant="ghost" size="sm" onClick={() => abrirEnvioPendencias([item])} className="w-fit px-2 flex gap-2 font-medium text-red-600 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 ml-auto">
+                                                            <MessageCircleWarning className="w-4 h-4" />
+                                                            <span>Enviar pendência</span>
+                                                        </Button>
+                                                    )}
+
+                                                    {badge && (
                                                         <Badge
                                                             className={`uppercase text-[10px] font-bold tracking-wider border-none ${badge.className}`}
                                                         >
@@ -670,17 +812,7 @@ export default function AssinaturaAsoPage() {
                                                         </Badge>
                                                     )}
 
-                                                    {item.acao === "PENDENCIA" &&
-                                                        badge &&
-                                                        (!isEspecialista || item.acao) && (
-                                                            <Badge
-                                                                className={`uppercase text-[10px] font-bold tracking-wider border-none ${badge.className}`}
-                                                            >
-                                                                {badge.label}
-                                                            </Badge>
-                                                        )}
-
-                                                    {!item.acao && !isEspecialista && (
+                                                    {!item.acao && !(isEspecialista && filtroStatus === "ASSINAR") && (
                                                         <span className="text-xs text-slate-400 italic">
                                                             Aguardando Assinatura
                                                         </span>
@@ -715,6 +847,21 @@ export default function AssinaturaAsoPage() {
                 onJustificativaChange={setJustificativa}
                 onClose={() => setPendenciaOpen(false)}
                 onConfirm={confirmarPendencia}
+            />
+
+            <EnviarPendenciasModal
+                open={pendenciasParaEnviar.length > 0}
+                pacientes={pendenciasParaEnviar}
+                observacoes={observacoesEnvioPendencia}
+                enviando={enviando}
+                onObservacaoChange={(id, value) => setObservacoesEnvioPendencia((prev) => ({ ...prev, [id]: value }))}
+                onClose={fecharEnvioPendencias}
+                onConfirm={confirmarEnvioPendencias}
+                titulo={modoPendencia === "REGISTRAR" ? "Registrar pendências" : "Enviar pendências"}
+                descricao={modoPendencia === "REGISTRAR"
+                    ? "Informe uma justificativa específica para cada paciente."
+                    : "Revise ou personalize a justificativa que será enviada para cada paciente."}
+                textoConfirmar={modoPendencia === "REGISTRAR" ? "Registrar pendências" : "Enviar pendências"}
             />
         </div>
     );

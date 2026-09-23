@@ -4,8 +4,11 @@ export interface Pacientes {
     nome_paciente: string;
     sequencial_ficha: string;
     created_at?: string;
-    acao?: "ASSINADO" | "PENDENCIA" | "ENVIADO" | null;
+    acao?: "ASSINADO" | "PENDENCIA" | "ENVIADO" | "ENVIADO_DIRETO" | "PENDENCIA_ENVIADA" | null;
     observacao?: string | null;
+    codigo_empresa_soc?: string | null;
+    codigo_ged_soc?: string | null;
+    data_criacao_ged_soc?: string | null;
 }
 
 export type ConfigOrdenacao = {
@@ -13,7 +16,7 @@ export type ConfigOrdenacao = {
     direcao: "asc" | "desc";
 };
 
-export type TipoConfirmacao = "ASSINATURA" | "ENVIO" | null;
+export type TipoConfirmacao = "ASSINATURA" | "ENVIO" | "ENVIO_PENDENCIA" | null;
 
 export type TipoFiltroStatus = "TODOS" | "ASSINAR" | "ENVIAR" | "PENDENCIA" | "ENVIADO";
 
