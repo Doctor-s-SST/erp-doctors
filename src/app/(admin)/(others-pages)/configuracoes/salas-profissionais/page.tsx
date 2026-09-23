@@ -345,12 +345,6 @@ export default function ConfiguracoesPage() {
     }
   }
 
-  async function removerProfissional(id: string) {
-    if (!confirm("Deseja excluir este profissional e todos os seus vínculos?")) return;
-    const { error } = await supabase.from("profissionais").delete().eq('id', id);
-    if (!error) { toast.success("Profissional removido!"); fetchAll(); }
-  }
-
   const profissionaisFiltrados = profissionais.filter((p) => {
     // Status
     if (filtroStatus === "ativos" && !p.ativo) {

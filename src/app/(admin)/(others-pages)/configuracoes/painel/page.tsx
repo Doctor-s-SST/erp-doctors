@@ -5,21 +5,21 @@ import { supabase } from "@/lib/supabase";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 
 import {
     Building2,
-    ImagePlus,
     Loader2,
     Save,
     ShieldCheck,
-    ImageIcon,
 } from "lucide-react";
 
 import { toast } from "sonner";
-import { refresh } from "next/cache";
 import { Switch } from "@/components/ui/switch";
 import { Field, FieldContent, FieldDescription, FieldLabel, FieldTitle } from "@/components/ui/field";
+
+function mensagemErro(error: unknown) {
+    return error instanceof Error ? error.message : "Não foi possível concluir a operação.";
+}
 
 export default function UnidadeConfigPage() {
     const [loading, setLoading] = useState(true);
@@ -27,13 +27,7 @@ export default function UnidadeConfigPage() {
 
     const [unidadeId, setUnidadeId] = useState<string | null>(null);
     const [falaAndar, setFalaAndar] = useState(false);
-
-    // =========================================
-    // CARREGA UNIDADE ATIVA
-    // =========================================
-    useEffect(() => {
-        carregarConfiguracoes();
-    }, []);
+    const [falaTerreo, setFalaTerreo] = useState(false);
 
     async function carregarConfiguracoes() {
         try {
@@ -63,13 +57,18 @@ export default function UnidadeConfigPage() {
 
             if (config) {
                 setFalaAndar(config.fala_andar);
+                setFalaTerreo(config.fala_terreo ?? false);
             }
-        } catch (error: any) {
-            toast.error(error.message);
+        } catch (error: unknown) {
+            toast.error(mensagemErro(error));
         } finally {
             setLoading(false);
         }
     }
+
+    useEffect(() => {
+        void carregarConfiguracoes();
+    }, []);
 
     async function handleSalvar() {
         try {
@@ -83,6 +82,7 @@ export default function UnidadeConfigPage() {
                     {
                         unidade_id: unidadeId,
                         fala_andar: falaAndar,
+                        fala_terreo: falaTerreo,
                     },
                     {
                         onConflict: "unidade_id",
@@ -92,8 +92,8 @@ export default function UnidadeConfigPage() {
             if (error) throw error;
 
             toast.success("Configurações salvas!");
-        } catch (error: any) {
-            toast.error(error.message);
+        } catch (error: unknown) {
+            toast.error(mensagemErro(error));
         } finally {
             setSaving(false);
         }
@@ -133,7 +133,7 @@ export default function UnidadeConfigPage() {
                 <Card className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 overflow-hidden shadow-sm">
                     <CardContent className="p-0">
 
-                        <div className="px-6 py-4 space-y-10 grid grid-cols-4">
+                        <div className="px-6 py-4 space-y-10 grid grid-cols-4 gap-4">
                             <div className="space-y-4">
                                 <FieldLabel htmlFor="switch-fala-andar" className="cursor-pointer">
                                     <Field
@@ -156,6 +156,30 @@ export default function UnidadeConfigPage() {
                                             id="switch-fala-andar"
                                             checked={falaAndar}
                                             onCheckedChange={setFalaAndar}
+                                        />
+                                    </Field>
+                                </FieldLabel>
+                            </div>
+
+                            <div className="space-y-4">
+                                <FieldLabel htmlFor="switch-fala-terreo" className={falaAndar ? "cursor-pointer" : "cursor-not-allowed opacity-60"}>
+                                    <Field
+                                        orientation="horizontal"
+                                        className="rounded-xl border border-gray-300 dark:border-gray-700 p-5 hover:bg-muted/30 transition-colors"
+                                    >
+                                        <FieldContent>
+                                            <FieldTitle className="font-black uppercase tracking-wide">
+                                                Informar térreo
+                                            </FieldTitle>
+                                            <FieldDescription>
+                                                Quando ativada, chamadas para salas no andar zero anunciarão “térreo”.
+                                            </FieldDescription>
+                                        </FieldContent>
+                                        <Switch
+                                            id="switch-fala-terreo"
+                                            checked={falaTerreo}
+                                            onCheckedChange={setFalaTerreo}
+                                            disabled={!falaAndar}
                                         />
                                     </Field>
                                 </FieldLabel>

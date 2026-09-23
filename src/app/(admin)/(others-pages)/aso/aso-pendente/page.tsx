@@ -211,6 +211,18 @@ export default function IndicadoresSocged() {
         }
     }, [atualizadoEm]);
 
+    const periodoSincronizacaoFormatado = useMemo(() => {
+        if (!atualizadoEm) return null;
+
+        const dataFinal = new Date(atualizadoEm);
+        if (isNaN(dataFinal.getTime())) return null;
+
+        const dataInicial = new Date(dataFinal);
+        dataInicial.setDate(dataInicial.getDate() - 30);
+
+        return `${dataInicial.toLocaleDateString("pt-BR")} a ${dataFinal.toLocaleDateString("pt-BR")}`;
+    }, [atualizadoEm]);
+
     return (
         <div className="min-h-fit mt-2 bg-gray-500/20 rounded-xl p-2">
             {/* HEADER */}
@@ -225,9 +237,12 @@ export default function IndicadoresSocged() {
                             Gestão de ASOs
                         </h1>
                         {dataSincronizacaoFormatada && (
-                            <p className="text-xs text-slate-400 font-mono">
-                                Última sincronização: {dataSincronizacaoFormatada}
-                            </p>
+                            <div className="space-y-0.5 text-xs text-slate-400 font-mono">
+                                <p>Última sincronização: {dataSincronizacaoFormatada}</p>
+                                {periodoSincronizacaoFormatado && (
+                                    <p>Período sincronizado: {periodoSincronizacaoFormatado}</p>
+                                )}
+                            </div>
                         )}
                     </div>
                 </div>
