@@ -45,6 +45,7 @@ import {
     parseDateBR,
     adicionarDiasUteis,
     calcularStatusVencimentoVisual,
+    exameEstaConcluido,
 } from "../utils";
 import { toast } from "sonner";
 import { criarPacienteAssinatura, criarPayloadAcaoAso } from "@/lib/aso-assinatura";
@@ -155,18 +156,25 @@ export function ViewExamesPendentes({
             const dataFicha = fDados?.aso?.dataFicha || fDados?.dataFicha || item.dataFicha || null;
 
             // Exames pendentes reportados para este funcionário
-            const examesList: string[] = Array.isArray(item.examesPendentes)
+            const examesReportados: string[] = Array.isArray(item.examesPendentes)
                 ? item.examesPendentes
                 : [item.examesPendentes || ""];
 
-            // Só é considerado "pendência real" se houver ao menos um exame
-            // que não esteja marcado para ser ignorado no cálculo
-            const temPendenciaReal = examesList.some(
-                (nomeExame) => !prazosMap[normalizarNomeExame(nomeExame)]?.ignorar_exame
-            );
-
             const listaCompletaExames: any[] =
                 fDados?.aso?.listaExamesResumida || fDados?.listaExamesResumida || [];
+
+            const examesList = examesReportados.filter((nomeExame: string) => {
+                const nomeNormalizado = normalizarNomeExame(nomeExame);
+                const info = listaCompletaExames.find(
+                    (exame: any) => normalizarNomeExame(
+                        exame?.descricaoExame || exame?.nomeExame || exame?.nome || ""
+                    ) === nomeNormalizado
+                );
+
+                return !info || !exameEstaConcluido(info, prazosMap);
+            });
+
+            const temPendenciaReal = examesList.length > 0;
 
             const examesDetalhados = examesList.map((nomeExame: string) => {
                 const nomeNormalizado = normalizarNomeExame(nomeExame);
@@ -184,13 +192,17 @@ export function ViewExamesPendentes({
 
                 let statusPrazoExame = null;
 
-                // Exame ignorado nunca entra no cálculo de prazo/vencimento,
-                // mas continua aparecendo como item.
-                if (dataExame && !ignorado && prazoConfig?.prazo_dias) {
+                // A flag dispensa somente o GED; prazo e data continuam válidos.
+                const prazoDias = Number(prazoConfig?.prazo_dias);
+                const possuiPrazoValido = Boolean(prazoConfig) &&
+                    Number.isFinite(prazoDias) &&
+                    prazoDias >= 0;
+
+                if (dataExame && possuiPrazoValido) {
                     const dataBase = parseDateBR(dataExame);
 
                     if (dataBase) {
-                        const dataLimite = adicionarDiasUteis(dataBase, Number(prazoConfig.prazo_dias));
+                        const dataLimite = adicionarDiasUteis(dataBase, prazoDias);
                         statusPrazoExame = calcularStatusVencimentoVisual(dataLimite);
                     }
                 }
@@ -947,9 +959,7 @@ export function ViewExamesPendentes({
                                         <TableCell className="max-w-[280px]">
                                             <div className="flex flex-wrap gap-1.5">
                                                 {item.examesDetalhados.map((exame: any, eIdx: number) => {
-                                                    const corBadge = exame.ignorado
-                                                        ? "bg-slate-500/10 text-slate-400 border-slate-500/20 opacity-70"
-                                                        : !exame.dataExame
+                                                    const corBadge = !exame.dataExame
                                                             ? "bg-slate-500/10 text-slate-500 border-slate-500/20"
                                                             : exame.statusPrazoExame?.estaVencido
                                                                 ? "bg-red-500/10 text-red-500 border-red-500/20"
@@ -962,7 +972,7 @@ export function ViewExamesPendentes({
                                                             className={`flex flex-col items-start gap-0 leading-tight py-1 px-2.5 text-[10px] font-semibold rounded-full ${corBadge}`}
                                                             title={
                                                                 exame.ignorado
-                                                                    ? "Exame configurado para não entrar no cálculo de prazo/conclusão"
+                                                                    ? "Documento GED dispensado; a data do exame define a conclusão"
                                                                     : exame.dataExame
                                                                         ? `Exame realizado em ${exame.dataExame}${exame.temRelacao === false ? " — aguardando vínculo GED" : ""
                                                                         }`
@@ -971,7 +981,7 @@ export function ViewExamesPendentes({
                                                         >
                                                             <span>
                                                                 {exame.nome}
-                                                                {exame.ignorado ? " (ignorado)" : ""}
+                                                                {exame.ignorado ? " (GED dispensado)" : ""}
                                                             </span>
                                                         </Badge>
                                                     );

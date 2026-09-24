@@ -53,7 +53,7 @@ export function classificarTipoExame(
         if (!nomeExame) return false;
 
         const prazo = prazosMap[nomeExame];
-        return prazo?.tipo_filtro === "complementar" && !prazo?.ignorar_exame;
+        return prazo?.tipo_filtro === "complementar";
     });
 
     return possuiComplementar ? "complementar" : "clinico";
@@ -150,7 +150,8 @@ export function normalizarNomeExame(
 }
 
 export function exameEstaConcluido(
-    exame: any
+    exame: any,
+    prazosMap: PrazosMap = {}
 ): boolean {
 
     const nome = normalizarNomeExame(
@@ -163,11 +164,8 @@ export function exameEstaConcluido(
     const temDataExame =
         String(exame?.dataExame || "").trim() !== "";
 
-    /*
-     * Exame clínico:
-     * concluído somente pela existência da data do exame.
-     */
-    if (nome === "exame clinico") {
+    // Exame clínico e exame com GED dispensado concluem apenas com a data.
+    if (nome === "exame clinico" || exameIsIgnorado(exame, prazosMap)) {
         return temDataExame;
     }
 
@@ -194,17 +192,7 @@ export function asoEstaConcluido(
         return false;
     }
 
-    const examesConsiderados = exames.filter(
-        (exame: any) => !exameIsIgnorado(exame, prazosMap)
-    );
-
-    // Se todos os exames do ASO foram marcados para ignorar,
-    // não sobra nada pendente — considera concluído.
-    if (examesConsiderados.length === 0) {
-        return true;
-    }
-
-    return examesConsiderados.every((exame: any) => exameEstaConcluido(exame));
+    return exames.every((exame: any) => exameEstaConcluido(exame, prazosMap));
 }
 
 
@@ -260,10 +248,7 @@ export function obterStatusPrazoPendente(
         return { temStatus: false, estaVencido: false, noPrazo: false };
     }
 
-    // Exames marcados para ignorar nunca entram no cálculo de prazo.
-    const exames = examesOriginais.filter(
-        (exame: any) => !exameIsIgnorado(exame, prazosMap)
-    );
+    const exames = examesOriginais;
 
     if (exames.length === 0) {
         return { temStatus: false, estaVencido: false, noPrazo: false };
@@ -272,9 +257,12 @@ export function obterStatusPrazoPendente(
     const examesPendentes = nomesExamesPendentes && nomesExamesPendentes.length > 0
         ? exames.filter((e: any) => {
             const nomeNorm = normalizarNomeExame(e?.descricaoExame || e?.nomeExame || e?.nome || "");
-            return nomesExamesPendentes.some((p) => normalizarNomeExame(p) === nomeNorm);
+            const foiReportado = nomesExamesPendentes.some(
+                (p) => normalizarNomeExame(p) === nomeNorm
+            );
+            return foiReportado && !exameEstaConcluido(e, prazosMap);
         })
-        : exames.filter((e: any) => e?.isPendente === true || !exameEstaConcluido(e));
+        : exames.filter((e: any) => !exameEstaConcluido(e, prazosMap));
 
     if (examesPendentes.length === 0) {
         return { temStatus: false, estaVencido: false, noPrazo: false };
@@ -292,12 +280,15 @@ export function obterStatusPrazoPendente(
         );
 
         const prazoConfig = prazosMap[nomeExame];
-        if (!prazoConfig?.prazo_dias || prazoConfig.ignorar_exame) return; // <- adiciona check
+        if (!prazoConfig) return;
+
+        const prazoDias = Number(prazoConfig.prazo_dias);
+        if (!Number.isFinite(prazoDias) || prazoDias < 0) return;
 
         const dataBase = parseDateBR(dataExameStr);
         if (!dataBase) return;
 
-        const dataLimite = adicionarDiasUteis(dataBase, Number(prazoConfig.prazo_dias));
+        const dataLimite = adicionarDiasUteis(dataBase, prazoDias);
         const status = calcularStatusVencimentoVisual(dataLimite);
         possuiStatus = true;
 
@@ -436,13 +427,13 @@ export function obterMaiorPrazo(
             exame?.descricaoExame || exame?.nomeExame || exame?.nome || exame || ""
         );
 
-        if (!nomeExame || nomeExame === "exame clinico") {
+        if (!nomeExame) {
             return;
         }
 
         const prazo = prazosMap[nomeExame];
 
-        if (!prazo || prazo.ignorar_exame) {
+        if (!prazo) {
             return;
         }
 
@@ -491,12 +482,12 @@ export function obterPrazoAso(
             exame?.descricaoExame || exame?.nomeExame || exame?.nome || ""
         );
 
-        if (!nomeExame || nomeExame === "exame clinico") {
+        if (!nomeExame) {
             return false;
         }
 
         const prazo = prazosMap[nomeExame];
-        return Boolean(prazo) && !prazo.ignorar_exame;
+        return Boolean(prazo);
     });
 
     if (examesComPrazo.length === 0) {
@@ -724,7 +715,6 @@ export function exameIsIgnorado(
         exame?.descricaoExame || exame?.nomeExame || exame?.nome || ""
     );
     if (!nome) return false;
-    console.log("[DEBUG ignorar]", nome, "→", prazosMap[nome]); // temporário
     return Boolean(prazosMap[nome]?.ignorar_exame);
 }
 

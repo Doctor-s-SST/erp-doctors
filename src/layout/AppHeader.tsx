@@ -1,15 +1,10 @@
 "use client";
 import { ThemeToggleButton } from "@/components/common/ThemeToggleButton";
-import NotificationDropdown from "@/components/header/NotificationDropdown";
 import UserDropdown from "@/components/header/UserDropdown";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useSidebar } from "@/context/SidebarContext";
 import { supabase } from "@/lib/supabase";
-import { Hospital, MenuIcon, Search } from "lucide-react";
-import Image from "next/image";
-import Link from "next/link";
-import React, { useState, useEffect, useRef } from "react";
-import { toast } from "sonner";
+import { MenuIcon } from "lucide-react";
+import React, { useState, useEffect } from "react";
 
 type ProfileType = {
   email: string;
@@ -21,7 +16,6 @@ type ProfileType = {
 const AppHeader: React.FC = () => {
   const [isApplicationMenuOpen, setApplicationMenuOpen] = useState(false);
 
-  const [unidadeId, setUnidadeId] = useState<string | null>(null);
   const [unidadeNome, setUnidadeNome] = useState<string>("");
   const [profileData, setProfileData] = useState<ProfileType>({
     email: "",
@@ -30,7 +24,7 @@ const AppHeader: React.FC = () => {
     role: ''
   });
 
-  const { isMobileOpen, toggleSidebar, toggleMobileSidebar } = useSidebar();
+  const { toggleSidebar, toggleMobileSidebar } = useSidebar();
 
   const handleToggle = () => {
     if (window.innerWidth >= 1024) {
@@ -60,8 +54,12 @@ const AppHeader: React.FC = () => {
           });
 
 
-          setUnidadeId(profile.unidade_id);
-          setUnidadeNome((profile.unidades as any)?.nome || "");
+          const unidades = profile.unidades as
+            | { nome?: string }
+            | { nome?: string }[]
+            | null;
+          const unidade = Array.isArray(unidades) ? unidades[0] : unidades;
+          setUnidadeNome(unidade?.nome || "");
 
         }
       }
@@ -74,23 +72,6 @@ const AppHeader: React.FC = () => {
   const toggleApplicationMenu = () => {
     setApplicationMenuOpen(!isApplicationMenuOpen);
   };
-  // const inputRef = useRef<HTMLInputElement>(null);
-
-  // useEffect(() => {
-  //   const handleKeyDown = (event: KeyboardEvent) => {
-  //     if ((event.metaKey || event.ctrlKey) && event.key === "k") {
-  //       event.preventDefault();
-  //       inputRef.current?.focus();
-  //     }
-  //   };
-
-  //   document.addEventListener("keydown", handleKeyDown);
-
-  //   return () => {
-  //     document.removeEventListener("keydown", handleKeyDown);
-  //   };
-  // }, []);
-
   return (
     <header className="sticky top-0 flex w-full h-[50px] bg-white border-gray-200 z-50 dark:border-gray-800 dark:bg-gray-900 lg:border-b">
       {/* Adicionamos "relative" aqui para que o absolute do texto se baseie no header inteiro */}

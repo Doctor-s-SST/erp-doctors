@@ -5,12 +5,10 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useSidebar } from "../context/SidebarContext";
 import {
-  CalenderIcon,
   ChevronDownIcon,
   HorizontaLDots,
-  UserCircleIcon,
 } from "../icons/index";
-import { ChartNoAxesCombined, ChartPie, FileText, FolderKanban, House, LayoutDashboard, MonitorCog, Settings } from 'lucide-react';
+import { ChartNoAxesCombined, ChartPie, FileText, FolderKanban, MonitorCog, Settings } from 'lucide-react';
 import { supabase } from "@/lib/supabase";
 
 type NavItem = {
@@ -72,10 +70,10 @@ const navItems: NavItem[] = [
     name: "ASO",
     icon: <FolderKanban className="w-5 h-5" />,
     // roles: ["admin", "operador"],
-    roles: ["admin", "operador", "especialista"],
+    roles: ["admin", "operador", "especialista", "recepcao"],
     subItems: [
       { name: "Gestão de ASO", path: "/aso/aso-pendente", roles: ["admin", "operador", "recepcao"] },
-      { name: "Assinatura e Envio", path: "/aso/assinatura-aso", roles: ["admin", "operador", "especialista",] },
+      { name: "Assinatura e Envio", path: "/aso/assinatura-aso", roles: ["admin", "operador", "especialista", "recepcao"] },
       { name: "Prazo de Exames", path: "/aso/prazo-exames", roles: ["admin", "operador", "recepcao"] },
     ],
   },

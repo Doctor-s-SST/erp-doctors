@@ -109,8 +109,11 @@ export function ViewExamesConcluidos({
              * Clínico:
              *   dataExame
              *
-             * Complementar:
+             * Complementar comum:
              *   dataExame + temRelacao
+             *
+             * Exame com GED dispensado:
+             *   dataExame
              */
             if (!asoEstaConcluido(item, prazosMap)) {
                 return;
@@ -1031,10 +1034,11 @@ export function ViewExamesConcluidos({
                                             {item.prazoAso ? (
                                                 <div className="flex flex-col gap-0.5">
                                                     <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
-                                                        {item.prazoAso.maiorPrazo}{" "}
-                                                        {item.prazoAso.maiorPrazo === 1
-                                                            ? "dia útil"
-                                                            : "dias úteis"}
+                                                        {item.prazoAso.maiorPrazo === 0
+                                                            ? "Dia da realização"
+                                                            : `${item.prazoAso.maiorPrazo} ${item.prazoAso.maiorPrazo === 1
+                                                                ? "dia útil"
+                                                                : "dias úteis"}`}
                                                     </span>
 
                                                     <span className="text-[9px] text-slate-400">

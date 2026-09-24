@@ -147,7 +147,7 @@ export function ViewDashboard({
 
             const prazo = prazosMap[nomeNormalizado];
 
-            if (!prazo || prazo.ignorar_exame) return;
+            if (!prazo) return;
 
             // contagem geral (todos os exames, usada só na média)
             if (prazo.tipo_filtro === "clinico") {
@@ -160,8 +160,7 @@ export function ViewDashboard({
             }
 
             // contagem só de exames pendentes (usada nos gráficos)
-            const exameEstaPendente =
-                exame?.isPendente === true || !exameEstaConcluido(exame);
+            const exameEstaPendente = !exameEstaConcluido(exame, prazosMap);
 
             if (!exameEstaPendente) return;
 
@@ -247,7 +246,6 @@ export function ViewDashboard({
     ============================================================ */
     let vencidos = 0;
     let noPrazo = 0;
-    let semPrazo = 0;
     const funcionariosVencidos: any[] = [];
 
     funcionarios.forEach((item) => {
@@ -255,7 +253,6 @@ export function ViewDashboard({
             const prazoAso = obterPrazoAso(item, prazosMap);
 
             if (!prazoAso) {
-                semPrazo++;
                 return;
             }
 
@@ -272,7 +269,6 @@ export function ViewDashboard({
         }
 
         if (!possuiAso(item)) {
-            semPrazo++;
             return;
         }
 
@@ -284,7 +280,7 @@ export function ViewDashboard({
         const statusPendente = obterStatusPrazoPendente(item, prazosMap, examesPendentesNomes);
 
         if (!statusPendente.temStatus) {
-            semPrazo++;
+            return;
         } else if (statusPendente.estaVencido) {
             vencidos++;
             funcionariosVencidos.push(item); // <- novo
@@ -293,7 +289,7 @@ export function ViewDashboard({
         }
     });
 
-    const totalComStatus = vencidos + noPrazo + semPrazo;
+    const totalComStatus = vencidos + noPrazo;
     const percentualVencidos =
         totalComStatus > 0 ? (vencidos / totalComStatus) * 100 : 0;
 
@@ -307,11 +303,6 @@ export function ViewDashboard({
             nome: "No prazo",
             total: noPrazo,
             percentual: totalComStatus > 0 ? (noPrazo / totalComStatus) * 100 : 0,
-        },
-        {
-            nome: "Sem prazo",
-            total: semPrazo,
-            percentual: totalComStatus > 0 ? (semPrazo / totalComStatus) * 100 : 0,
         },
     ];
 
@@ -683,9 +674,7 @@ export function ViewDashboard({
                                                 fill={
                                                     entry.nome === "Vencidos"
                                                         ? THEME_COLORS.danger
-                                                        : entry.nome === "No prazo"
-                                                            ? THEME_COLORS.success
-                                                            : THEME_COLORS.slate
+                                                        : THEME_COLORS.success
                                                 }
                                             />
                                         ))}

@@ -1,77 +1,69 @@
-# Sistema de Gestão de Filas - Clínicas de Medicina Ocupacional
+# ERP Doctor's
 
-Sistema completo para gerenciamento de atendimentos, controle de fluxo de pacientes, emissão de senhas e relatórios analíticos. 
+Sistema web para operação de clínicas de saúde ocupacional. Reúne gestão de filas, emissão e chamada de senhas, atendimento por especialidade, relatórios, indicadores, painel de TV e gestão do ciclo de ASOs.
 
----
+## Visão rápida
 
-## Tecnologias
+- Next.js 16, App Router, React 19 e TypeScript.
+- Supabase para autenticação, PostgreSQL, storage e realtime.
+- n8n como camada de integração com SOC, GED, relatórios e indicadores.
+- Controle multiunidade por `profiles.unidade_id`.
+- Perfis: `admin`, `recepcao`, `especialista`, `operador` e `painel`.
+- Impressão local e comunicação ESC/POS para senhas.
 
-* **Frontend / Backend:** Next.js (App Router + API Routes)
-* **Banco de dados:** Supabase (PostgreSQL)
-* **Automações:** n8n
-* **App de impressão:** Java .exe + ESC/POS (TCP)
-* **Deploy:** Netlify + VPS
-
----
-
-## Estrutura do Projeto
-
-```bash
-src/
-  app/  
-    api/           # Endpoints (relatórios, fihca, declaração de comparecimento)
-  components/      # Componentes UI
-  hooks/           # Hooks customizados
-  layout/           # Sidebar e Header customizados
-  lib/             # Integrações (supabase, utils)
-```
-
----
-
-## Documentação
-
-* [Arquitetura](./docs/arquitetura.md)
-* [Setup](./docs/setup.md)
-* [Guia de Uso](./docs/uso.md)
-* [API](./docs/api.md)
-
----
-
-## Rodando localmente
+## Começando
 
 ```bash
 npm install
 npm run dev
 ```
 
----
+O servidor local inicia em `http://localhost:3000`. Configure antes as variáveis descritas em [Setup e ambiente](docs/setup.md).
 
-## Produção
+## Comandos
 
-* Frontend hospedado na Netlify
-* Supabase e n8n rodando em VPS
-* App de impressão rodando via .exe feito em Java, sendo instalado em cada máquina que chama senhas
+```bash
+npm run dev      # desenvolvimento na porta 3000
+npm run build    # build de produção
+npm run start    # executa o build
+npm run lint     # análise estática
+npx tsc --noEmit # validação TypeScript
+```
 
----
+## Documentação
 
-## Observações importantes
+- [Arquitetura](docs/arquitetura.md)
+- [Setup e ambiente](docs/setup.md)
+- [Mapa de páginas](docs/paginas.md)
+- [APIs](docs/api.md)
+- [Banco de dados](docs/banco-de-dados.md)
+- [Regras e fluxos de negócio](docs/fluxos-negocio.md)
+- [Guia de manutenção](docs/manutencao.md)
+- [Guia funcional](docs/uso.md)
+- [Manual de ASO](docs/Manual_do_Usuario_Gestao_de_ASO.docx)
 
-* Impressão depende de worker local ativo
-* Impressora térmica usa protocolo TCP (porta 9100)
-* Sistema depende de conexão com Supabase
+## Estrutura principal
 
----
+```text
+src/
+  app/          rotas, layouts e Route Handlers
+  components/   componentes de domínio e visuais
+  context/      tema e estado da barra lateral
+  hooks/        hooks reutilizáveis
+  layout/       cabeçalho, menu e estrutura administrativa
+  lib/          Supabase, autenticação, contratos e utilitários
+public/         recursos estáticos
+docs/           documentação técnica e funcional
+```
 
-## Funcionalidades
+## Regras essenciais
 
-* Emissão de senhas
-* Painel de chamada
-* Kanban de exames e especialidades
-* Relatórios e dashboards de atendimento
-* Filas de atendimentos com autonomia de trabalho
-* Impressão de senha automática
-* Controle de tempo de espera e permanência
-* Controle de usuários e permissões (admin)
-* Controle de salas e profissionais
+1. Toda consulta operacional deve respeitar a unidade do perfil autenticado.
+2. Segredos de n8n permanecem no servidor; o frontend chama `/api/*`.
+3. Visibilidade no menu não substitui autorização no proxy e no banco.
+4. Mudanças em estados de atendimento ou ASO afetam Supabase, realtime e n8n.
+5. Desenvolvimento e produção usam atualmente o mesmo banco; testes locais podem alterar dados reais.
 
----
+## Deploy
+
+O frontend é preparado para Next.js/Netlify. Supabase e n8n são serviços externos. Consulte o setup antes de alterar variáveis, URLs ou credenciais.

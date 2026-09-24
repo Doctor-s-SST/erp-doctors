@@ -1,6 +1,5 @@
 import { Outfit, Geist } from 'next/font/google';
 import './globals.css';
-import "flatpickr/dist/flatpickr.css";
 import { SidebarProvider } from '@/context/SidebarContext';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { cn } from "@/lib/utils";

@@ -188,7 +188,7 @@ export default function PrazosAsoPage() {
             "Nome do Exame": item.nome_exame,
             "Prazo (Dias)": item.prazo_dias,
             "Tipo Filtro": item.tipo_filtro === "clinico" || item.tipo_filtro === "complementar" ? item.tipo_filtro : "",
-            "Ignorar Exame": item.ignorar_exame ? "Sim" : "Não",
+            "Dispensar Documento GED": item.ignorar_exame ? "Sim" : "Não",
         }));
         const worksheet = XLSX.utils.json_to_sheet(dadosModelo);
         const workbook = XLSX.utils.book_new();
@@ -246,7 +246,7 @@ export default function PrazosAsoPage() {
                     );
 
                     const ignorarExameRaw = String(
-                        row["Ignorar Exame"] ?? row["ignorar_exame"] ?? ""
+                        row["Dispensar Documento GED"] ?? row["Ignorar Exame"] ?? row["ignorar_exame"] ?? ""
                     ).trim().toLowerCase();
                     const ignorarExameValor = ["sim", "true", "1"].includes(ignorarExameRaw);
 
@@ -428,7 +428,7 @@ export default function PrazosAsoPage() {
                                     Tipo Filtro
                                 </TableHead>
                                 <TableHead className="font-bold text-xs uppercase text-right">
-                                    Ignorar Exame
+                                    Dispensa Documento GED
                                 </TableHead>
                                 <TableHead className="font-bold text-xs uppercase text-right w-24">
                                     Ações

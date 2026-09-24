@@ -34,7 +34,7 @@ function getRedirectByRole(role?: string, especialidade_id?: string) {
 }
 
 export async function updateSession(request: NextRequest) {
-  let response = NextResponse.next()
+  const response = NextResponse.next()
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

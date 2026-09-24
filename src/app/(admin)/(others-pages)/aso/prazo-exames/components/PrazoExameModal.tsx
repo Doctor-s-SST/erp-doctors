@@ -112,7 +112,7 @@ export function PrazoExameModal({
                         </div>
                         <div className="space-y-1.5">
                             <Label htmlFor="ignorar_exame" className="text-xs font-bold uppercase">
-                                Ignorar Exame
+                                Dispensar documento GED
                             </Label>
                             <Input
                                 id="ignorar_exame"
