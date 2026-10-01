@@ -9,6 +9,8 @@
 5. Ao concluir, o sistema libera etapas dependentes ou finaliza o paciente.
 6. Painel de TV acompanha chamadas e anuncia sala/andar conforme configuração.
 
+A identificação de sala e profissional da fila fica no `localStorage` por usuário durante no máximo uma hora. Ao expirar com a fila aberta, o sistema limpa a identificação e reabre o modal. Todo login bem-sucedido também remove a identificação anterior, obrigando uma nova confirmação de sala e profissional. A sessão de guichê da recepção é independente.
+
 Antes de mudar um status, pesquise o valor em recepção, fila dinâmica, painel, componentes de status e relatórios.
 
 ## Painel
@@ -28,6 +30,10 @@ As telas enviam período e filtros ao backend. O n8n processa e geralmente retor
 Prazo `0` é válido e significa o mesmo dia útil. Ausência de configuração é “Sem prazo”. A coluna legada `ignorar_exame` significa **dispensar documento GED**: com data do exame, o item está concluído; sem data, permanece pendente. A flag não exclui o exame da classificação nem do cálculo de prazo.
 
 O gráfico de situação do prazo no dashboard apresenta apenas ASOs com prazo calculável, nas categorias **No prazo** e **Vencidos**. Registros sem configuração ou sem data-base não entram nesse gráfico. Para prazo `0`, a data-limite é a própria data do exame; depois dela, o ASO é vencido.
+
+### Vínculo com o atendimento
+
+As views de exames pendentes e concluídos consultam o status da recepção pelo hook `useStatusAtendimentos`. O vínculo prioriza CPF, depois nome e ficha sequencial. Quando há mais de um atendimento para o paciente, a data da ficha seleciona o registro correspondente; ficha exata, observação e atendimento mais recente funcionam como alternativas. As consultas ao Supabase são divididas em lotes com concorrência limitada para evitar URLs REST extensas e sobrecarga, todos os cadastros encontrados para o mesmo CPF são considerados e somente a requisição mais recente pode atualizar a tela.
 
 ### Liberação
 

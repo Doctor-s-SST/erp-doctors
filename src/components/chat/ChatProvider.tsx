@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
+import { carregarSessaoFila } from "@/lib/fila-session"
 
 import ChatButton from "./ChatButton"
 import ChatDrawer from "./ChatDrawer"
@@ -233,15 +234,9 @@ export default function ChatProvider() {
             }
         ]
 
-        const sessao = localStorage.getItem(
-            `fila_session_${userId}`
-        )
+        const dados = carregarSessaoFila(userId)
 
-
-
-        if (sessao) {
-
-            const dados = JSON.parse(sessao)
+        if (dados) {
 
             if (dados.especialidade_id) {
 
@@ -353,13 +348,12 @@ export default function ChatProvider() {
 
     function carregarProfissionalAtivo(userId: string) {
 
-        const sessao = localStorage.getItem(
-            `fila_session_${userId}`
-        )
+        const dados = carregarSessaoFila(userId)
 
-        if (!sessao) return
-
-        const dados = JSON.parse(sessao)
+        if (!dados) {
+            setProfissionalAtivo({ nome: "", sala: "" })
+            return
+        }
 
         setProfissionalAtivo(
             {

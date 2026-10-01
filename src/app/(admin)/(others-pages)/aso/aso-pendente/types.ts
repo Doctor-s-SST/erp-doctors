@@ -147,3 +147,25 @@ export interface FuncionarioModalProps {
     funcionario: Funcionario | null;
 }
 
+export type TipoStatusAtendimento = "FINALIZADO" | "EM_ATENDIMENTO" | "AGUARDANDO" | "SEM_ATENDIMENTO";
+
+export interface ExameAtendimentoResumo {
+    id: string;
+    sala: string | null;
+    status: string | null;
+    finalizado_em: string | null;
+}
+
+export interface InfoStatusAtendimento {
+    ficha: string;
+    atendimentoId?: string;
+    statusGeral: TipoStatusAtendimento;
+    label: string;
+    corBadge: string;
+    totalExames: number;
+    examesFinalizados: number;
+    exames: ExameAtendimentoResumo[];
+    todosFinalizados: boolean;
+    detalhesTexto: string;
+}
+

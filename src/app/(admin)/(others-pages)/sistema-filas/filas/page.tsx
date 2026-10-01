@@ -3,30 +3,17 @@
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
+import { salvarSessaoFila } from "@/lib/fila-session"
 
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select" // Adicionado
 import { toast } from "sonner"
 import { Stethoscope, UserCog, ArrowRight, Activity, X } from "lucide-react" // Adicionado X e UserCog
-
-// ================= TYPES =================
-type Especialidade = { id: string; nome: string }
-type SalaEspecialidade = {
-  especialidade_id: string
-}
-type Sala = {
-  id: string
-  numero: string
-  sala_especialidades: SalaEspecialidade[]
-}
-type Profissional = {
-  profissional_especialidades: any; id: string; nome: string; especialidade_id: string
-}
+import { Especialidade, ProfissionalFila, SalaSelecao } from "./types"
 
 export default function SelecionarFila() {
   const router = useRouter()
@@ -36,8 +23,8 @@ export default function SelecionarFila() {
   const [selected, setSelected] = useState<Especialidade | null>(null)
   const [form, setForm] = useState({ sala: "", profissional: "" })
 
-  const [salas, setSalas] = useState<Sala[]>([])
-  const [profissionais, setProfissionais] = useState<Profissional[]>([])
+  const [salas, setSalas] = useState<SalaSelecao[]>([])
+  const [profissionais, setProfissionais] = useState<ProfissionalFila[]>([])
 
   const [isOutraSala, setIsOutraSala] = useState(false)
   const [isOutroProfissional, setIsOutroProfissional] = useState(false)
@@ -58,7 +45,7 @@ export default function SelecionarFila() {
 
     return profissionais.filter(p =>
       p.profissional_especialidades?.some(
-        (v: any) => v.especialidade_id === selected.id
+        (v) => v.especialidade_id === selected.id
       )
     )
   }, [profissionais, selected])
@@ -75,7 +62,7 @@ export default function SelecionarFila() {
         .eq("unidade_id", currentUnidadeId) // Filtro crucial
         .order("nome");
 
-      const { data: sls, error: salasError } = await supabase
+      const { data: sls } = await supabase
         .from("salas")
         .select(`
           id,
@@ -103,13 +90,13 @@ export default function SelecionarFila() {
       setEspecialidades(esp || []);
       setSalas(sls || []);
       setProfissionais(
-        (profs || []).map((p: any) => ({
+        (profs || []).map((p) => ({
           ...p,
           especialidade_id: p.profissional_especialidades?.[0]?.especialidade_id || ""
         }))
       );
 
-    } catch (error) {
+    } catch {
       toast.error("Erro ao carregar dados");
     } finally {
       setLoading(false);
@@ -160,12 +147,11 @@ export default function SelecionarFila() {
     const { data: { user } } = await supabase.auth.getUser()
 
     if (user) {
-      const userKey = `fila_session_${user.id}`
-      localStorage.setItem(userKey, JSON.stringify({
+      salvarSessaoFila(user.id, {
         sala: form.sala,
         profissional: form.profissional,
         especialidade_id: selected?.id,
-      }))
+      })
 
       window.dispatchEvent(
         new CustomEvent("fila-changed")

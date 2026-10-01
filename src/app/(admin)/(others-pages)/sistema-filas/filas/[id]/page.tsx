@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo, useRef } from "react"
 import { useParams } from "next/navigation"
 import { supabase } from "@/lib/supabase"
+import { carregarSessaoFila, FilaSession, limparSessaoFila, salvarSessaoFila } from "@/lib/fila-session"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -15,14 +16,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import {
     CheckCircle2,
     User,
-    XCircle,
-    ArrowUpDown,
     Stethoscope,
-    Volume2,
-    DoorOpen,
-    LayoutGrid,
     RefreshCw,
-    Beaker,
     Clock,
     FlaskConical,
     BellRing,
@@ -37,76 +32,43 @@ import {
 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { StatusSenhaFilas } from "@/components/atendimento/status-senha-filas/StatusSenhaFilas"
-
-type ItemFila = {
-    finaliza_em: any
-    tipo_senha: string
-    id: string
-    atendimento_id: string
-    senha: string
-    nome: string
-    empresa_razao: string
-    codigo_empresa: string
-    status: string
-    status_atendimento: string
-    created_at: string
-    ficha_sequencial: string
-    num_sala?: string | null
-    tempo_espera_inicial?: number
-    observacao?: string
-    bloqueado?: boolean
-    sala?: string
-    profissional?: string
-    especialidade_nome?: string
-    sala_atual?: string
-}
-
-type ConfigOrdenacao = {
-    coluna: keyof ItemFila | 'tempo_espera'
-    direcao: 'asc' | 'desc'
-}
+import { SortableTableHead } from "../components/SortableTableHead"
+import {
+    ConfigOrdenacaoFila,
+    ExameFila,
+    GrupoEspecialidade,
+    ItemFila,
+    ParametrosAcaoFila,
+    ProfissionalFila,
+} from "../types"
+import {
+    corTempoEspera,
+    formatarHoraFila,
+    normalizarTextoFila,
+    obterTempoEsperaTotal,
+} from "../utils"
 
 type Sala = { id: string; numero: string; especialidade_id: string }
-type Profissional = {
-    id: string;
-    nome: string;
-    profissional_especialidades: { especialidade_id: string }[];
-}
-
-type GrupoEspecialidade = {
-    id: string
-    nome: string
-    tipo_filtro: "todos" | "algum" | "obrigatorio_mais_algum" | "apenas_do_grupo"
-    grupo_especialidade_itens: {
-        especialidade_id: string
-        obrigatoria: boolean
-        especialidades: {
-            id: string
-            nome: string
-        }
-    }[]
-}
-
 export default function FilaPage() {
     const { id } = useParams()
     const [especialidadeNome, setEspecialidadeNome] = useState("Carregando...")
     const [data, setData] = useState<ItemFila[]>([])
     const [loading, setLoading] = useState(true)
-    const [isRefreshing, setIsRefreshing] = useState(false)
     const [loadingAction, setLoadingAction] = useState<string | null>(null)
     const [openModal, setOpenModal] = useState(false)
-    const [session, setSession] = useState<any>(null)
-    const [ordenacao, setOrdenacao] = useState<ConfigOrdenacao>({ coluna: 'tempo_espera', direcao: 'desc' })
+    const [session, setSession] = useState<FilaSession | null>(null)
+    const [usuarioId, setUsuarioId] = useState("")
+    const [ordenacao, setOrdenacao] = useState<ConfigOrdenacaoFila>({ coluna: 'tempo_espera', direcao: 'desc' })
     const [filtroPesquisa, setFiltroPesquisa] = useState("")
     const [filtroTipo, setFiltroTipo] = useState<string>("TODOS")
-    const [examesPorAtendimento, setExamesPorAtendimento] = useState<Record<string, any[]>>({});
+    const [examesPorAtendimento, setExamesPorAtendimento] = useState<Record<string, ExameFila[]>>({});
     const [examesConcluidos, setExamesConcluidos] = useState<Record<string, string[]>>({});
     const [finalizandoIds, setFinalizandoIds] = useState<Record<string, number>>({});
     const [selectedAtendimento, setSelectedAtendimento] = useState<ItemFila | null>(null)
     const [isDetailsOpen, setIsDetailsOpen] = useState(false)
     const [role, setRole] = useState<string | null>(null)
     const [salas, setSalas] = useState<Sala[]>([])
-    const [profissionais, setProfissionais] = useState<Profissional[]>([])
+    const [profissionais, setProfissionais] = useState<ProfissionalFila[]>([])
     const [form, setForm] = useState({ sala: "", profissional: "" });
     const [isOutraSala, setIsOutraSala] = useState(false);
     const [isOutroProfissional, setIsOutroProfissional] = useState(false);
@@ -156,14 +118,15 @@ export default function FilaPage() {
         return segundos;
     };
 
-    const [naoAtendidosRecentes, setNaoAtendidosRecentes] = useState<string[]>([]);
-
-    useEffect(() => {
-        const saved = localStorage.getItem('nao_atendidos_recentes');
-        if (saved) {
-            setNaoAtendidosRecentes(JSON.parse(saved));
+    const [naoAtendidosRecentes, setNaoAtendidosRecentes] = useState<string[]>(() => {
+        if (typeof window === "undefined") return [];
+        try {
+            const salvos = localStorage.getItem("nao_atendidos_recentes");
+            return salvos ? JSON.parse(salvos) : [];
+        } catch {
+            return [];
         }
-    }, []);
+    });
 
     useEffect(() => {
         // Evita sobrescrever o localStorage com um array vazio antes do carregamento inicial
@@ -176,14 +139,14 @@ export default function FilaPage() {
         if (!id) return []
         return profissionais.filter(p =>
             p.profissional_especialidades?.some(
-                (v: any) => v.especialidade_id === id
+                (v) => v.especialidade_id === id
             )
         )
     }, [profissionais, id])
 
     const entrar = async () => {
         if (!form.sala || !form.profissional) {
-            alert("Por favor, preencha a sala e o profissional.");
+            toast.warning("Preencha a sala e o profissional.");
             return;
         }
 
@@ -195,60 +158,23 @@ export default function FilaPage() {
         const dadosSessao = {
             ...form,
             sala: salaNormalizada,
-            especialidade_id: id
+            especialidade_id: Array.isArray(id) ? id[0] : String(id || "")
         };
 
         const { data: { user } } = await supabase.auth.getUser();
 
         if (user) {
-            const userKey = `fila_session_${user.id}`;
-
-            localStorage.setItem(
-                userKey,
-                JSON.stringify(dadosSessao)
-            );
+            const sessaoSalva = salvarSessaoFila(user.id, dadosSessao);
 
             window.dispatchEvent(
                 new CustomEvent("fila-changed")
             )
 
-            setSession(dadosSessao);
+            setSession(sessaoSalva);
 
             setOpenModal(false);
         }
     };
-
-    const getTempoEsperaTotal = (item: ItemFila) => {
-        if (!item.created_at) return 0;
-
-        if (item.status === "FINALIZADO") {
-            return 0;
-        }
-
-        const dataCriacao = new Date(item.created_at).getTime();
-        const agora = Date.now();
-
-        const diffMs = agora - dataCriacao;
-        const minutos = Math.floor(diffMs / 1000 / 60);
-
-        return minutos > 0 ? minutos : 0;
-    };
-
-    const getHora = (date: string) => {
-        if (!date) return "--:--"
-        return new Date(date).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
-    }
-
-    const getColorTempoEspera = (created_at: string, isCancelado: boolean) => {
-        const minutos = Math.floor((Date.now() - new Date(created_at).getTime()) / 1000 / 60);
-
-
-        if (isCancelado) return "text-red-500";
-        if (minutos < 10) return "text-emerald-500";
-        if (minutos < 20) return "text-amber-500";
-        if (minutos < 30) return "text-orange-600";
-        return "text-red-600 animate-pulse";
-    }
 
     const getStatusStyles = (item: ItemFila) => {
         let isMinhaSala = false;
@@ -285,53 +211,6 @@ export default function FilaPage() {
             bg: "bg-blue-500/10",
             label: "AGUARDANDO",
             podeAcoes: true
-        }
-    }
-
-    async function fetchFila() {
-        if (!unidadeId) return;
-
-        setIsRefreshing(true);
-        try {
-            const { data: esp } = await supabase
-                .from('especialidades')
-                .select('nome')
-                .eq('id', id)
-                .single();
-
-            if (!esp) return;
-            setEspecialidadeNome(esp.nome);
-
-            const { data: result } = await supabase.rpc("get_fila_especialidade_novo", {
-                p_sala: esp.nome,
-                p_unidade_id: unidadeId
-            });
-
-            if (result) {
-                setData(result);
-
-                const novosTimers: Record<string, number> = {};
-                const agora = Date.now();
-
-                result.forEach((item: any) => {
-                    if (item.finaliza_em) {
-                        const fim = new Date(item.finaliza_em).getTime();
-
-                        if (fim > agora) {
-                            novosTimers[item.id] = fim;
-                        }
-                    }
-                });
-
-                setFinalizandoIds(prev => ({
-                    ...prev,
-                    ...novosTimers
-                }));
-            }
-        } catch (err) {
-        } finally {
-            setLoading(false);
-            setIsRefreshing(false);
         }
     }
 
@@ -400,28 +279,6 @@ export default function FilaPage() {
     }, [id, unidadeId]);
 
     useEffect(() => {
-        const emAtendimento = data.find(item =>
-            item.status === "EM_ATENDIMENTO" &&
-            item.num_sala === session?.sala &&
-            item.profissional === session?.profissional
-        );
-
-
-        if (emAtendimento) {
-            if (atendimentoAtualId !== emAtendimento.id) {
-                setAtendimentoAtualId(emAtendimento.id);
-                setInicioAtendimento(Date.now());
-                ultimoAlertaRef.current = null;
-            }
-        } else {
-            setAtendimentoAtualId(null);
-            setInicioAtendimento(null);
-            ultimoAlertaRef.current = null;
-            setShowTempoAlerta(false);
-        }
-    }, [data, session]);
-
-    useEffect(() => {
         if (!inicioAtendimento || !atendimentoAtualId) return;
 
         const interval = setInterval(() => {
@@ -450,37 +307,49 @@ export default function FilaPage() {
         );
 
         eventSource.onmessage = (event) => {
-            const payload = JSON.parse(event.data);
-            setData(payload.dados);
+            const payload = JSON.parse(event.data) as { dados?: ItemFila[] };
+            const novosDados = payload.dados ?? [];
+            const agora = Date.now();
+            const emAtendimento = novosDados.find(item =>
+                item.status === "EM_ATENDIMENTO" &&
+                item.num_sala === session?.sala &&
+                item.profissional === session?.profissional
+            );
+
+            setData(novosDados);
+            setFinalizandoIds(Object.fromEntries(
+                novosDados
+                    .filter(item =>
+                        item.status === "EM_ATENDIMENTO" &&
+                        item.finaliza_em &&
+                        new Date(item.finaliza_em).getTime() > agora
+                    )
+                    .map(item => [item.id, new Date(item.finaliza_em!).getTime()])
+            ));
+
+            setAtendimentoAtualId(atual => {
+                if (emAtendimento && atual !== emAtendimento.id) {
+                    setInicioAtendimento(agora);
+                    ultimoAlertaRef.current = null;
+                    return emAtendimento.id;
+                }
+
+                if (!emAtendimento) {
+                    setInicioAtendimento(null);
+                    ultimoAlertaRef.current = null;
+                    setShowTempoAlerta(false);
+                    return null;
+                }
+
+                return atual;
+            });
         };
 
         return () => {
             eventSource.close();
         };
 
-    }, [unidadeId, especialidadeNome]);
-
-    useEffect(() => {
-        if (!data?.length) return;
-
-        const agora = Date.now();
-
-        const timers = Object.fromEntries(
-            data
-                .filter(item =>
-                    item.status === "EM_ATENDIMENTO" &&
-                    item.finaliza_em &&
-                    new Date(item.finaliza_em).getTime() > agora
-                )
-                .map(item => [
-                    item.id,
-                    new Date(item.finaliza_em).getTime()
-                ])
-        );
-
-        setFinalizandoIds(timers);
-
-    }, [data]);
+    }, [unidadeId, especialidadeNome, session?.sala, session?.profissional]);
 
     useEffect(() => {
         data.forEach(item => {
@@ -517,13 +386,14 @@ export default function FilaPage() {
             }
         });
 
-    }, [now, finalizandoIds, data]);
+    }, [now, finalizandoIds, data, especialidadeNome, session?.sala]);
 
     useEffect(() => {
         const initialize = async () => {
             const { data: { user } } = await supabase.auth.getUser();
 
             if (user) {
+                setUsuarioId(user.id);
                 const { data: profile } = await supabase
                     .from('profiles')
                     .select('role, unidade_id')
@@ -531,20 +401,17 @@ export default function FilaPage() {
                     .single();
 
                 if (profile) {
-                    let idFinal = profile.unidade_id;
+                    const idFinal = profile.unidade_id;
 
                     setRole(profile.role);
                     setUnidadeId(idFinal);
 
-                    const userKey = `fila_session_${user.id}`;
-                    const saved = localStorage.getItem(userKey);
-                    if (saved) {
-                        const parsed = JSON.parse(saved);
-                        if (parsed.sala && parsed.profissional) {
-                            setSession(parsed);
-                            setOpenModal(false);
-                        }
+                    const sessaoSalva = carregarSessaoFila(user.id);
+                    if (sessaoSalva) {
+                        setSession(sessaoSalva);
+                        setOpenModal(false);
                     } else {
+                        setSession(null);
                         setOpenModal(true);
                     }
                 }
@@ -552,6 +419,28 @@ export default function FilaPage() {
         };
         initialize();
     }, [id]);
+
+    useEffect(() => {
+        if (!usuarioId || !session?.expiresAt) return;
+
+        const expirarSessao = () => {
+            limparSessaoFila(usuarioId);
+            setSession(null);
+            setForm({ sala: "", profissional: "" });
+            setOpenModal(true);
+            window.dispatchEvent(new CustomEvent("fila-changed"));
+            toast.info("Identifique novamente a sala e o profissional.");
+        };
+
+        const tempoRestante = session.expiresAt - Date.now();
+        if (tempoRestante <= 0) {
+            expirarSessao();
+            return;
+        }
+
+        const timer = window.setTimeout(expirarSessao, tempoRestante);
+        return () => window.clearTimeout(timer);
+    }, [session?.expiresAt, usuarioId]);
 
     useEffect(() => {
         async function fetchConfig() {
@@ -576,7 +465,7 @@ export default function FilaPage() {
                 .order("nome");
 
             setSalas(
-                (s || []).map((row: any) => ({
+                (s || []).map((row) => ({
                     id: String(row.id),
                     numero: String(row.numero),
                     especialidade_id: String(row.sala_especialidades?.[0]?.especialidade_id ?? "")
@@ -594,11 +483,13 @@ export default function FilaPage() {
             fetchExamesAtendimentos(data);
             fetchEspecialidadesAtendimentos(data);
         }
+        // As funções consultam o Supabase para o snapshot recebido pelo SSE.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [data]);
 
-    async function fetchExamesAtendimentos(data: any) {
+    async function fetchExamesAtendimentos(data: ItemFila[]) {
         if (!data.length || !id) return;
-        const atendimentoIds = data.map((i: { atendimento_id: any }) => i.atendimento_id);
+        const atendimentoIds = data.map((item) => item.atendimento_id);
 
 
         const { data: atendimentosData, error } = await supabase
@@ -632,24 +523,19 @@ export default function FilaPage() {
     `)
             .eq("especialidade_id", id);
 
-        const nomesExamesEspecialidade =
-            examesEspecialidade?.map(e =>
-                e.nome?.toLowerCase().trim()
-            ) || [];
-
-        const agrupado: Record<string, any[]> = {};
+        const agrupado: Record<string, ExameFila[]> = {};
         const concluidosIniciais: Record<string, string[]> = {};
 
-        atendimentosData?.forEach((atendimento: any) => {
+        atendimentosData?.forEach((atendimento) => {
 
             const examesList = Array.isArray(atendimento.exames_list)
-                ? atendimento.exames_list
+                ? atendimento.exames_list as ExameFila[]
                 : [];
 
             const examesFiltrados = examesList
-                .map((ex: any) => {
+                .map((ex) => {
                     const exameSistema = examesEspecialidade?.find(
-                        e => normalizar(e.nome) === normalizar(ex.exame)
+                        e => normalizarTextoFila(e.nome) === normalizarTextoFila(ex.exame)
                     );
 
                     if (!exameSistema) return null;
@@ -661,12 +547,12 @@ export default function FilaPage() {
                             exameSistema.obrigatorio_checkbox ?? true
                     };
                 })
-                .filter(Boolean);
+                .filter((ex): ex is NonNullable<typeof ex> => ex !== null);
 
             agrupado[atendimento.id] = examesFiltrados;
 
             concluidosIniciais[atendimento.id] = examesFiltrados
-                .filter((ex: any) => {
+                .filter((ex) => {
 
                     if (ex.realizado === true) {
                         return true;
@@ -684,7 +570,7 @@ export default function FilaPage() {
                         exameObrigatorio === false
                     );
                 })
-                .map((ex: any) => ex.exame);
+                .map((ex) => ex.exame);
         });
 
 
@@ -733,14 +619,14 @@ export default function FilaPage() {
 
         const agrupado: Record<string, string[]> = {};
 
-        especialidadesData?.forEach((item: any) => {
+        especialidadesData?.forEach((item) => {
             if (!item.atendimento_id || !item.sala) return;
 
             if (!agrupado[item.atendimento_id]) {
                 agrupado[item.atendimento_id] = [];
             }
 
-            const especialidade = normalizar(item.sala);
+            const especialidade = normalizarTextoFila(item.sala);
 
             if (
                 especialidade &&
@@ -752,13 +638,6 @@ export default function FilaPage() {
 
         setEspecialidadesPorAtendimento(agrupado);
     }
-
-    const normalizar = (texto: string) =>
-        texto
-            .toLowerCase()
-            .normalize("NFD")
-            .replace(/[\u0300-\u036f]/g, "")
-            .trim();
 
     const obterTempoExecucao = async () => {
         if (!id) return 20;
@@ -778,7 +657,7 @@ export default function FilaPage() {
 
     async function salvarRealizacaoExames(
         atendimentoId: string,
-        examesEspecialidadeAtual: any[]
+        examesEspecialidadeAtual: ExameFila[]
     ) {
 
         const { data: atendimento, error: erroBusca } = await supabase
@@ -793,21 +672,21 @@ export default function FilaPage() {
         }
 
         const examesOriginais = Array.isArray(atendimento.exames_list)
-            ? atendimento.exames_list
+            ? atendimento.exames_list as ExameFila[]
             : [];
 
         const concluidos =
             examesConcluidos[atendimentoId] || [];
 
         const nomesEspecialidadeAtual = examesEspecialidadeAtual.map(
-            (e: any) => normalizar(e.exame)
+            (e) => normalizarTextoFila(e.exame)
         );
 
-        const examesAtualizados = examesOriginais.map((ex: any) => {
+        const examesAtualizados = examesOriginais.map((ex) => {
 
             const pertenceEspecialidadeAtual =
                 nomesEspecialidadeAtual.includes(
-                    normalizar(ex.exame)
+                    normalizarTextoFila(ex.exame)
                 );
 
             if (!pertenceEspecialidadeAtual) {
@@ -815,8 +694,8 @@ export default function FilaPage() {
             }
 
             const exameAtual = examesEspecialidadeAtual.find(
-                (e: any) =>
-                    normalizar(e.exame) === normalizar(ex.exame)
+                (e) =>
+                    normalizarTextoFila(e.exame) === normalizarTextoFila(ex.exame)
             );
 
             return {
@@ -845,7 +724,7 @@ export default function FilaPage() {
         return true;
     }
 
-    async function executarAcao(rpcName: string, params: any) {
+    async function executarAcao(rpcName: string, params: ParametrosAcaoFila) {
         setLoadingAction(params.p_atendimento_id);
 
         const { error } = await supabase.rpc(rpcName, params);
@@ -854,10 +733,10 @@ export default function FilaPage() {
             toast.error("Erro na operação: " + error.message);
         } else {
             toast.success("Sucesso!");
-            if (rpcName === "nao_atendido_especialidade_novo") {
-                setNaoAtendidosRecentes(prev => [...prev, params.p_atendimento_exame_id]);
+            if (rpcName === "nao_atendido_especialidade_novo" && params.p_atendimento_exame_id) {
+                setNaoAtendidosRecentes(prev => [...prev, params.p_atendimento_exame_id!]);
             }
-            if (rpcName === "chamar_paciente_bloqueado_novo") {
+            if (rpcName === "chamar_paciente_bloqueado_novo" && params.p_atendimento_exame_id) {
                 setNaoAtendidosRecentes(prev => prev.filter(id => id !== params.p_atendimento_exame_id));
             }
         }
@@ -883,7 +762,7 @@ export default function FilaPage() {
             lista = lista.filter(item => {
 
                 const especialidadesGrupo = grupoAtual.grupo_especialidade_itens.map(
-                    (i: any) => normalizar(i.especialidades.nome)
+                    (i) => normalizarTextoFila(i.especialidades.nome)
                 );
 
                 const especialidadesAtendimento =
@@ -929,12 +808,12 @@ export default function FilaPage() {
                     const itensGrupo = grupoAtual.grupo_especialidade_itens || [];
 
                     const obrigatorias = itensGrupo
-                        .filter((i: any) => i.obrigatoria === true)
-                        .map((i: any) => normalizar(i.especialidades.nome));
+                        .filter((i) => i.obrigatoria === true)
+                        .map((i) => normalizarTextoFila(i.especialidades.nome));
 
                     const adicionais = itensGrupo
-                        .filter((i: any) => i.obrigatoria !== true)
-                        .map((i: any) => normalizar(i.especialidades.nome));
+                        .filter((i) => i.obrigatoria !== true)
+                        .map((i) => normalizarTextoFila(i.especialidades.nome));
 
                     const permitidas = new Set([...obrigatorias, ...adicionais]);
 
@@ -1002,11 +881,12 @@ export default function FilaPage() {
                 if (pA !== pB) return pA - pB;
             }
 
-            let valA: any, valB: any;
+            let valA: string | number | boolean;
+            let valB: string | number | boolean;
 
             if (ordenacao.coluna === 'tempo_espera') {
-                valA = getTempoEsperaTotal(a);
-                valB = getTempoEsperaTotal(b);
+                valA = obterTempoEsperaTotal(a);
+                valB = obterTempoEsperaTotal(b);
             } else {
                 valA = a[ordenacao.coluna as keyof ItemFila] ?? '';
                 valB = b[ordenacao.coluna as keyof ItemFila] ?? '';
@@ -1026,10 +906,10 @@ export default function FilaPage() {
         filtroPesquisa,
         filtroTipo,
         session,
-        gruposEspecialidades,
         grupoSelecionado,
         grupoAtual,
-        especialidadesPorAtendimento
+        especialidadesPorAtendimento,
+        naoAtendidosRecentes
     ]);
 
     useEffect(() => {
@@ -1061,34 +941,12 @@ export default function FilaPage() {
         });
     }, [now, finalizandoIds, data, especialidadeNome, session]);
 
-    const ThOrdenavel = ({ label, coluna }: { label: string, coluna: keyof ItemFila | 'tempo_espera' }) => {
-        const isAtivo = ordenacao.coluna === coluna;
-
-        return (
-            <th
-                className={`text-left p-4 font-bold uppercase tracking-widest text-[10px] cursor-pointer transition-colors
-                ${isAtivo ? 'bg-slate-200/50 dark:bg-slate-800 text-emerald-600' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
-                onClick={() => setOrdenacao(prev => ({
-                    coluna,
-                    direcao: prev.coluna === coluna && prev.direcao === 'asc' ? 'desc' : 'asc'
-                }))}
-            >
-                <div className="flex items-center gap-1">
-                    {label}
-                    <div className="flex flex-col">
-                        <ArrowUpDown className={`w-3 h-3 ${isAtivo ? 'opacity-100' : 'opacity-30'}`} />
-                    </div>
-                </div>
-            </th>
-        );
-    };
-
-    const onFichaClick = (item: any) => {
+    const onFichaClick = (item: ItemFila) => {
         window.navigator.clipboard.writeText(item.ficha_sequencial || "--");
         toast.success("Ficha copiada: " + (item.ficha_sequencial || "--"))
     };
 
-    const onEmpresaClick = (item: any) => {
+    const onEmpresaClick = (item: ItemFila) => {
         window.navigator.clipboard.writeText(item.empresa_razao || "--");
         toast.success("Empresa copiada: " + (item.empresa_razao || "--"))
     };
@@ -1259,13 +1117,23 @@ export default function FilaPage() {
                             <table className="w-full text-[13px]">
                                 <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
                                     <tr>
-                                        <ThOrdenavel label="Senha" coluna="senha" />
-                                        <ThOrdenavel label="Nome" coluna="nome" />
-                                        <ThOrdenavel label="Sequencial Ficha" coluna="ficha_sequencial" />
-                                        <ThOrdenavel label="Chegada" coluna="created_at" />
-                                        <ThOrdenavel label="Tempo Espera" coluna="tempo_espera" />
-                                        <ThOrdenavel label="Status" coluna="status" />
-                                        <ThOrdenavel label="Observação" coluna="observacao" />
+                                        {[
+                                            ["Senha", "senha"],
+                                            ["Nome", "nome"],
+                                            ["Sequencial Ficha", "ficha_sequencial"],
+                                            ["Chegada", "created_at"],
+                                            ["Tempo Espera", "tempo_espera"],
+                                            ["Status", "status"],
+                                            ["Observação", "observacao"],
+                                        ].map(([label, coluna]) => (
+                                            <SortableTableHead
+                                                key={coluna}
+                                                label={label}
+                                                coluna={coluna as ConfigOrdenacaoFila["coluna"]}
+                                                ordenacao={ordenacao}
+                                                onChange={setOrdenacao}
+                                            />
+                                        ))}
                                         <th className="text-right p-4 font-bold dark:text-slate-400 uppercase tracking-widest text-[10px]">
                                             Ações
                                         </th>
@@ -1273,7 +1141,7 @@ export default function FilaPage() {
                                 </thead>
 
                                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                                    {dadosProcessados.map((item: any) => {
+                                    {dadosProcessados.map((item) => {
 
                                         const podeFinalizar =
                                             item.status === "EM_ATENDIMENTO" &&
@@ -1324,11 +1192,11 @@ export default function FilaPage() {
 
                                         const todosExamesConcluidos = (
                                             atendimentoId: string,
-                                            exames: any[]
+                                            exames: ExameFila[]
                                         ) => {
 
                                             const examesObrigatorios = exames.filter(
-                                                (ex: any) => ex.obrigatorio_checkbox === true
+                                                (ex) => ex.obrigatorio_checkbox === true
                                             );
 
                                             if (examesObrigatorios.length === 0) {
@@ -1338,7 +1206,7 @@ export default function FilaPage() {
                                             const concluidos =
                                                 examesConcluidos[atendimentoId] || [];
 
-                                            return examesObrigatorios.every((ex: any) =>
+                                            return examesObrigatorios.every((ex) =>
                                                 concluidos.includes(ex.exame)
                                             );
                                         };
@@ -1427,7 +1295,7 @@ export default function FilaPage() {
                                                                             </div>
 
                                                                             <div className="space-y-2">
-                                                                                {examesList.map((ex: any, idx: number) => {
+                                                                                {examesList.map((ex, idx: number) => {
                                                                                     const podeEditarCheckbox =
                                                                                         item.status === "EM_ATENDIMENTO" &&
                                                                                         item.num_sala === session?.sala &&
@@ -1557,14 +1425,14 @@ export default function FilaPage() {
 
                                                 {/* CHEGADA */}
                                                 <td className="p-4 text-slate-600 dark:text-slate-400 font-medium">
-                                                    {getHora(item.created_at)}
+                                                    {formatarHoraFila(item.created_at)}
                                                 </td>
 
                                                 {/* TEMPO */}
-                                                <td className={`p-4 font-bold ${isEncerrado ? "text-slate-400" : getColorTempoEspera(item.created_at, isCancelado)}`}>
+                                                <td className={`p-4 font-bold ${isEncerrado ? "text-slate-400" : corTempoEspera(item.created_at, isCancelado)}`}>
                                                     <div className="flex items-center gap-1">
                                                         <Clock className="w-3 h-3 opacity-70" />
-                                                        {getTempoEsperaTotal(item)} min
+                                                        {obterTempoEsperaTotal(item)} min
                                                     </div>
                                                 </td>
 
@@ -1670,8 +1538,8 @@ export default function FilaPage() {
                                                                             p_atendimento_id: item.atendimento_id,
                                                                             p_atendimento_exame_id: item.id,
                                                                             p_sala: item.sala || especialidadeNome,
-                                                                            p_num_sala: session.sala,
-                                                                            p_profissional: session.profissional
+                                                                            p_num_sala: session?.sala,
+                                                                            p_profissional: session?.profissional
                                                                         })}
                                                                         className="h-8 text-[11px] border-amber-600 text-amber-600 hover:bg-amber-50"
                                                                     >
@@ -1757,8 +1625,8 @@ export default function FilaPage() {
                                                                                         p_atendimento_id: item.atendimento_id,
                                                                                         p_atendimento_exame_id: item.id,
                                                                                         p_sala: item.sala || especialidadeNome,
-                                                                                        p_num_sala: session.sala,
-                                                                                        p_profissional: session.profissional,
+                                                                                        p_num_sala: session?.sala,
+                                                                                        p_profissional: session?.profissional,
                                                                                     })}
                                                                                 >
                                                                                     <BellRing className="w-3 h-3 mr-1" />
@@ -1852,7 +1720,7 @@ export default function FilaPage() {
             </div >
 
             {/* MODAL CONFIGURAÇÃO */}
-            < Dialog open={openModal} onOpenChange={(open) => !loading && setOpenModal(open)
+            < Dialog open={openModal} onOpenChange={(open) => !loading && (open || session) && setOpenModal(open)
             }>
                 <DialogContent className="sm:max-w-[450px] bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 p-0 overflow-hidden shadow-2xl">
 

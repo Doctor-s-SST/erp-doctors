@@ -37,6 +37,8 @@ import {
 } from "lucide-react";
 import { FuncionarioModal } from "./FuncionarioModal";
 import { ConfirmarAcaoDialog } from "./ConfirmarAcaoDialog";
+import { StatusAtendimentoBadge } from "./StatusAtendimentoBadge";
+import { useStatusAtendimentos } from "../hooks/useStatusAtendimentos";
 import { ViewExamesPendentesProps } from "../types";
 import {
     classificarTipoExame,
@@ -236,6 +238,17 @@ export function ViewExamesPendentes({
         [pendenciasComStatus]
     );
 
+    const itensPendentesStatus = useMemo(() => {
+        return pendenciasVisiveis.map((item: any) => ({
+            sequencialFicha: item.sequencialFicha,
+            cpf: item.cpf || item.cpfFuncionario,
+            nome: item.nome,
+            dataFicha: item.dataFicha,
+        }));
+    }, [pendenciasVisiveis]);
+
+    const { statusMap: statusAtendimentosMap } = useStatusAtendimentos(unidadeId, itensPendentesStatus);
+
     /* ============================================================
        HELPER: FUNCIONÁRIO JÁ MONTADO/SALVO
     ============================================================ */
@@ -326,12 +339,25 @@ export function ViewExamesPendentes({
         });
 
         filtrada.sort((a: any, b: any) => {
+            if (sortKey === "statusAtendimento") {
+                const infoA = statusAtendimentosMap[a.sequencialFicha] || statusAtendimentosMap[a.cpf] || statusAtendimentosMap[a.nome];
+                const infoB = statusAtendimentosMap[b.sequencialFicha] || statusAtendimentosMap[b.cpf] || statusAtendimentosMap[b.nome];
+                const rank = (info?: any) => {
+                    if (!info || info.statusGeral === "SEM_ATENDIMENTO") return 0;
+                    if (info.statusGeral === "AGUARDANDO") return 1;
+                    if (info.statusGeral === "EM_ATENDIMENTO") return 2;
+                    if (info.todosFinalizados) return 3;
+                    return 1;
+                };
+                const diff = rank(infoA) - rank(infoB);
+                return sortDirection === "asc" ? diff : -diff;
+            }
             const resultado = compararValores(a, b, sortKey);
             return sortDirection === "asc" ? resultado : -resultado;
         });
 
         return filtrada;
-    }, [pendenciasComFiltros, busca, abaAtiva, sortKey, sortDirection, funcionariosSalvos]);
+    }, [pendenciasComFiltros, busca, abaAtiva, sortKey, sortDirection, funcionariosSalvos, statusAtendimentosMap]);
 
     const indicadoresExamesPendentes = useMemo(() => {
         let vencidos = 0;
@@ -845,6 +871,7 @@ export function ViewExamesPendentes({
                             <SortHeader label="Médico Examinador" sortKeyValue="medicoExaminador" />
                             <SortHeader label="Seq. Ficha" sortKeyValue="sequencialFicha" />
                             <SortHeader label="Data Ficha" sortKeyValue="dataFicha" />
+                            <SortHeader label="Status Atendimento" sortKeyValue="statusAtendimento" />
                             <SortHeader label="Exames Pendentes" sortKeyValue="examesList" />
                         </TableRow>
                     </TableHeader>
@@ -852,7 +879,7 @@ export function ViewExamesPendentes({
                     <TableBody className="divide-y divide-slate-100 dark:divide-slate-800">
                         {pendenciasPaginadas.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={7} className="text-center py-8 text-xs text-slate-400">
+                                <TableCell colSpan={8} className="text-center py-8 text-xs text-slate-400">
                                     {abaAtiva === "pendentes"
                                         ? "Nenhum funcionário pendente para montagem."
                                         : "Nenhum funcionário salvo ou com ASO montado nesta lista."}
@@ -953,6 +980,17 @@ export function ViewExamesPendentes({
                                         {/* DATA FICHA */}
                                         <TableCell className="text-xs text-slate-600 dark:text-slate-400 font-mono">
                                             {item.dataFicha || "-"}
+                                        </TableCell>
+
+                                        {/* STATUS ATENDIMENTO */}
+                                        <TableCell>
+                                            <StatusAtendimentoBadge
+                                                info={
+                                                    statusAtendimentosMap[item.sequencialFicha] ||
+                                                    statusAtendimentosMap[item.cpf] ||
+                                                    statusAtendimentosMap[item.nome]
+                                                }
+                                            />
                                         </TableCell>
 
                                         {/* EXAMES */}

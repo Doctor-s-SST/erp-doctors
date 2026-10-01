@@ -37,7 +37,7 @@ Os handlers operacionais usam `getAuthSession()`: exigem sessão, perfil ativo e
 }
 ```
 
-Ações externas: `LIBERAR`, `LIBERAR-ENVIAR`, `ASSINADO`, `PENDENCIA`, `ENVIAR-PENDENCIA` e `ENVIADO`. Estados adicionais no banco: `ENVIADO_DIRETO` e `PENDENCIA_ENVIADA`.
+Ações externas: `LIBERAR`, `LIBERAR-ENVIAR`, `ASSINADO`, `PENDENCIA`, `ENVIAR-PENDENCIA`, `ENVIADO`, `REENVIAR-ASO` e `REENVIAR-PENDENCIA`. Estados adicionais no banco: `ENVIADO_DIRETO` e `PENDENCIA_ENVIADA`.
 
 ## Erros
 

@@ -16,7 +16,7 @@ export type ConfigOrdenacao = {
     direcao: "asc" | "desc";
 };
 
-export type TipoConfirmacao = "ASSINATURA" | "ENVIO" | "ENVIO_PENDENCIA" | null;
+export type TipoConfirmacao = "ASSINATURA" | "ENVIO" | "ENVIO_PENDENCIA" | "REENVIO_ASO" | null;
 
 export type TipoFiltroStatus = "TODOS" | "ASSINAR" | "ENVIAR" | "PENDENCIA" | "ENVIADO";
 

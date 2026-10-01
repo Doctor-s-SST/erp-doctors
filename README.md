@@ -40,6 +40,7 @@ npx tsc --noEmit # validação TypeScript
 - [Regras e fluxos de negócio](docs/fluxos-negocio.md)
 - [Guia de manutenção](docs/manutencao.md)
 - [Guia funcional](docs/uso.md)
+- [Módulo de filas](docs/filas.md)
 - [Manual de ASO](docs/Manual_do_Usuario_Gestao_de_ASO.docx)
 
 ## Estrutura principal

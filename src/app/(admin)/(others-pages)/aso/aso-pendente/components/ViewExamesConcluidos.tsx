@@ -38,6 +38,8 @@ import {
 } from "lucide-react";
 import { FuncionarioModal } from "./FuncionarioModal";
 import { ConfirmarAcaoDialog } from "./ConfirmarAcaoDialog";
+import { StatusAtendimentoBadge } from "./StatusAtendimentoBadge";
+import { useStatusAtendimentos } from "../hooks/useStatusAtendimentos";
 import { ViewExamesConcluidosProps, FuncionarioItem, StatusVencimentoVisual } from "../types";
 import {
     classificarTipoExame,
@@ -63,6 +65,18 @@ export function ViewExamesConcluidos({
     prazosMap,
 }: ViewExamesConcluidosProps) {
     const [selectedFuncionario, setSelectedFuncionario] = useState<any | null>(null);
+
+    const itensConcluidosStatus = useMemo(() => {
+        return todosFuncionarios.map((item: any) => ({
+            sequencialFicha: item.sequencialFicha || item.sequencial_ficha || item.aso?.sequencialFicha,
+            cpf: item.cpf || item.cpfFuncionario || item.aso?.cpfFuncionario || item.aso?.cpf,
+            nome: item.nome || item.nomeFuncionario || item.aso?.nomeFuncionario,
+            // dataFicha pode estar no item raiz ou aninhado dentro de aso
+            dataFicha: item.dataFicha || item.aso?.dataFicha || null,
+        }));
+    }, [todosFuncionarios]);
+
+    const { statusMap: statusAtendimentosMap } = useStatusAtendimentos(unidadeId, itensConcluidosStatus);
     const [modalOpen, setModalOpen] = useState(false);
     const [selectedCpfs, setSelectedCpfs] = useState<Set<string>>(new Set());
     const [cpfsEnviadosDireto, setCpfsEnviadosDireto] = useState<Set<string>>(new Set());
@@ -400,6 +414,24 @@ export function ViewExamesConcluidos({
                     resultado = (a.prazoAso?.dataLimite.getTime() ?? Number.POSITIVE_INFINITY) -
                         (b.prazoAso?.dataLimite.getTime() ?? Number.POSITIVE_INFINITY);
                 }
+            } else if (sortKey === "statusAtendimento") {
+                const fichaA = a.sequencialFicha || a.sequencial_ficha || a.aso?.sequencialFicha || "";
+                const fichaB = b.sequencialFicha || b.sequencial_ficha || b.aso?.sequencialFicha || "";
+                const cpfA = a.cpf || a.cpfFuncionario || a.aso?.cpfFuncionario || "";
+                const cpfB = b.cpf || b.cpfFuncionario || b.aso?.cpfFuncionario || "";
+                const nomeA = a.nome || a.nomeFuncionario || a.aso?.nomeFuncionario || "";
+                const nomeB = b.nome || b.nomeFuncionario || b.aso?.nomeFuncionario || "";
+
+                const infoA = statusAtendimentosMap[fichaA] || statusAtendimentosMap[cpfA] || statusAtendimentosMap[nomeA];
+                const infoB = statusAtendimentosMap[fichaB] || statusAtendimentosMap[cpfB] || statusAtendimentosMap[nomeB];
+                const rank = (info?: any) => {
+                    if (!info || info.statusGeral === "SEM_ATENDIMENTO") return 0;
+                    if (info.statusGeral === "AGUARDANDO") return 1;
+                    if (info.statusGeral === "EM_ATENDIMENTO") return 2;
+                    if (info.todosFinalizados) return 3;
+                    return 1;
+                };
+                resultado = rank(infoA) - rank(infoB);
             } else {
                 const av = a[sortKey] ?? "";
                 const bv = b[sortKey] ?? "";
@@ -422,6 +454,7 @@ export function ViewExamesConcluidos({
         sortDirection,
         funcionariosSalvos,
         abaAtiva,
+        statusAtendimentosMap,
     ]);
 
     /* ============================================================
@@ -895,6 +928,11 @@ export function ViewExamesConcluidos({
                                 sortKeyValue="statusPrazo"
                             />
 
+                            <SortHeader
+                                label="Status Atendimento"
+                                sortKeyValue="statusAtendimento"
+                            />
+
                             <SortHeader label="Observação" sortKeyValue="observacao" />
                         </TableRow>
                     </TableHeader>
@@ -903,7 +941,7 @@ export function ViewExamesConcluidos({
                         {funcionariosPaginados.length === 0 ? (
                             <TableRow>
                                 <TableCell
-                                    colSpan={9}
+                                    colSpan={10}
                                     className="text-center py-8 text-xs text-slate-400"
                                 >
                                     {abaAtiva === "pendentes"
@@ -1076,6 +1114,17 @@ export function ViewExamesConcluidos({
                                                     </span>
                                                 )}
                                             </div>
+                                        </TableCell>
+
+                                        {/* STATUS ATENDIMENTO */}
+                                        <TableCell>
+                                            <StatusAtendimentoBadge
+                                                info={
+                                                    statusAtendimentosMap[item.sequencialFicha || item.sequencial_ficha || item.aso?.sequencialFicha || ""] ||
+                                                    statusAtendimentosMap[item.cpf || item.cpfFuncionario || item.aso?.cpfFuncionario || ""] ||
+                                                    statusAtendimentosMap[item.nome || item.nomeFuncionario || item.aso?.nomeFuncionario || ""]
+                                                }
+                                            />
                                         </TableCell>
 
                                         {/* OBSERVAÇÃO */}

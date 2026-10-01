@@ -31,6 +31,7 @@ import {
     X,
     MailCheck,
     CheckSquare,
+    RotateCcw,
 } from "lucide-react";
 
 import {
@@ -43,7 +44,7 @@ import {
 import { ConfirmarAcaoModal } from "./components/ConfirmarAcaoModal";
 import { RegistrarPendenciaModal } from "./components/RegistrarPendenciaModal";
 import { EnviarPendenciasModal } from "./components/EnviarPendenciasModal";
-import { criarPayloadAcaoAso, criarPayloadAcoesAso } from "@/lib/aso-assinatura";
+import { criarPayloadAcaoAso, criarPayloadAcoesAso, AcaoAso } from "@/lib/aso-assinatura";
 
 const BADGE_CONFIG: Record<string, { label: string; className: string }> = {
     ASSINADO: { label: "Assinado", className: "bg-blue-600 text-white" },
@@ -76,7 +77,7 @@ export default function AssinaturaAsoPage() {
     const [justificativa, setJustificativa] = useState("");
     const [pendenciasParaEnviar, setPendenciasParaEnviar] = useState<Pacientes[]>([]);
     const [observacoesEnvioPendencia, setObservacoesEnvioPendencia] = useState<Record<string, string>>({});
-    const [modoPendencia, setModoPendencia] = useState<"REGISTRAR" | "ENVIAR">("ENVIAR");
+    const [modoPendencia, setModoPendencia] = useState<"REGISTRAR" | "ENVIAR" | "REENVIAR">("ENVIAR");
 
     const [itemSelecionado, setItemSelecionado] = useState<Pacientes | null>(null);
     const [enviando, setEnviando] = useState(false);
@@ -156,7 +157,12 @@ export default function AssinaturaAsoPage() {
         setTipoConfirmacao("ENVIO");
     };
 
-    const abrirPendencias = (itens: Pacientes[], modo: "REGISTRAR" | "ENVIAR") => {
+    const abrirConfirmarReenvioAso = (item: Pacientes) => {
+        setItemSelecionado(item);
+        setTipoConfirmacao("REENVIO_ASO");
+    };
+
+    const abrirPendencias = (itens: Pacientes[], modo: "REGISTRAR" | "ENVIAR" | "REENVIAR") => {
         setModoPendencia(modo);
         setPendenciasParaEnviar(itens);
         setObservacoesEnvioPendencia(Object.fromEntries(
@@ -165,6 +171,7 @@ export default function AssinaturaAsoPage() {
     };
 
     const abrirEnvioPendencias = (itens: Pacientes[]) => abrirPendencias(itens, "ENVIAR");
+    const abrirReenvioPendencias = (itens: Pacientes[]) => abrirPendencias(itens, "REENVIAR");
 
     const fecharEnvioPendencias = () => {
         setPendenciasParaEnviar([]);
@@ -218,7 +225,7 @@ export default function AssinaturaAsoPage() {
         });
     }, [pacientes, busca, filtroStatus, ordenacao]);
 
-    // Pacientes elegíveis para envio em massa na lista atual
+    // Pacientes elegíveis para envio ou reenvio em massa na lista atual
     const elegiveisParaAcao = useMemo(() => {
         if (filtroStatus === "ASSINAR" && isEspecialista) {
             return dadosProcessados.filter((p) => !p.acao);
@@ -226,12 +233,20 @@ export default function AssinaturaAsoPage() {
         if (filtroStatus === "ENVIAR" && isOperador) {
             return dadosProcessados.filter((p) => p.acao === "ASSINADO" || p.acao === "PENDENCIA");
         }
+        if (filtroStatus === "PENDENCIA" && isOperador) {
+            return dadosProcessados.filter((p) => p.acao === "PENDENCIA_ENVIADA");
+        }
+        if (filtroStatus === "ENVIADO" && isOperador) {
+            return dadosProcessados.filter((p) => p.acao === "ENVIADO" || p.acao === "ENVIADO_DIRETO");
+        }
         return [];
     }, [dadosProcessados, filtroStatus, isEspecialista, isOperador]);
 
     const quantidadeSelecionadaPorTipo = useMemo(() => ({
         aso: pacientes.filter((p) => p.id && selecionadosEmMassa.includes(p.id) && p.acao === "ASSINADO").length,
         pendencia: pacientes.filter((p) => p.id && selecionadosEmMassa.includes(p.id) && p.acao === "PENDENCIA").length,
+        reenvioAso: pacientes.filter((p) => p.id && selecionadosEmMassa.includes(p.id) && (p.acao === "ENVIADO" || p.acao === "ENVIADO_DIRETO")).length,
+        reenvioPendencia: pacientes.filter((p) => p.id && selecionadosEmMassa.includes(p.id) && p.acao === "PENDENCIA_ENVIADA").length,
     }), [pacientes, selecionadosEmMassa]);
 
     const quantidadeSelecionadaParaAssinar = pacientes.filter(
@@ -258,7 +273,7 @@ export default function AssinaturaAsoPage() {
 
     async function enviarAcaoAso(
         pacientesParaEnviar: Pacientes[],
-        acao: "ASSINADO" | "PENDENCIA" | "ENVIADO",
+        acao: AcaoAso,
         observacao?: string
     ) {
         const response = await fetch("/api/enviar-asos-concluidos", {
@@ -302,17 +317,26 @@ export default function AssinaturaAsoPage() {
     const confirmarAcao = async () => {
         if (!itemSelecionado?.id || !tipoConfirmacao) return;
 
-        const acao = tipoConfirmacao === "ASSINATURA" ? "ASSINADO" : "ENVIADO";
+        const acao: AcaoAso =
+            tipoConfirmacao === "ASSINATURA"
+                ? "ASSINADO"
+                : tipoConfirmacao === "REENVIO_ASO"
+                    ? "REENVIAR-ASO"
+                    : "ENVIADO";
 
         setEnviando(true);
         try {
             await enviarAcaoAso([itemSelecionado], acao);
-            await registrarAcao([itemSelecionado.id], acao);
+            if (tipoConfirmacao !== "REENVIO_ASO") {
+                await registrarAcao([itemSelecionado.id], acao as any);
+            }
 
             toast.success(
-                acao === "ASSINADO"
+                tipoConfirmacao === "ASSINATURA"
                     ? "ASO assinado!"
-                    : "ASO enviado!"
+                    : tipoConfirmacao === "REENVIO_ASO"
+                        ? "ASO reenviado com sucesso!"
+                        : "ASO enviado!"
             );
             fecharConfirmModal();
         } catch (err) {
@@ -387,21 +411,30 @@ export default function AssinaturaAsoPage() {
         setEnviando(true);
         try {
             const registrando = modoPendencia === "REGISTRAR";
+            const reenviando = modoPendencia === "REENVIAR";
+            const acaoApi: AcaoAso = registrando
+                ? "PENDENCIA"
+                : reenviando
+                    ? "REENVIAR-PENDENCIA"
+                    : "ENVIAR-PENDENCIA";
+
             const response = await fetch("/api/enviar-asos-concluidos", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(criarPayloadAcoesAso(itens.map((paciente) => ({
                     paciente,
-                    acao: registrando ? "PENDENCIA" : "ENVIAR-PENDENCIA",
+                    acao: acaoApi,
                     observacao: observacoesEnvioPendencia[paciente.id!].trim(),
                 })))),
             });
             if (!response.ok) throw new Error("Falha ao enviar pendências");
 
+            const statusBd = registrando ? ("PENDENCIA" as const) : ("PENDENCIA_ENVIADA" as const);
+
             const resultados = await Promise.all(itens.map((paciente) => supabase
                 .from("pacientes_assinatura")
                 .update({
-                    acao: registrando ? "PENDENCIA" : "PENDENCIA_ENVIADA",
+                    acao: statusBd,
                     observacao: observacoesEnvioPendencia[paciente.id!].trim(),
                 })
                 .eq("id", paciente.id!)));
@@ -412,7 +445,7 @@ export default function AssinaturaAsoPage() {
             setPacientes((prev) => prev.map((paciente) => paciente.id && ids.includes(paciente.id)
                 ? {
                     ...paciente,
-                    acao: registrando ? "PENDENCIA" as const : "PENDENCIA_ENVIADA" as const,
+                    acao: statusBd,
                     observacao: observacoesEnvioPendencia[paciente.id].trim(),
                 }
                 : paciente));
@@ -420,7 +453,9 @@ export default function AssinaturaAsoPage() {
             toast.success(
                 registrando
                     ? `${itens.length} pendência(s) registrada(s) com sucesso!`
-                    : `${itens.length} pendência(s) enviada(s) com sucesso!`
+                    : reenviando
+                        ? `${itens.length} pendência(s) reenviada(s) com sucesso!`
+                        : `${itens.length} pendência(s) enviada(s) com sucesso!`
             );
             fecharEnvioPendencias();
         } catch (error) {
@@ -428,6 +463,36 @@ export default function AssinaturaAsoPage() {
             toast.error("Erro ao enviar as pendências.");
         } finally {
             setEnviando(false);
+        }
+    };
+
+    const reenviarAsoEmMassa = async () => {
+        const itensParaReenviar = pacientes.filter(
+            (p) => p.id && selecionadosEmMassa.includes(p.id) && (p.acao === "ENVIADO" || p.acao === "ENVIADO_DIRETO")
+        );
+        if (!itensParaReenviar.length) return;
+
+        const ids = itensParaReenviar.flatMap((p) => (p.id ? [p.id] : []));
+
+        setEnviando(true);
+        try {
+            await enviarAcaoAso(itensParaReenviar, "REENVIAR-ASO");
+            toast.success(`${itensParaReenviar.length} ASO(s) reenviado(s) com sucesso!`);
+            setSelecionadosEmMassa((prev) => prev.filter((id) => !ids.includes(id)));
+        } catch (err) {
+            console.error(err);
+            toast.error("Erro ao reenviar os ASOs.");
+        } finally {
+            setEnviando(false);
+        }
+    };
+
+    const reenviarPendenciaEmMassa = () => {
+        const itensParaReenviar = pacientes.filter(
+            (p) => p.id && selecionadosEmMassa.includes(p.id) && p.acao === "PENDENCIA_ENVIADA"
+        );
+        if (itensParaReenviar.length) {
+            abrirReenvioPendencias(itensParaReenviar);
         }
     };
 
@@ -537,6 +602,24 @@ export default function AssinaturaAsoPage() {
                                 <MessageCircleWarning className="w-4 h-4" /> Enviar {quantidadeSelecionadaPorTipo.pendencia} pendência(s)
                             </Button>
                         )}
+                    </div>
+                )}
+
+                {/* BOTÃO DE REENVIO EM MASSA DE PENDÊNCIAS */}
+                {isOperador && filtroStatus === "PENDENCIA" && quantidadeSelecionadaPorTipo.reenvioPendencia > 0 && (
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Button onClick={reenviarPendenciaEmMassa} disabled={enviando} className="bg-violet-600 hover:bg-violet-700 text-white gap-2">
+                            <RotateCcw className="w-4 h-4" /> Reenviar {quantidadeSelecionadaPorTipo.reenvioPendencia} pendência(s)
+                        </Button>
+                    </div>
+                )}
+
+                {/* BOTÃO DE REENVIO EM MASSA DE ASO */}
+                {isOperador && filtroStatus === "ENVIADO" && quantidadeSelecionadaPorTipo.reenvioAso > 0 && (
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Button onClick={reenviarAsoEmMassa} disabled={enviando} className="bg-cyan-600 hover:bg-cyan-700 text-white gap-2">
+                            <RotateCcw className="w-4 h-4" /> Reenviar {quantidadeSelecionadaPorTipo.reenvioAso} ASO(s)
+                        </Button>
                     </div>
                 )}
             </header>
@@ -715,7 +798,9 @@ export default function AssinaturaAsoPage() {
                                     const badge = item.acao ? BADGE_CONFIG[item.acao] : null;
                                     const canSelect =
                                         (isEspecialista && filtroStatus === "ASSINAR" && !item.acao) ||
-                                        (isOperador && filtroStatus === "ENVIAR" && (item.acao === "ASSINADO" || item.acao === "PENDENCIA"));
+                                        (isOperador && filtroStatus === "ENVIAR" && (item.acao === "ASSINADO" || item.acao === "PENDENCIA")) ||
+                                        (isOperador && filtroStatus === "PENDENCIA" && item.acao === "PENDENCIA_ENVIADA") ||
+                                        (isOperador && filtroStatus === "ENVIADO" && (item.acao === "ENVIADO" || item.acao === "ENVIADO_DIRETO"));
                                     const isSelected = selecionadosEmMassa.includes(item.id);
 
                                     return (
@@ -804,6 +889,34 @@ export default function AssinaturaAsoPage() {
                                                         </Button>
                                                     )}
 
+                                                    {/* REENVIAR ASO */}
+                                                    {isOperador && (filtroStatus === "ENVIADO" || filtroStatus === "TODOS") && (item.acao === "ENVIADO" || item.acao === "ENVIADO_DIRETO") && (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => abrirConfirmarReenvioAso(item)}
+                                                            className="w-fit px-2 flex gap-1.5 font-medium text-cyan-600 bg-cyan-500/10 hover:bg-cyan-500/20 hover:text-cyan-600 border border-cyan-500/30"
+                                                            title="Reenviar ASO"
+                                                        >
+                                                            <RotateCcw className="w-3.5 h-3.5" />
+                                                            <span>Reenviar ASO</span>
+                                                        </Button>
+                                                    )}
+
+                                                    {/* REENVIAR PENDÊNCIA */}
+                                                    {isOperador && (filtroStatus === "PENDENCIA" || filtroStatus === "TODOS") && item.acao === "PENDENCIA_ENVIADA" && (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => abrirReenvioPendencias([item])}
+                                                            className="w-fit px-2 flex gap-1.5 font-medium text-violet-600 bg-violet-500/10 hover:bg-violet-500/20 hover:text-violet-600 border border-violet-500/30"
+                                                            title="Reenviar pendência"
+                                                        >
+                                                            <RotateCcw className="w-3.5 h-3.5" />
+                                                            <span>Reenviar pendência</span>
+                                                        </Button>
+                                                    )}
+
                                                     {badge && (
                                                         <Badge
                                                             className={`uppercase text-[10px] font-bold tracking-wider border-none ${badge.className}`}
@@ -857,11 +970,27 @@ export default function AssinaturaAsoPage() {
                 onObservacaoChange={(id, value) => setObservacoesEnvioPendencia((prev) => ({ ...prev, [id]: value }))}
                 onClose={fecharEnvioPendencias}
                 onConfirm={confirmarEnvioPendencias}
-                titulo={modoPendencia === "REGISTRAR" ? "Registrar pendências" : "Enviar pendências"}
-                descricao={modoPendencia === "REGISTRAR"
-                    ? "Informe uma justificativa específica para cada paciente."
-                    : "Revise ou personalize a justificativa que será enviada para cada paciente."}
-                textoConfirmar={modoPendencia === "REGISTRAR" ? "Registrar pendências" : "Enviar pendências"}
+                titulo={
+                    modoPendencia === "REGISTRAR"
+                        ? "Registrar pendências"
+                        : modoPendencia === "REENVIAR"
+                            ? "Reenviar pendências"
+                            : "Enviar pendências"
+                }
+                descricao={
+                    modoPendencia === "REGISTRAR"
+                        ? "Informe uma justificativa específica para cada paciente."
+                        : modoPendencia === "REENVIAR"
+                            ? "Revise ou personalize a justificativa que será reenviada para cada paciente."
+                            : "Revise ou personalize a justificativa que será enviada para cada paciente."
+                }
+                textoConfirmar={
+                    modoPendencia === "REGISTRAR"
+                        ? "Registrar pendências"
+                        : modoPendencia === "REENVIAR"
+                            ? `Reenviar pendência${pendenciasParaEnviar.length > 1 ? "s" : ""}`
+                            : `Enviar pendência${pendenciasParaEnviar.length > 1 ? "s" : ""}`
+                }
             />
         </div>
     );

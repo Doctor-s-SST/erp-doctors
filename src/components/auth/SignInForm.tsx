@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { limparSessaoFila } from "@/lib/fila-session";
 import { toast } from "sonner";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 
@@ -64,6 +65,9 @@ export default function SignInForm() {
         toast.error("Usuário inativo. Entre em contato com o administrador.");
         return;
       }
+
+      limparSessaoFila(authData.user.id);
+      window.dispatchEvent(new CustomEvent("fila-changed"));
 
       toast.success("Login realizado!");
 

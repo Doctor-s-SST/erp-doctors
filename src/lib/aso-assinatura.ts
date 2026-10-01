@@ -4,7 +4,9 @@ export type AcaoAso =
     | "ENVIAR-PENDENCIA"
     | "ASSINADO"
     | "PENDENCIA"
-    | "ENVIADO";
+    | "ENVIADO"
+    | "REENVIAR-ASO"
+    | "REENVIAR-PENDENCIA";
 
 export interface PacienteAssinaturaPayload {
     id?: string;

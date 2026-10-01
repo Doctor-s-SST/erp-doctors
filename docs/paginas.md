@@ -14,8 +14,8 @@
 | Rota | Perfis principais | Uso |
 |---|---|---|
 | `/sistema-filas/senhas-recepcao` | admin, recepcao, especialista, painel | importar ficha, criar atendimento e emitir senha |
-| `/sistema-filas/filas` | admin, especialista, recepcao, painel | selecionar especialidade |
-| `/sistema-filas/filas/[id]` | mesmos | chamar, iniciar, encaminhar e finalizar atendimento |
+| `/sistema-filas/filas` | admin, especialista, recepcao, painel | selecionar especialidade e identificar sala/profissional por uma hora |
+| `/sistema-filas/filas/[id]` | mesmos | acompanhar a fila via SSE, chamar, conferir exames e finalizar a etapa |
 | `/sistema-filas/kanban` | admin | configurar exames e especialidades |
 
 ## Análise e relatórios

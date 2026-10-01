@@ -7,14 +7,16 @@
 | menu e papéis | `src/layout/AppSidebar.tsx`, `src/lib/proxy-supabase.ts` |
 | sessão em APIs | `src/lib/api-auth.ts`, `src/lib/server-supabase.ts` |
 | recepção/emissão | `sistema-filas/senhas-recepcao/page.tsx` |
-| lista de filas | `sistema-filas/filas/page.tsx` |
-| atendimento | `sistema-filas/filas/[id]/page.tsx` |
+| lista de filas | `sistema-filas/filas/page.tsx`, `docs/filas.md` |
+| atendimento | `sistema-filas/filas/[id]/page.tsx`, `docs/filas.md` |
+| sessão de sala/profissional | `src/lib/fila-session.ts` |
 | painel de TV | `painel-senhas/page.tsx`, `configuracoes/painel/page.tsx` |
 | salas/profissionais | `configuracoes/salas-profissionais/page.tsx` |
 | dashboard | `dashboards/atendimento/page.tsx`, `lib/dashboard-analytics.ts` |
 | relatórios | `sistema-filas/relatorios/*`, `src/app/api/relatorio*` |
 | indicadores | `analise-dados/*`, `api/indicadores*` |
 | ASO | `aso/*`, `lib/aso-assinatura.ts`, `api/enviar-asos-concluidos` |
+| status do atendimento no ASO | `aso/aso-pendente/hooks/useStatusAtendimentos.ts` |
 | GED | `FuncionarioModal.tsx`, `api/download-documento-ged` |
 | chat | `src/components/chat/*` |
 
@@ -46,6 +48,10 @@ Prepare migração reversível, adicione default para coluna obrigatória nova, 
 ## Alteração de webhook
 
 Atualize variável, Route Handler, validação, documentação e workflow n8n. Nunca faça o frontend chamar webhook privado diretamente.
+
+## Consultas em massa no Supabase
+
+Evite enviar listas grandes diretamente para `.in(...)`: o PostgREST codifica os valores na URL e proxies podem rejeitar a requisição antes de devolver os cabeçalhos CORS. Divida nomes, CPFs, fichas e IDs em lotes pequenos e nunca converta silenciosamente uma resposta com `error` em uma lista vazia, pois isso pode produzir estados falsos como “Sem atendimento”.
 
 ## Débitos técnicos conhecidos
 
