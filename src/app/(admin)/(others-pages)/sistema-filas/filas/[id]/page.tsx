@@ -94,7 +94,7 @@ export default function FilaPage() {
 
     const [unidadeId, setUnidadeId] = useState<string | null>(null);
     const finalizandoEmAndamento = useRef<Set<string>>(new Set());
-    const [now, setNow] = useState(Date.now());
+    const [now, setNow] = useState(() => Date.now());
 
     useEffect(() => {
         const interval = setInterval(() => {
@@ -317,14 +317,20 @@ export default function FilaPage() {
             );
 
             setData(novosDados);
-            setFinalizandoIds(Object.fromEntries(
+            setFinalizandoIds(atuais => Object.fromEntries(
                 novosDados
-                    .filter(item =>
-                        item.status === "EM_ATENDIMENTO" &&
-                        item.finaliza_em &&
-                        new Date(item.finaliza_em).getTime() > agora
-                    )
-                    .map(item => [item.id, new Date(item.finaliza_em!).getTime()])
+                    .filter(item => item.status === "EM_ATENDIMENTO" && item.finaliza_em)
+                    .map(item => {
+                        const fimRegistrado = new Date(item.finaliza_em!).getTime();
+                        const proximaTentativa = atuais[item.id];
+
+                        return [
+                            item.id,
+                            proximaTentativa && proximaTentativa > agora
+                                ? proximaTentativa
+                                : Math.max(fimRegistrado, agora)
+                        ];
+                    })
             ));
 
             setAtendimentoAtualId(atual => {
@@ -350,43 +356,6 @@ export default function FilaPage() {
         };
 
     }, [unidadeId, especialidadeNome, session?.sala, session?.profissional]);
-
-    useEffect(() => {
-        data.forEach(item => {
-
-            const fim = finalizandoIds[item.id];
-
-            if (!fim) return;
-
-            if (
-                Date.now() >= fim &&
-                !finalizandoEmAndamento.current.has(item.id)
-            ) {
-
-                finalizandoEmAndamento.current.add(item.id);
-
-                executarAcao(
-                    "finalizar_especialidade_novo",
-                    {
-                        p_atendimento_id: item.atendimento_id,
-                        p_atendimento_exame_id: item.id,
-                        p_sala: item.sala || especialidadeNome,
-                        p_num_sala: session?.sala,
-                    }
-                ).finally(() => {
-
-                    setFinalizandoIds(prev => {
-                        const novo = { ...prev };
-                        delete novo[item.id];
-                        return novo;
-                    });
-
-                    finalizandoEmAndamento.current.delete(item.id);
-                });
-            }
-        });
-
-    }, [now, finalizandoIds, data, especialidadeNome, session?.sala]);
 
     useEffect(() => {
         const initialize = async () => {
@@ -477,15 +446,6 @@ export default function FilaPage() {
         }
         fetchConfig();
     }, [unidadeId]);
-
-    useEffect(() => {
-        if (data.length > 0) {
-            fetchExamesAtendimentos(data);
-            fetchEspecialidadesAtendimentos(data);
-        }
-        // As funções consultam o Supabase para o snapshot recebido pelo SSE.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [data]);
 
     async function fetchExamesAtendimentos(data: ItemFila[]) {
         if (!data.length || !id) return;
@@ -639,6 +599,17 @@ export default function FilaPage() {
         setEspecialidadesPorAtendimento(agrupado);
     }
 
+    useEffect(() => {
+        if (data.length > 0) {
+            // As consultas assíncronas sincronizam os detalhes do snapshot SSE.
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            fetchExamesAtendimentos(data);
+            fetchEspecialidadesAtendimentos(data);
+        }
+        // As funções consultam o Supabase para o snapshot recebido pelo SSE.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [data]);
+
     const obterTempoExecucao = async () => {
         if (!id) return 20;
 
@@ -724,14 +695,17 @@ export default function FilaPage() {
         return true;
     }
 
-    async function executarAcao(rpcName: string, params: ParametrosAcaoFila) {
+    async function executarAcao(rpcName: string, params: ParametrosAcaoFila): Promise<boolean> {
         setLoadingAction(params.p_atendimento_id);
 
-        const { error } = await supabase.rpc(rpcName, params);
+        try {
+            const { error } = await supabase.rpc(rpcName, params);
 
-        if (error) {
-            toast.error("Erro na operação: " + error.message);
-        } else {
+            if (error) {
+                toast.error("Erro na operação: " + error.message);
+                return false;
+            }
+
             toast.success("Sucesso!");
             if (rpcName === "nao_atendido_especialidade_novo" && params.p_atendimento_exame_id) {
                 setNaoAtendidosRecentes(prev => [...prev, params.p_atendimento_exame_id!]);
@@ -739,8 +713,14 @@ export default function FilaPage() {
             if (rpcName === "chamar_paciente_bloqueado_novo" && params.p_atendimento_exame_id) {
                 setNaoAtendidosRecentes(prev => prev.filter(id => id !== params.p_atendimento_exame_id));
             }
+            return true;
+        } catch (error) {
+            const mensagem = error instanceof Error ? error.message : "falha de conexão";
+            toast.error("Erro na operação: " + mensagem);
+            return false;
+        } finally {
+            setLoadingAction(null);
         }
-        setLoadingAction(null);
     }
 
     // Grupo atualmente selecionado — mesma ideia da PaginaRelatorio
@@ -921,25 +901,30 @@ export default function FilaPage() {
 
                 finalizandoEmAndamento.current.add(item.id);
 
-                executarAcao(
+                void executarAcao(
                     "finalizar_especialidade_novo",
                     {
                         p_atendimento_id: item.atendimento_id,
                         p_atendimento_exame_id: item.id,
                         p_sala: item.sala || especialidadeNome,
-                        p_num_sala: session?.sala,
+                        p_num_sala: item.num_sala || session?.sala,
                     }
-                ).finally(() => {
+                ).then(sucesso => {
                     setFinalizandoIds(prev => {
+                        if (!sucesso) {
+                            return { ...prev, [item.id]: Date.now() + 5000 };
+                        }
+
                         const novo = { ...prev };
                         delete novo[item.id];
                         return novo;
                     });
+                }).finally(() => {
                     finalizandoEmAndamento.current.delete(item.id);
                 });
             }
         });
-    }, [now, finalizandoIds, data, especialidadeNome, session]);
+    }, [now, finalizandoIds, data, especialidadeNome, session?.sala]);
 
     const onFichaClick = (item: ItemFila) => {
         window.navigator.clipboard.writeText(item.ficha_sequencial || "--");
@@ -977,17 +962,22 @@ export default function FilaPage() {
 
         const fimDate = new Date(Date.now() + tempo * 1000);
 
-        setFinalizandoIds(prev => ({
-            ...prev,
-            [item.id]: fimDate.getTime()
-        }));
-
-        await supabase
+        const { error } = await supabase
             .from('atendimento_exames')
             .update({
                 finaliza_em: fimDate.toISOString()
             })
             .eq('id', item.id);
+
+        if (error) {
+            toast.error("Não foi possível iniciar a finalização: " + error.message);
+            return;
+        }
+
+        setFinalizandoIds(prev => ({
+            ...prev,
+            [item.id]: fimDate.getTime()
+        }));
     };
 
     const profissionalOcupado = useMemo(() => {

@@ -52,6 +52,8 @@ Os exames da especialidade são cruzados com `atendimentos.exames_list`. A tela 
 
 O tempo de confirmação vem de `especialidades.tempo_finalizacao_segundos`, com fallback de 20 segundos. `atendimento_exames.finaliza_em` permite reconstruir temporizadores depois de recarregar a página.
 
+Ao terminar o contador, a finalização usa `num_sala` do próprio item de atendimento, e não apenas a identificação mantida no navegador. Assim, uma sessão que expire durante o contador não invalida a operação já iniciada. O contador somente é retirado depois que `finalizar_especialidade_novo` confirma sucesso; em caso de falha, a tela mantém a finalização pendente e tenta novamente após cinco segundos.
+
 ## Filtros e armazenamento local
 
 | Chave | Conteúdo |
