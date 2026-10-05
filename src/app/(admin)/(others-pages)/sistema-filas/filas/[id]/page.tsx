@@ -1032,7 +1032,7 @@ export default function FilaPage() {
                         </div>
 
                         {/* FILTRO DE GRUPO DE ESPECIALIDADES */}
-                        {(role == "admin" && gruposEspecialidades.length > 0) && (
+                        {(gruposEspecialidades.length > 0) && (
                             <div className="flex items-center gap-2 bg-white dark:bg-black p-2 rounded-xl shadow-sm border dark:border-gray-600">
                                 <Stethoscope className="w-4 h-4 font-black text-emerald-600 dark:text-emerald-400" />
                                 <Select
