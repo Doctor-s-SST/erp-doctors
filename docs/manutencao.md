@@ -41,6 +41,8 @@ Crie `page.tsx`, defina permissão no proxy, adicione ao menu com os mesmos pap�
 
 Pesquise estados atuais em `atendimentos`, `atendimento_exames`, recepção, fila dinâmica, painel, relatórios e componentes `StatusSenha*`. Atualize todos em uma única entrega e coordene automações.
 
+Dados recebidos pelo SSE podem conter `status: null` durante registros incompletos ou transições. Consumidores como `senhas-recepcao/page.tsx` devem tratar esse valor como estado desconhecido (`SEM STATUS`) e nunca chamar métodos de string diretamente sem normalização.
+
 ## Alteração de banco
 
 Prepare migração reversível, adicione default para coluna obrigatória nova, atualize tipos/consultas e confirme RLS. Como não há migrações versionadas hoje, instituí-las é prioridade técnica.

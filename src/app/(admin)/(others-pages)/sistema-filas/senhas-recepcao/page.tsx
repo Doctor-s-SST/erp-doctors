@@ -25,7 +25,7 @@ type Atendimento = {
     nome: string;
     ficha_sequencial: string;
     created_at: string;
-    status: string;
+    status: string | null;
     guiche: string;
     atendente: string;
     tempo_espera_min: number;
@@ -309,7 +309,8 @@ export default function RecepcaoPage() {
         return new Date(date).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
     }
 
-    function getStatusBadge(status: string) {
+    function getStatusBadge(status: string | null) {
+        const statusSeguro = status || "SEM_STATUS";
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const styles: any = {
             "AGUARDANDO_RECEPCAO": "bg-gray-600 text-gray-100",
@@ -321,7 +322,7 @@ export default function RecepcaoPage() {
             "AGUARDANDO_EXAMES": "bg-green-600 text-green-100",
 
         }
-        return <Badge className={`${styles[status] || 'bg-green-600'} border-none text-[9px] font-black tracking-widest uppercase px-2`}>{(status) === "NAO_ATENDIDO" ? "NÃO ATENDIDO" : (status === "AGUARDANDO_RECEPCAO" ? "AGUARDANDO RECEPÇÃO" : (status === "EM_RECEPCAO" ? "EM RECEPÇÃO" : status.replace('_', ' ')))}</Badge>
+        return <Badge className={`${styles[statusSeguro] || 'bg-gray-600'} border-none text-[9px] font-black tracking-widest uppercase px-2`}>{statusSeguro === "NAO_ATENDIDO" ? "NÃO ATENDIDO" : (statusSeguro === "AGUARDANDO_RECEPCAO" ? "AGUARDANDO RECEPÇÃO" : (statusSeguro === "EM_RECEPCAO" ? "EM RECEPÇÃO" : statusSeguro.replaceAll('_', ' ')))}</Badge>
     }
 
     const handleSort = (coluna: keyof Atendimento | 'tempo_espera') => {
@@ -1142,13 +1143,14 @@ export default function RecepcaoPage() {
                                     <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                                         {dadosProcessados.map((item) => {
                                             const tempo = getTempoEsperaEvolutivo(item);
+                                            const status = item.status || "";
 
                                             // Lógica de estados
-                                            const isFinalizado = item.status === "FINALIZADO";
-                                            const isNaoAtendido = item.status === "NAO_ATENDIDO";
-                                            const isCancelado = item.status === "CANCELADO";
-                                            const isAguardandoExames = item.status === "AGUARDANDO_EXAMES" || (item.status.startsWith("EM ") && item.status !== "EM_FILA" && item.status !== "EM_RECEPCAO");
-                                            const isAguardandoRecepcao = item.status === "AGUARDANDO_RECEPCAO";
+                                            const isFinalizado = status === "FINALIZADO";
+                                            const isNaoAtendido = status === "NAO_ATENDIDO";
+                                            const isCancelado = status === "CANCELADO";
+                                            const isAguardandoExames = status === "AGUARDANDO_EXAMES" || (status.startsWith("EM ") && status !== "EM_FILA" && status !== "EM_RECEPCAO");
+                                            const isAguardandoRecepcao = status === "AGUARDANDO_RECEPCAO";
                                             const isEncerrado = isFinalizado || isCancelado;
 
                                             // NOVIDADE: Verifica se a ficha já foi salva no banco
