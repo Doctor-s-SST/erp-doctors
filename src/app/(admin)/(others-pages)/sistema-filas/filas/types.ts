@@ -65,6 +65,7 @@ export type ParametrosAcaoFila = Record<string, unknown> & {
 export type GrupoEspecialidadeItem = {
   especialidade_id: string;
   obrigatoria: boolean;
+  excludente?: boolean;
   especialidades: { id: string; nome: string };
 };
 

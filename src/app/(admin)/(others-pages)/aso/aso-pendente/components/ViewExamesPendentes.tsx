@@ -37,8 +37,6 @@ import {
 } from "lucide-react";
 import { FuncionarioModal } from "./FuncionarioModal";
 import { ConfirmarAcaoDialog } from "./ConfirmarAcaoDialog";
-import { StatusAtendimentoBadge } from "./StatusAtendimentoBadge";
-import { useStatusAtendimentos } from "../hooks/useStatusAtendimentos";
 import { ViewExamesPendentesProps } from "../types";
 import {
     classificarTipoExame,
@@ -78,7 +76,8 @@ export function ViewExamesPendentes({
     const [filtroExameEspecifico, setFiltroExameEspecifico] = useState("todos");
     const [saving, setSaving] = useState(false);
     const [sendingAso, setSendingAso] = useState(false);
-    const [acaoParaConfirmar, setAcaoParaConfirmar] = useState<"salvar" | "enviar" | null>(null);
+    const [concluindoAtendimento, setConcluindoAtendimento] = useState(false);
+    const [acaoParaConfirmar, setAcaoParaConfirmar] = useState<"salvar" | "enviar" | "concluido" | null>(null);
 
     /* ============================================================
        PAGINAÇÃO
@@ -238,17 +237,6 @@ export function ViewExamesPendentes({
         [pendenciasComStatus]
     );
 
-    const itensPendentesStatus = useMemo(() => {
-        return pendenciasVisiveis.map((item: any) => ({
-            sequencialFicha: item.sequencialFicha,
-            cpf: item.cpf || item.cpfFuncionario,
-            nome: item.nome,
-            dataFicha: item.dataFicha,
-        }));
-    }, [pendenciasVisiveis]);
-
-    const { statusMap: statusAtendimentosMap } = useStatusAtendimentos(unidadeId, itensPendentesStatus);
-
     /* ============================================================
        HELPER: FUNCIONÁRIO JÁ MONTADO/SALVO
     ============================================================ */
@@ -339,25 +327,12 @@ export function ViewExamesPendentes({
         });
 
         filtrada.sort((a: any, b: any) => {
-            if (sortKey === "statusAtendimento") {
-                const infoA = statusAtendimentosMap[a.sequencialFicha] || statusAtendimentosMap[a.cpf] || statusAtendimentosMap[a.nome];
-                const infoB = statusAtendimentosMap[b.sequencialFicha] || statusAtendimentosMap[b.cpf] || statusAtendimentosMap[b.nome];
-                const rank = (info?: any) => {
-                    if (!info || info.statusGeral === "SEM_ATENDIMENTO") return 0;
-                    if (info.statusGeral === "AGUARDANDO") return 1;
-                    if (info.statusGeral === "EM_ATENDIMENTO") return 2;
-                    if (info.todosFinalizados) return 3;
-                    return 1;
-                };
-                const diff = rank(infoA) - rank(infoB);
-                return sortDirection === "asc" ? diff : -diff;
-            }
             const resultado = compararValores(a, b, sortKey);
             return sortDirection === "asc" ? resultado : -resultado;
         });
 
         return filtrada;
-    }, [pendenciasComFiltros, busca, abaAtiva, sortKey, sortDirection, funcionariosSalvos, statusAtendimentosMap]);
+    }, [pendenciasComFiltros, busca, abaAtiva, sortKey, sortDirection, funcionariosSalvos]);
 
     const indicadoresExamesPendentes = useMemo(() => {
         let vencidos = 0;
@@ -565,6 +540,46 @@ export function ViewExamesPendentes({
             toast.error("Não foi possível enviar os ASOs selecionados.");
         } finally {
             setSendingAso(false);
+        }
+    };
+
+    const handleAtendimentoConcluiido = async () => {
+        if (selectedCpfs.size === 0) {
+            toast.warning("Selecione ao menos um funcionário.");
+            return;
+        }
+
+        setConcluindoAtendimento(true);
+
+        try {
+            const selecionados = pendenciasVisiveis
+                .filter((f: any) => selectedCpfs.has(f.cpf))
+                .map((f: any) => funcionariosMapeados.get(f.cpf) || f);
+
+            if (!selecionados.length) {
+                toast.warning("Nenhum funcionário válido foi selecionado.");
+                return;
+            }
+
+            const pacientes = selecionados.map((funcionario: any) =>
+                criarPacienteAssinatura(funcionario, unidadeId)
+            );
+
+            const response = await fetch("/api/enviar-asos-concluidos", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(criarPayloadAcaoAso(pacientes, "CONCLUIDO", "Concluído")),
+            });
+
+            if (!response.ok) throw new Error("Erro ao concluir atendimento.");
+
+            toast.success(`${selecionados.length} atendimento(s) enviado(s) como concluído(s)!`);
+            setSelectedCpfs(new Set());
+        } catch (error) {
+            console.error("Erro ao concluir atendimentos:", error);
+            toast.error("Não foi possível concluir os atendimentos selecionados.");
+        } finally {
+            setConcluindoAtendimento(false);
         }
     };
 
@@ -828,7 +843,7 @@ export function ViewExamesPendentes({
                                     )}
                                 </Button>
 
-                                {/* <Button
+                                <Button
                                     type="button"
                                     onClick={() => setAcaoParaConfirmar("enviar")}
                                     disabled={sendingAso || selectedCpfs.size === 0}
@@ -846,7 +861,27 @@ export function ViewExamesPendentes({
                                             {selectedCpfs.size > 0 && ` (${selectedCpfs.size})`}
                                         </>
                                     )}
-                                </Button> */}
+                                </Button>
+
+                                <Button
+                                    type="button"
+                                    onClick={() => setAcaoParaConfirmar("concluido")}
+                                    disabled={concluindoAtendimento || selectedCpfs.size === 0}
+                                    className="h-9 px-4 text-[10px] font-black uppercase tracking-wide gap-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white"
+                                >
+                                    {concluindoAtendimento ? (
+                                        <>
+                                            <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                                            Concluindo...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <CheckCircle2 className="w-3.5 h-3.5" />
+                                            Atendimento concluído
+                                            {selectedCpfs.size > 0 && ` (${selectedCpfs.size})`}
+                                        </>
+                                    )}
+                                </Button>
                             </div>
                         )}
                     </div>
@@ -871,7 +906,6 @@ export function ViewExamesPendentes({
                             <SortHeader label="Médico Examinador" sortKeyValue="medicoExaminador" />
                             <SortHeader label="Seq. Ficha" sortKeyValue="sequencialFicha" />
                             <SortHeader label="Data Ficha" sortKeyValue="dataFicha" />
-                            <SortHeader label="Status Atendimento" sortKeyValue="statusAtendimento" />
                             <SortHeader label="Exames Pendentes" sortKeyValue="examesList" />
                         </TableRow>
                     </TableHeader>
@@ -879,7 +913,7 @@ export function ViewExamesPendentes({
                     <TableBody className="divide-y divide-slate-100 dark:divide-slate-800">
                         {pendenciasPaginadas.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={8} className="text-center py-8 text-xs text-slate-400">
+                                <TableCell colSpan={7} className="text-center py-8 text-xs text-slate-400">
                                     {abaAtiva === "pendentes"
                                         ? "Nenhum funcionário pendente para montagem."
                                         : "Nenhum funcionário salvo ou com ASO montado nesta lista."}
@@ -982,26 +1016,15 @@ export function ViewExamesPendentes({
                                             {item.dataFicha || "-"}
                                         </TableCell>
 
-                                        {/* STATUS ATENDIMENTO */}
-                                        <TableCell>
-                                            <StatusAtendimentoBadge
-                                                info={
-                                                    statusAtendimentosMap[item.sequencialFicha] ||
-                                                    statusAtendimentosMap[item.cpf] ||
-                                                    statusAtendimentosMap[item.nome]
-                                                }
-                                            />
-                                        </TableCell>
-
                                         {/* EXAMES */}
                                         <TableCell className="max-w-[280px]">
                                             <div className="flex flex-wrap gap-1.5">
                                                 {item.examesDetalhados.map((exame: any, eIdx: number) => {
                                                     const corBadge = !exame.dataExame
-                                                            ? "bg-slate-500/10 text-slate-500 border-slate-500/20"
-                                                            : exame.statusPrazoExame?.estaVencido
-                                                                ? "bg-red-500/10 text-red-500 border-red-500/20"
-                                                                : "bg-amber-500/10 text-amber-600 border-amber-500/20";
+                                                        ? "bg-slate-500/10 text-slate-500 border-slate-500/20"
+                                                        : exame.statusPrazoExame?.estaVencido
+                                                            ? "bg-red-500/10 text-red-500 border-red-500/20"
+                                                            : "bg-amber-500/10 text-amber-600 border-amber-500/20";
 
                                                     return (
                                                         <Badge
@@ -1026,6 +1049,7 @@ export function ViewExamesPendentes({
                                                 })}
                                             </div>
                                         </TableCell>
+
                                     </TableRow>
                                 );
                             })
@@ -1137,6 +1161,7 @@ export function ViewExamesPendentes({
                     setAcaoParaConfirmar(null);
                     if (acao === "salvar") void handleSaveSelection();
                     if (acao === "enviar") void handleEnviarAso();
+                    if (acao === "concluido") void handleAtendimentoConcluiido();
                 }}
             />
         </Card>

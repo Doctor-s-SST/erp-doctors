@@ -66,7 +66,6 @@ export default function FilaPage() {
     const [finalizandoIds, setFinalizandoIds] = useState<Record<string, number>>({});
     const [selectedAtendimento, setSelectedAtendimento] = useState<ItemFila | null>(null)
     const [isDetailsOpen, setIsDetailsOpen] = useState(false)
-    const [role, setRole] = useState<string | null>(null)
     const [salas, setSalas] = useState<Sala[]>([])
     const [profissionais, setProfissionais] = useState<ProfissionalFila[]>([])
     const [form, setForm] = useState({ sala: "", profissional: "" });
@@ -238,6 +237,7 @@ export default function FilaPage() {
                         id,
                         especialidade_id,
                         obrigatoria,
+                        excludente,
                         especialidades(
                             id,
                             nome
@@ -372,7 +372,6 @@ export default function FilaPage() {
                 if (profile) {
                     const idFinal = profile.unidade_id;
 
-                    setRole(profile.role);
                     setUnidadeId(idFinal);
 
                     const sessaoSalva = carregarSessaoFila(user.id);
@@ -741,12 +740,22 @@ export default function FilaPage() {
 
             lista = lista.filter(item => {
 
-                const especialidadesGrupo = grupoAtual.grupo_especialidade_itens.map(
-                    (i) => normalizarTextoFila(i.especialidades.nome)
-                );
+                const itensGrupo = grupoAtual.grupo_especialidade_itens || [];
+                const especialidadesExcludentes = itensGrupo
+                    .filter((item) => item.excludente === true)
+                    .map((item) => normalizarTextoFila(item.especialidades.nome));
+                const especialidadesGrupo = itensGrupo
+                    .filter((item) => item.excludente !== true)
+                    .map((item) => normalizarTextoFila(item.especialidades.nome));
 
                 const especialidadesAtendimento =
                     especialidadesPorAtendimento[item.atendimento_id] || [];
+
+                if (especialidadesExcludentes.some(
+                    (especialidade) => especialidadesAtendimento.includes(especialidade)
+                )) {
+                    return false;
+                }
 
                 // TODAS as especialidades do grupo (comparação exata)
                 if (grupoAtual.tipo_filtro === "todos") {
@@ -785,14 +794,12 @@ export default function FilaPage() {
                 // OBRIGATÓRIA(S) + PELO MENOS UMA ADICIONAL
                 if (grupoAtual.tipo_filtro === "obrigatorio_mais_algum") {
 
-                    const itensGrupo = grupoAtual.grupo_especialidade_itens || [];
-
                     const obrigatorias = itensGrupo
-                        .filter((i) => i.obrigatoria === true)
+                        .filter((i) => i.obrigatoria === true && i.excludente !== true)
                         .map((i) => normalizarTextoFila(i.especialidades.nome));
 
                     const adicionais = itensGrupo
-                        .filter((i) => i.obrigatoria !== true)
+                        .filter((i) => i.obrigatoria !== true && i.excludente !== true)
                         .map((i) => normalizarTextoFila(i.especialidades.nome));
 
                     const permitidas = new Set([...obrigatorias, ...adicionais]);

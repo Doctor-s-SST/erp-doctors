@@ -1,4 +1,5 @@
 export type AcaoAso =
+    | "CONCLUIDO"
     | "LIBERAR"
     | "LIBERAR-ENVIAR"
     | "ENVIAR-PENDENCIA"

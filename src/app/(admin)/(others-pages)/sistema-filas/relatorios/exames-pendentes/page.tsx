@@ -257,13 +257,20 @@ export default function PaginaRelatorio() {
 
             items = items.filter(item => {
 
-                const especialidadesGrupo =
-                    grupoAtual.grupo_especialidade_itens.map(
-                        (i: any) => normalizar(i.especialidades.nome)
-                    );
+                const itensGrupo = grupoAtual.grupo_especialidade_itens || [];
+                const especialidadesExcludentes = itensGrupo
+                    .filter((i: any) => i.excludente === true)
+                    .map((i: any) => normalizar(i.especialidades.nome));
+                const especialidadesGrupo = itensGrupo
+                    .filter((i: any) => i.excludente !== true)
+                    .map((i: any) => normalizar(i.especialidades.nome));
 
                 const especialidadesAtendimento: string[] =
                     (item.especialidades || []).map((e: string) => normalizar(e));
+
+                if (especialidadesExcludentes.some(
+                    (especialidade: string) => especialidadesAtendimento.includes(especialidade)
+                )) return false;
 
                 // TODAS as especialidades do grupo (match exato)
                 if (grupoAtual.tipo_filtro === 'todos') {
@@ -302,14 +309,12 @@ export default function PaginaRelatorio() {
                 // OBRIGATÓRIA(S) + PELO MENOS UMA ADICIONAL
                 if (grupoAtual.tipo_filtro === 'obrigatorio_mais_algum') {
 
-                    const itensGrupo = grupoAtual.grupo_especialidade_itens || [];
-
                     const obrigatorias = itensGrupo
-                        .filter((i: any) => i.obrigatoria === true)
+                        .filter((i: any) => i.obrigatoria === true && i.excludente !== true)
                         .map((i: any) => normalizar(i.especialidades.nome));
 
                     const adicionais = itensGrupo
-                        .filter((i: any) => i.obrigatoria !== true)
+                        .filter((i: any) => i.obrigatoria !== true && i.excludente !== true)
                         .map((i: any) => normalizar(i.especialidades.nome));
 
                     const permitidas = new Set([...obrigatorias, ...adicionais]);
@@ -437,6 +442,8 @@ export default function PaginaRelatorio() {
                             *,
                             grupo_especialidade_itens(
                             especialidade_id,
+                            obrigatoria,
+                            excludente,
                             especialidades(
                                 id,
                                 nome

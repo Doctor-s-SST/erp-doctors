@@ -98,7 +98,8 @@ export function ViewExamesConcluidos({
     const [filtroMedico, setFiltroMedico] = useState("todos");
     const [filtroExameEspecifico, setFiltroExameEspecifico] = useState("todos");
     const [sendingAso, setSendingAso] = useState(false);
-    const [acaoParaConfirmar, setAcaoParaConfirmar] = useState<"salvar" | "enviar" | null>(null);
+    const [concluindoAtendimento, setConcluindoAtendimento] = useState(false);
+    const [acaoParaConfirmar, setAcaoParaConfirmar] = useState<"salvar" | "enviar" | "concluido" | null>(null);
 
     /* ============================================================
    FUNCIONÁRIOS CONCLUÍDOS
@@ -657,6 +658,46 @@ export function ViewExamesConcluidos({
         }
     };
 
+    const handleAtendimentoConcluiido = async () => {
+        if (selectedCpfs.size === 0) {
+            toast.warning("Selecione ao menos um funcionário.");
+            return;
+        }
+
+        setConcluindoAtendimento(true);
+
+        try {
+            const selecionados = funcionariosConcluidosFiltrados.filter((f) =>
+                selectedCpfs.has(f.cpf!)
+            );
+
+            if (!selecionados.length) {
+                toast.warning("Nenhum funcionário válido foi selecionado.");
+                return;
+            }
+
+            const pacientes = selecionados.map((funcionario) =>
+                criarPacienteAssinatura(funcionario, unidadeId)
+            );
+
+            const response = await fetch("/api/enviar-asos-concluidos", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(criarPayloadAcaoAso(pacientes, "CONCLUIDO", "Concluído")),
+            });
+
+            if (!response.ok) throw new Error("Erro ao concluir atendimento.");
+
+            toast.success(`${selecionados.length} atendimento(s) enviado(s) como concluído(s)!`);
+            setSelectedCpfs(new Set());
+        } catch (error) {
+            console.error("Erro ao concluir atendimentos:", error);
+            toast.error("Não foi possível concluir os atendimentos selecionados.");
+        } finally {
+            setConcluindoAtendimento(false);
+        }
+    };
+
     const handleRowClick = (f: any) => {
         setSelectedFuncionario(f);
         setModalOpen(true);
@@ -873,7 +914,7 @@ export function ViewExamesConcluidos({
                                     )}
                                 </Button>
 
-                                {/* <Button
+                                <Button
                                     type="button"
                                     onClick={() => setAcaoParaConfirmar("enviar")}
                                     disabled={sendingAso || selectedCpfs.size === 0}
@@ -891,7 +932,27 @@ export function ViewExamesConcluidos({
                                             {selectedCpfs.size > 0 && ` (${selectedCpfs.size})`}
                                         </>
                                     )}
-                                </Button> */}
+                                </Button>
+
+                                <Button
+                                    type="button"
+                                    onClick={() => setAcaoParaConfirmar("concluido")}
+                                    disabled={concluindoAtendimento || selectedCpfs.size === 0}
+                                    className="h-9 px-4 text-[10px] font-black uppercase tracking-wide gap-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white"
+                                >
+                                    {concluindoAtendimento ? (
+                                        <>
+                                            <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                                            Concluindo...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <CheckCircle2 className="w-3.5 h-3.5" />
+                                            Atendimento concluído
+                                            {selectedCpfs.size > 0 && ` (${selectedCpfs.size})`}
+                                        </>
+                                    )}
+                                </Button>
                             </div>
                         )}
                     </div>
@@ -1131,6 +1192,7 @@ export function ViewExamesConcluidos({
                                         <TableCell className="text-xs">
                                             {item.observacao || ""}
                                         </TableCell>
+
                                     </TableRow>
                                 );
                             })
@@ -1263,6 +1325,7 @@ export function ViewExamesConcluidos({
                     setAcaoParaConfirmar(null);
                     if (acao === "salvar") void handleSaveSelection();
                     if (acao === "enviar") void handleEnviarAso();
+                    if (acao === "concluido") void handleAtendimentoConcluiido();
                 }}
             />
         </Card>

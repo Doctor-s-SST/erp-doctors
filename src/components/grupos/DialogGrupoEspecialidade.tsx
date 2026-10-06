@@ -26,6 +26,7 @@ import {
     Layers,
     Search,
     Star,
+    Ban,
     Sparkles,
     SlidersHorizontal,
     CheckCircle2
@@ -42,7 +43,7 @@ interface Props {
 }
 
 interface Especialidade {
-    id: number;
+    id: string;
     nome: string;
 }
 
@@ -82,8 +83,8 @@ const CRITERIOS: CriterioConfig[] = [
         id: 'obrigatorio_mais_algum',
         titulo: 'Obrigatórias + Extra',
         subtitulo: 'Obrigatórias + 1 opcional',
-        descricao: 'Exige que todas as especialidades marcadas com a estrela (obrigatórias) estejam presentes, mais pelo menos uma das opcionais do grupo.',
-        exemplo: 'Ex: Clínico (obrigatório) + [Audiometria, ECG]. Aceita quem tiver Clínico + Audiometria.',
+        descricao: 'Exige todas as obrigatórias, pelo menos uma opcional e rejeita o atendimento se qualquer especialidade marcada como impeditiva estiver presente.',
+        exemplo: 'Ex: Clínico obrigatório + [Audiometria, ECG] opcionais; Toxicológico impeditivo. Aceita Clínico + Audiometria, mas rejeita se também houver Toxicológico.',
     },
 ];
 
@@ -97,8 +98,9 @@ export function DialogGrupoEspecialidade({
     const [loading, setLoading] = useState(false);
     const [nome, setNome] = useState('');
     const [especialidades, setEspecialidades] = useState<Especialidade[]>([]);
-    const [obrigatorias, setObrigatorias] = useState<number[]>([]);
-    const [selecionadas, setSelecionadas] = useState<number[]>([]);
+    const [obrigatorias, setObrigatorias] = useState<string[]>([]);
+    const [excludentes, setExcludentes] = useState<string[]>([]);
+    const [selecionadas, setSelecionadas] = useState<string[]>([]);
     const [tipoFiltro, setTipoFiltro] = useState<TipoFiltro>('apenas_do_grupo');
     const [buscaEspecialidade, setBuscaEspecialidade] = useState('');
 
@@ -107,6 +109,7 @@ export function DialogGrupoEspecialidade({
             setNome('');
             setSelecionadas([]);
             setObrigatorias([]);
+            setExcludentes([]);
             setTipoFiltro('apenas_do_grupo');
             setBuscaEspecialidade('');
             return;
@@ -121,6 +124,11 @@ export function DialogGrupoEspecialidade({
         setObrigatorias(
             itens
                 .filter((i: any) => i.obrigatoria)
+                .map((i: any) => i.especialidade_id)
+        );
+        setExcludentes(
+            itens
+                .filter((i: any) => i.excludente)
                 .map((i: any) => i.especialidade_id)
         );
     }, [grupo]);
@@ -146,18 +154,29 @@ export function DialogGrupoEspecialidade({
         }
     };
 
-    const toggleObrigatoria = (id: number) => {
+    const toggleObrigatoria = (id: string) => {
+        setExcludentes(prev => prev.filter(item => item !== id));
         setObrigatorias(prev =>
             prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
         );
     };
 
-    const toggleEspecialidade = (id: number) => {
+    const toggleExcludente = (id: string) => {
+        setObrigatorias(prev => prev.filter(item => item !== id));
+        setExcludentes(prev =>
+            prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+        );
+    };
+
+    const toggleEspecialidade = (id: string) => {
         setSelecionadas(prev => {
             const jaSelecionada = prev.includes(id);
             if (jaSelecionada) {
                 setObrigatorias(obrigatoriasPrev =>
                     obrigatoriasPrev.filter(item => item !== id)
+                );
+                setExcludentes(excludentesPrev =>
+                    excludentesPrev.filter(item => item !== id)
                 );
                 return prev.filter(item => item !== id);
             }
@@ -180,6 +199,7 @@ export function DialogGrupoEspecialidade({
     const desmarcarTodas = () => {
         setSelecionadas([]);
         setObrigatorias([]);
+        setExcludentes([]);
     };
 
     const criterioAtual = useMemo(() => {
@@ -207,7 +227,7 @@ export function DialogGrupoEspecialidade({
 
         if (
             tipoFiltro === 'obrigatorio_mais_algum' &&
-            obrigatorias.length === selecionadas.length
+            selecionadas.filter(id => !obrigatorias.includes(id) && !excludentes.includes(id)).length === 0
         ) {
             toast.warning('Selecione pelo menos uma especialidade adicional (opcional)');
             return;
@@ -215,7 +235,7 @@ export function DialogGrupoEspecialidade({
 
         try {
             setLoading(true);
-            let grupoId: number;
+            let grupoId: string;
 
             // Edição
             if (grupo?.id) {
@@ -257,7 +277,8 @@ export function DialogGrupoEspecialidade({
                 unidade_id: unidadeId,
                 grupo_id: grupoId,
                 especialidade_id,
-                obrigatoria: obrigatorias.includes(especialidade_id)
+                obrigatoria: tipoFiltro === 'obrigatorio_mais_algum' && obrigatorias.includes(especialidade_id),
+                excludente: tipoFiltro === 'obrigatorio_mais_algum' && excludentes.includes(especialidade_id)
             }));
 
             const { error: erroItens } = await supabase
@@ -273,6 +294,7 @@ export function DialogGrupoEspecialidade({
             setNome('');
             setSelecionadas([]);
             setObrigatorias([]);
+            setExcludentes([]);
             onOpenChange(false);
             onSuccess?.();
         } catch (err) {
@@ -359,7 +381,13 @@ export function DialogGrupoEspecialidade({
                                         <button
                                             key={criterio.id}
                                             type="button"
-                                            onClick={() => setTipoFiltro(criterio.id)}
+                                            onClick={() => {
+                                                setTipoFiltro(criterio.id);
+                                                if (criterio.id !== 'obrigatorio_mais_algum') {
+                                                    setObrigatorias([]);
+                                                    setExcludentes([]);
+                                                }
+                                            }}
                                             className={`
                                                 relative text-left p-3 rounded-xl border transition-all flex flex-col justify-between gap-2
                                                 ${isSelected
@@ -445,6 +473,7 @@ export function DialogGrupoEspecialidade({
                                             especialidadesFiltradas.map(esp => {
                                                 const selecionada = selecionadas.includes(esp.id);
                                                 const obrigatoria = obrigatorias.includes(esp.id);
+                                                const excludente = excludentes.includes(esp.id);
 
                                                 return (
                                                     <div
@@ -473,23 +502,36 @@ export function DialogGrupoEspecialidade({
 
                                                         {/* TOGGLE OBRIGATÓRIA (SÓ EM 'obrigatorio_mais_algum') */}
                                                         {tipoFiltro === 'obrigatorio_mais_algum' && selecionada && (
-                                                            <button
-                                                                type="button"
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    toggleObrigatoria(esp.id);
-                                                                }}
-                                                                className={`
-                                                                    flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md border font-semibold transition-all
-                                                                    ${obrigatoria
+                                                            <div className="flex items-center gap-1">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        toggleObrigatoria(esp.id);
+                                                                    }}
+                                                                    className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md border font-semibold transition-all ${obrigatoria
                                                                         ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/40'
-                                                                        : 'bg-slate-100 dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700 hover:border-slate-300'
-                                                                    }
-                                                                `}
-                                                            >
-                                                                <Star className={`w-3 h-3 ${obrigatoria ? 'fill-amber-500 text-amber-500' : 'text-slate-400'}`} />
-                                                                <span>{obrigatoria ? 'Obrigatória' : 'Opcional'}</span>
-                                                            </button>
+                                                                        : 'bg-slate-100 dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700 hover:border-amber-400'
+                                                                        }`}
+                                                                >
+                                                                    <Star className={`w-3 h-3 ${obrigatoria ? 'fill-amber-500 text-amber-500' : 'text-slate-400'}`} />
+                                                                    <span>{obrigatoria ? 'Obrigatória' : 'Opcional'}</span>
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        toggleExcludente(esp.id);
+                                                                    }}
+                                                                    className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md border font-semibold transition-all ${excludente
+                                                                        ? 'bg-red-500/15 text-red-700 dark:text-red-300 border-red-500/40'
+                                                                        : 'bg-slate-100 dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700 hover:border-red-400'
+                                                                        }`}
+                                                                >
+                                                                    <Ban className="w-3 h-3" />
+                                                                    <span>{excludente ? 'Impeditiva' : 'Impedir'}</span>
+                                                                </button>
+                                                            </div>
                                                         )}
                                                     </div>
                                                 );

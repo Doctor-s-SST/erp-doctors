@@ -11,7 +11,7 @@ Este mapa foi inferido das consultas do código. O esquema e as políticas RLS d
 | `exames` | exames disponíveis | vínculo e ordem na especialidade |
 | `especialidade_dependencias` | precedência entre especialidades | usada no Kanban/fluxo |
 | `grupos_especialidades` | agrupamento configurável | unidade e nome |
-| `grupo_especialidade_itens` | itens do grupo | grupo e especialidade |
+| `grupo_especialidade_itens` | itens do grupo | grupo, especialidade e papel opcional/obrigatório/excludente |
 | `atendimentos` | senha e ciclo do paciente | status, prioridade, unidade e datas |
 | `atendimento_exames` | andamento por exame/especialidade | atendimento, exame e status |
 | `salas` | locais de atendimento | número/nome, unidade e estado |
@@ -40,4 +40,4 @@ Em `prazos_exames`, o campo legado `ignorar_exame` não remove o exame do fluxo.
 
 ## Migrações
 
-Não há diretório de migrações versionado. Isso é um risco de manutenção. Crie `supabase/migrations` ou equivalente antes de novas alterações estruturais. A coluna `painel_config.fala_terreo` deve ser booleana, `not null` e ter padrão `false`.
+Os scripts SQL operacionais mantidos pelo projeto ficam em `docs/sql/`. A coluna `painel_config.fala_terreo` deve ser booleana, `not null` e ter padrão `false`.

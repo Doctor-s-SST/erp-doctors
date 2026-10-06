@@ -111,6 +111,7 @@ export default function UnidadeConfigPage() {
                 id,
                 especialidade_id,
                 obrigatoria,
+                excludente,
                     especialidades(
                         id,
                         nome
@@ -262,10 +263,22 @@ export default function UnidadeConfigPage() {
                                             <Badge
                                                 key={item.id}
                                                 variant="secondary"
-                                            >
-                                                {
-                                                    item.especialidades.nome
+                                                className={item.excludente
+                                                    ? "bg-red-500/15 text-red-700 dark:text-red-300"
+                                                    : item.obrigatoria
+                                                        ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                                                        : ""
                                                 }
+                                            >
+                                                {grupo.tipo_filtro === "obrigatorio_mais_algum"
+                                                    ? item.excludente
+                                                        ? "Impede: "
+                                                        : item.obrigatoria
+                                                            ? "Obrigatória: "
+                                                            : "Opcional: "
+                                                    : ""
+                                                }
+                                                {item.especialidades.nome}
                                             </Badge>
                                         )
                                     )}
