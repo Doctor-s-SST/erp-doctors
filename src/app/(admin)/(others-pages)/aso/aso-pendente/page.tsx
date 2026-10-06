@@ -28,6 +28,18 @@ import { ViewDashboard } from "./components/ViewDashboard";
 import { ViewExamesPendentes } from "./components/ViewExamesPendentes";
 import { ViewExamesConcluidos } from "./components/ViewExamesConcluidos";
 
+function obterCpfFuncionario(item: any): string {
+    return String(
+        item?.cpf ||
+        item?.cpfFuncionario ||
+        item?.socResumo?.cpf ||
+        item?.socResumo?.cpfFuncionario ||
+        item?.aso?.cpf ||
+        item?.aso?.cpfFuncionario ||
+        ""
+    );
+}
+
 export default function IndicadoresSocged() {
     const [view, setView] = useState<ViewType>("geral");
     const [unidadeId, setUnidadeId] = useState("");
@@ -205,9 +217,31 @@ export default function IndicadoresSocged() {
     /* ============================================================
        FILTRO POR TIPO DE EXAME
     ============================================================ */
+    const dadosRelatorioVisiveis = useMemo(() => {
+        return dadosRelatorio.filter((item) => {
+            const cpf = obterCpfFuncionario(item);
+            return !cpf || !cpfsAtendimentosConcluidos.has(cpf);
+        });
+    }, [dadosRelatorio, cpfsAtendimentosConcluidos]);
+
+    const dadosGraficosVisiveis = useMemo(() => {
+        if (!dadosGraficos) return null;
+
+        const pendentes = dadosGraficos.funcionariosComExamesPendentes;
+        if (!Array.isArray(pendentes)) return dadosGraficos;
+
+        return {
+            ...dadosGraficos,
+            funcionariosComExamesPendentes: pendentes.filter((item: any) => {
+                const cpf = obterCpfFuncionario(item);
+                return !cpf || !cpfsAtendimentosConcluidos.has(cpf);
+            }),
+        };
+    }, [dadosGraficos, cpfsAtendimentosConcluidos]);
+
     const funcionariosComAso = useMemo(() => {
-        return dadosRelatorio.filter((item) => possuiAso(item));
-    }, [dadosRelatorio]);
+        return dadosRelatorioVisiveis.filter((item) => possuiAso(item));
+    }, [dadosRelatorioVisiveis]);
 
     const funcionariosFiltradosTipo = useMemo(() => {
         if (filtroTipoExame === "todos") {
@@ -396,8 +430,8 @@ export default function IndicadoresSocged() {
                     {/* VIEW PENDÊNCIAS */}
                     {view === "pendencias" && (
                         <ViewExamesPendentes
-                            analytics={dadosGraficos}
-                            todosFuncionarios={dadosRelatorio}
+                            analytics={dadosGraficosVisiveis}
+                            todosFuncionarios={dadosRelatorioVisiveis}
                             filtroTipoExame={filtroTipoExame}
                             funcionariosSalvos={funcionariosSalvos}
                             onFuncionariosSalvos={(cpfs) => {
@@ -430,7 +464,7 @@ export default function IndicadoresSocged() {
                     {/* VIEW CONCLUÍDOS */}
                     {view === "concluidos" && (
                         <ViewExamesConcluidos
-                            todosFuncionarios={dadosRelatorio}
+                            todosFuncionarios={dadosRelatorioVisiveis}
                             funcionariosSalvos={funcionariosSalvos}
                             onFuncionariosSalvos={(cpfs) => {
                                 setFuncionariosSalvos((prev) => {
@@ -462,8 +496,8 @@ export default function IndicadoresSocged() {
                     {/* VIEW DASHBOARD */}
                     {view === "geral" && (
                         <ViewDashboard
-                            analytics={dadosGraficos}
-                            todosFuncionarios={dadosRelatorio}
+                            analytics={dadosGraficosVisiveis}
+                            todosFuncionarios={dadosRelatorioVisiveis}
                             filtroTipoExame={filtroTipoExame}
                             prazosMap={prazosMap}
                         />
