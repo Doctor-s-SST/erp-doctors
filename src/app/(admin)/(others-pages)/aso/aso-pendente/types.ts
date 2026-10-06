@@ -123,6 +123,8 @@ export interface ViewExamesPendentesProps {
     filtroTipoExame: FiltroTipoExame;
     unidadeId: string;
     prazosMap: PrazosMap;
+    cpfsAtendimentosConcluidos: Set<string>;
+    onAtendimentosConcluidos: (cpfs: string[]) => void;
 }
 
 export interface ViewExamesConcluidosProps {
@@ -132,6 +134,8 @@ export interface ViewExamesConcluidosProps {
     filtroTipoExame: FiltroTipoExame;
     unidadeId: string;
     prazosMap: PrazosMap;
+    cpfsAtendimentosConcluidos: Set<string>;
+    onAtendimentosConcluidos: (cpfs: string[]) => void;
 }
 
 export interface ViewDashboardProps {

@@ -31,7 +31,7 @@ Prazo `0` é válido e significa o mesmo dia útil. Ausência de configuração 
 
 O gráfico de situação do prazo no dashboard apresenta apenas ASOs com prazo calculável, nas categorias **No prazo** e **Vencidos**. Registros sem configuração ou sem data-base não entram nesse gráfico. Para prazo `0`, a data-limite é a própria data do exame; depois dela, o ASO é vencido.
 
-As views de exames pendentes e concluídos exibem no `CardHeader` a ação em massa laranja **Atendimento concluído**, usando os funcionários selecionados pelos checkboxes. Após confirmação, a ação chama `POST /api/enviar-asos-concluidos` com `acao: "concluido"`; ela não cria estado em `pacientes_assinatura`. A tabela de exames pendentes não exibe a coluna de status do atendimento.
+As views de exames pendentes e concluídos exibem no `CardHeader` a ação em massa laranja **Atendimento concluído**, usando os funcionários selecionados pelos checkboxes. Após confirmação, a ação chama `POST /api/enviar-asos-concluidos` com `acao: "CONCLUIDO"`; ela não cria estado em `pacientes_assinatura`. Quando a API confirma o envio, os itens processados são ocultados das duas views, com atualização dos contadores e da paginação. Essa marcação fica no `localStorage`, isolada por unidade e por `processadoEm`: sobrevive ao F5 e a consultas que retornem a mesma sincronização, sendo reiniciada automaticamente quando chegar uma sincronização com novo `processadoEm`. A tabela de exames pendentes não exibe a coluna de status do atendimento.
 
 ### Vínculo com o atendimento
 

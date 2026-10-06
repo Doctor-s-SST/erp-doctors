@@ -58,6 +58,8 @@ export function ViewExamesPendentes({
     filtroTipoExame,
     unidadeId,
     prazosMap,
+    cpfsAtendimentosConcluidos,
+    onAtendimentosConcluidos,
 }: ViewExamesPendentesProps) {
     const pendencias = analytics?.funcionariosComExamesPendentes || [];
 
@@ -278,6 +280,10 @@ export function ViewExamesPendentes({
     ============================================================ */
     const pendenciasComFiltros = useMemo(() => {
         return pendenciasVisiveis.filter((item: any) => {
+            if (cpfsAtendimentosConcluidos.has(item.cpf || item.cpfFuncionario)) {
+                return false;
+            }
+
             if (filtroMedico !== "todos" && item.medicoExaminador !== filtroMedico) {
                 return false;
             }
@@ -293,7 +299,7 @@ export function ViewExamesPendentes({
 
             return true;
         });
-    }, [pendenciasVisiveis, filtroMedico, filtroExameEspecifico]);
+    }, [pendenciasVisiveis, filtroMedico, filtroExameEspecifico, cpfsAtendimentosConcluidos]);
 
     /* ============================================================
        CONTADORES DAS ABAS
@@ -379,8 +385,9 @@ export function ViewExamesPendentes({
        GARANTE QUE A PÁGINA NÃO FIQUE INVÁLIDA
     ============================================================ */
     useEffect(() => {
-        if (totalPaginas > 0 && paginaAtual > totalPaginas) {
-            setPaginaAtual(totalPaginas);
+        const ultimaPaginaValida = Math.max(1, totalPaginas);
+        if (paginaAtual > ultimaPaginaValida) {
+            setPaginaAtual(ultimaPaginaValida);
         }
     }, [totalPaginas, paginaAtual]);
 
@@ -573,6 +580,11 @@ export function ViewExamesPendentes({
 
             if (!response.ok) throw new Error("Erro ao concluir atendimento.");
 
+            onAtendimentosConcluidos(
+                selecionados
+                    .map((funcionario: any) => funcionario.cpf || funcionario.cpfFuncionario)
+                    .filter(Boolean)
+            );
             toast.success(`${selecionados.length} atendimento(s) enviado(s) como concluído(s)!`);
             setSelectedCpfs(new Set());
         } catch (error) {

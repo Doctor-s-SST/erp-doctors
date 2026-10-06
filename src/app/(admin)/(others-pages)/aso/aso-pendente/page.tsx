@@ -36,6 +36,7 @@ export default function IndicadoresSocged() {
     const [dadosGraficos, setDadosGraficos] = useState<any>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [atualizadoEm, setAtualizadoEm] = useState<string | null>(null);
+    const [cpfsAtendimentosConcluidos, setCpfsAtendimentosConcluidos] = useState<Set<string>>(new Set());
 
     const [prazosMap, setPrazosMap] = useState<PrazosMap>({});
 
@@ -51,6 +52,40 @@ export default function IndicadoresSocged() {
         return new Set();
     });
     const [filtroTipoExame, setFiltroTipoExame] = useState<FiltroTipoExame>("todos");
+
+    const chaveAtendimentosConcluidos = useMemo(() => {
+        if (!unidadeId || !atualizadoEm) return null;
+        return `aso_atendimentos_concluidos:${unidadeId}:${atualizadoEm}`;
+    }, [unidadeId, atualizadoEm]);
+
+    useEffect(() => {
+        if (!chaveAtendimentosConcluidos) {
+            setCpfsAtendimentosConcluidos(new Set());
+            return;
+        }
+
+        try {
+            const armazenados = JSON.parse(localStorage.getItem(chaveAtendimentosConcluidos) || "[]");
+            setCpfsAtendimentosConcluidos(new Set(Array.isArray(armazenados) ? armazenados : []));
+        } catch {
+            setCpfsAtendimentosConcluidos(new Set());
+        }
+    }, [chaveAtendimentosConcluidos]);
+
+    const registrarAtendimentosConcluidos = useCallback((cpfs: string[]) => {
+        if (!chaveAtendimentosConcluidos) return;
+
+        setCpfsAtendimentosConcluidos((anteriores) => {
+            const atualizados = new Set(anteriores);
+            cpfs.forEach((cpf) => atualizados.add(cpf));
+            try {
+                localStorage.setItem(chaveAtendimentosConcluidos, JSON.stringify(Array.from(atualizados)));
+            } catch (error) {
+                console.warn("Não foi possível persistir os atendimentos concluídos:", error);
+            }
+            return atualizados;
+        });
+    }, [chaveAtendimentosConcluidos]);
 
     /* ============================================================
        CONSULTA DA ÚLTIMA SINCRONIZAÇÃO
@@ -387,6 +422,8 @@ export default function IndicadoresSocged() {
 
                             unidadeId={unidadeId}
                             prazosMap={prazosMap}
+                            cpfsAtendimentosConcluidos={cpfsAtendimentosConcluidos}
+                            onAtendimentosConcluidos={registrarAtendimentosConcluidos}
                         />
                     )}
 
@@ -417,6 +454,8 @@ export default function IndicadoresSocged() {
                             filtroTipoExame={filtroTipoExame}
                             unidadeId={unidadeId}
                             prazosMap={prazosMap}
+                            cpfsAtendimentosConcluidos={cpfsAtendimentosConcluidos}
+                            onAtendimentosConcluidos={registrarAtendimentosConcluidos}
                         />
                     )}
 

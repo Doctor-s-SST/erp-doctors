@@ -63,6 +63,8 @@ export function ViewExamesConcluidos({
     filtroTipoExame,
     unidadeId,
     prazosMap,
+    cpfsAtendimentosConcluidos,
+    onAtendimentosConcluidos,
 }: ViewExamesConcluidosProps) {
     const [selectedFuncionario, setSelectedFuncionario] = useState<any | null>(null);
 
@@ -296,6 +298,11 @@ export function ViewExamesConcluidos({
 
     const funcionariosConcluidosFiltrados = useMemo(() => {
         return funcionariosConcluidos.filter((funcionario) => {
+            const cpf = funcionario.cpf || funcionario.cpfFuncionario;
+            if (cpf && cpfsAtendimentosConcluidos.has(cpf)) {
+                return false;
+            }
+
             if (filtroTipoExame !== "todos" && classificarTipoExame(funcionario, prazosMap) !== filtroTipoExame) {
                 return false;
             }
@@ -309,7 +316,14 @@ export function ViewExamesConcluidos({
             }
             return true;
         });
-    }, [funcionariosConcluidos, filtroTipoExame, filtroMedico, filtroExameEspecifico, prazosMap]);
+    }, [
+        funcionariosConcluidos,
+        filtroTipoExame,
+        filtroMedico,
+        filtroExameEspecifico,
+        prazosMap,
+        cpfsAtendimentosConcluidos,
+    ]);
 
     /* ============================================================
    PRAZO DO ASO
@@ -480,8 +494,9 @@ export function ViewExamesConcluidos({
     }, [busca, filtroTipoExame, sortKey, sortDirection, abaAtiva, prazosMap]);
 
     useEffect(() => {
-        if (totalPaginas > 0 && paginaAtual > totalPaginas) {
-            setPaginaAtual(totalPaginas);
+        const ultimaPaginaValida = Math.max(1, totalPaginas);
+        if (paginaAtual > ultimaPaginaValida) {
+            setPaginaAtual(ultimaPaginaValida);
         }
     }, [totalPaginas, paginaAtual]);
 
@@ -688,6 +703,11 @@ export function ViewExamesConcluidos({
 
             if (!response.ok) throw new Error("Erro ao concluir atendimento.");
 
+            onAtendimentosConcluidos(
+                selecionados
+                    .map((funcionario) => funcionario.cpf || funcionario.cpfFuncionario)
+                    .filter((cpf): cpf is string => Boolean(cpf))
+            );
             toast.success(`${selecionados.length} atendimento(s) enviado(s) como concluído(s)!`);
             setSelectedCpfs(new Set());
         } catch (error) {
