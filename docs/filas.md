@@ -50,6 +50,8 @@ Os parâmetros essenciais são `p_atendimento_id`, `p_atendimento_exame_id`, `p_
 
 Os exames da especialidade são cruzados com `atendimentos.exames_list`. A tela preserva exames de outras especialidades e atualiza apenas os pertencentes à etapa atual. Quando a especialidade obriga conferência, os exames marcados como obrigatórios precisam estar concluídos antes da finalização.
 
+Na fila de **Toxicológico**, o botão **Realizado** pode iniciar a finalização enquanto o exame ainda está com status `AGUARDANDO`. O temporizador é persistido em `atendimento_exames.finaliza_em` e restaurado a cada atualização da fila independentemente de o item estar em `AGUARDANDO` ou `EM_ATENDIMENTO`. Uma finalização cancelada pelo usuário não é reativada por um evento SSE atrasado.
+
 O tempo de confirmação vem de `especialidades.tempo_finalizacao_segundos`, com fallback de 20 segundos. `atendimento_exames.finaliza_em` permite reconstruir temporizadores depois de recarregar a página.
 
 Ao terminar o contador, a finalização usa `num_sala` do próprio item de atendimento, e não apenas a identificação mantida no navegador. Assim, uma sessão que expire durante o contador não invalida a operação já iniciada. O contador somente é retirado depois que `finalizar_especialidade_novo` confirma sucesso; em caso de falha, a tela mantém a finalização pendente e tenta novamente após cinco segundos.

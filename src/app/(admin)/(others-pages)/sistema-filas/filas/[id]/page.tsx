@@ -319,7 +319,7 @@ export default function FilaPage() {
             setData(novosDados);
             setFinalizandoIds(atuais => Object.fromEntries(
                 novosDados
-                    .filter(item => item.status === "EM_ATENDIMENTO" && item.finaliza_em)
+                    .filter(item => item.finaliza_em && !canceladosRef.current.has(item.id))
                     .map(item => {
                         const fimRegistrado = new Date(item.finaliza_em!).getTime();
                         const proximaTentativa = atuais[item.id];
