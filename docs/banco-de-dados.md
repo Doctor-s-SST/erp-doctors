@@ -38,6 +38,8 @@ Este mapa foi inferido das consultas do código. O esquema e as políticas RLS d
 
 Em `prazos_exames`, o campo legado `ignorar_exame` não remove o exame do fluxo. Quando `true`, ele apenas dispensa a relação com um documento GED: com `dataExame`, o exame está concluído; sem data, continua pendente. O nome da coluna foi preservado por compatibilidade.
 
+`pacientes_assinatura` guarda o estado atual do fluxo. O histórico imutável das operações fica em `pacientes_assinatura_logs`, criado por `docs/sql/pacientes-assinatura-logs.sql`. Cada linha registra a ação enviada, o paciente, a observação, a unidade e o usuário autenticado. As políticas RLS permitem leitura apenas para usuários da mesma unidade e inserção apenas em nome do próprio usuário autenticado.
+
 ## Migrações
 
 Os scripts SQL operacionais mantidos pelo projeto ficam em `docs/sql/`. A coluna `painel_config.fala_terreo` deve ser booleana, `not null` e ter padrão `false`.

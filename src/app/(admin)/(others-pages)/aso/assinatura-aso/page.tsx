@@ -239,6 +239,13 @@ export default function AssinaturaAsoPage() {
         if (filtroStatus === "ENVIADO" && isOperador) {
             return dadosProcessados.filter((p) => p.acao === "ENVIADO" || p.acao === "ENVIADO_DIRETO");
         }
+        if (filtroStatus === "TODOS" && isOperador) {
+            return dadosProcessados.filter((p) =>
+                p.acao === "ENVIADO" ||
+                p.acao === "ENVIADO_DIRETO" ||
+                p.acao === "PENDENCIA_ENVIADA"
+            );
+        }
         return [];
     }, [dadosProcessados, filtroStatus, isEspecialista, isOperador]);
 
@@ -606,7 +613,7 @@ export default function AssinaturaAsoPage() {
                 )}
 
                 {/* BOTÃO DE REENVIO EM MASSA DE PENDÊNCIAS */}
-                {isOperador && filtroStatus === "PENDENCIA" && quantidadeSelecionadaPorTipo.reenvioPendencia > 0 && (
+                {isOperador && (filtroStatus === "PENDENCIA" || filtroStatus === "TODOS") && quantidadeSelecionadaPorTipo.reenvioPendencia > 0 && (
                     <div className="flex flex-wrap items-center gap-2">
                         <Button onClick={reenviarPendenciaEmMassa} disabled={enviando} className="bg-violet-600 hover:bg-violet-700 text-white gap-2">
                             <RotateCcw className="w-4 h-4" /> Reenviar {quantidadeSelecionadaPorTipo.reenvioPendencia} pendência(s)
@@ -615,7 +622,7 @@ export default function AssinaturaAsoPage() {
                 )}
 
                 {/* BOTÃO DE REENVIO EM MASSA DE ASO */}
-                {isOperador && filtroStatus === "ENVIADO" && quantidadeSelecionadaPorTipo.reenvioAso > 0 && (
+                {isOperador && (filtroStatus === "ENVIADO" || filtroStatus === "TODOS") && quantidadeSelecionadaPorTipo.reenvioAso > 0 && (
                     <div className="flex flex-wrap items-center gap-2">
                         <Button onClick={reenviarAsoEmMassa} disabled={enviando} className="bg-cyan-600 hover:bg-cyan-700 text-white gap-2">
                             <RotateCcw className="w-4 h-4" /> Reenviar {quantidadeSelecionadaPorTipo.reenvioAso} ASO(s)
@@ -769,6 +776,7 @@ export default function AssinaturaAsoPage() {
                                             }
                                             onCheckedChange={toggleSelectAll}
                                             disabled={elegiveisParaAcao.length === 0}
+                                            className="h-5 w-5 border-2 border-slate-500 bg-white shadow-sm data-[state=checked]:border-blue-600 data-[state=checked]:bg-blue-600 dark:border-slate-400 dark:bg-slate-900"
                                         />
                                     </TableHead>
                                 )}
@@ -816,6 +824,7 @@ export default function AssinaturaAsoPage() {
                                                         <Checkbox
                                                             checked={isSelected}
                                                             onCheckedChange={() => toggleSelectItem(item.id)}
+                                                            className="h-5 w-5 border-2 border-slate-500 bg-white shadow-sm data-[state=checked]:border-blue-600 data-[state=checked]:bg-blue-600 dark:border-slate-400 dark:bg-slate-900"
                                                         />
                                                     )}
                                                 </TableCell>

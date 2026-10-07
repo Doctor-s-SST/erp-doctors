@@ -39,6 +39,8 @@ As duas views oferecem busca textual e filtros combináveis por médico, exame, 
 
 O cabeçalho das views mantém as ações centralizadas em uma faixa compacta acima dos filtros e distribui os campos horizontalmente por toda a largura disponível. As datas usam controles horizontais `De` e `Até`; os indicadores **ASOs vencidos** e **ASOs no prazo** usam uma apresentação reduzida, sem subtítulo, para aproximar a tabela do topo. Em telas menores, filtros e ações quebram linhas de forma responsiva.
 
+Em `/aso/assinatura-aso`, operadores podem selecionar e reenviar em massa ASOs enviados e pendências enviadas tanto nas abas específicas quanto na visão **Todos**. Os checkboxes usam borda e estado marcado de alto contraste. Toda ação confirmada pela API gera auditoria em `pacientes_assinatura_logs` com a identidade obtida da sessão do servidor.
+
 ### Vínculo com o atendimento
 
 As views de exames pendentes e concluídos consultam o status da recepção pelo hook `useStatusAtendimentos`. O vínculo prioriza CPF, depois nome e ficha sequencial. Quando há mais de um atendimento para o paciente, a data da ficha seleciona o registro correspondente; ficha exata, observação e atendimento mais recente funcionam como alternativas. As consultas ao Supabase são divididas em lotes com concorrência limitada para evitar URLs REST extensas e sobrecarga, todos os cadastros encontrados para o mesmo CPF são considerados e somente a requisição mais recente pode atualizar a tela.

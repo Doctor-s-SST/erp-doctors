@@ -39,6 +39,8 @@ Os handlers operacionais usam `getAuthSession()`: exigem sessão, perfil ativo e
 
 Ações externas: `CONCLUIDO`, `LIBERAR`, `LIBERAR-ENVIAR`, `ASSINADO`, `PENDENCIA`, `ENVIAR-PENDENCIA`, `ENVIADO`, `REENVIAR-ASO` e `REENVIAR-PENDENCIA`. Estados adicionais no banco: `ENVIADO_DIRETO` e `PENDENCIA_ENVIADA`.
 
+Depois que o n8n confirma uma ação, `POST /api/enviar-asos-concluidos` grava uma linha em `pacientes_assinatura_logs` para cada item, contendo paciente, unidade, ação, observação, usuário autenticado, e-mail e horário. A unidade e o usuário são obtidos da sessão validada no servidor, não do corpo enviado pelo navegador. Antes do deploy desse recurso, execute `docs/sql/pacientes-assinatura-logs.sql`.
+
 ## Erros
 
 - `400`: entrada inválida;
