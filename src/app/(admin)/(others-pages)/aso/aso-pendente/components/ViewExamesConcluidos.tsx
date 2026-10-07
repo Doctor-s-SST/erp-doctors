@@ -68,6 +68,8 @@ export function ViewExamesConcluidos({
     prazosMap,
     cpfsAtendimentosConcluidos,
     onAtendimentosConcluidos,
+    cpfsEnviadosDireto,
+    onAsosEnviadosDireto,
 }: ViewExamesConcluidosProps) {
     const [selectedFuncionario, setSelectedFuncionario] = useState<any | null>(null);
 
@@ -84,7 +86,6 @@ export function ViewExamesConcluidos({
     const { statusMap: statusAtendimentosMap } = useStatusAtendimentos(unidadeId, itensConcluidosStatus);
     const [modalOpen, setModalOpen] = useState(false);
     const [selectedCpfs, setSelectedCpfs] = useState<Set<string>>(new Set());
-    const [cpfsEnviadosDireto, setCpfsEnviadosDireto] = useState<Set<string>>(new Set());
     const [saving, setSaving] = useState(false);
 
     // Aba Ativa: "pendentes" (disponíveis para montagem) ou "salvos" (montados/salvos)
@@ -695,7 +696,7 @@ export function ViewExamesConcluidos({
             if (saveBd.error) throw saveBd.error;
 
             const cpfsEnviados = selecionados.map((f) => f.cpf!).filter(Boolean);
-            setCpfsEnviadosDireto((prev) => new Set([...prev, ...cpfsEnviados]));
+            onAsosEnviadosDireto(cpfsEnviados);
 
             toast.success(`${selecionados.length} ASO(s) enviado(s) com sucesso!`);
             setSelectedCpfs(new Set());

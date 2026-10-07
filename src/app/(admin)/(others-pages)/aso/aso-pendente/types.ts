@@ -126,6 +126,8 @@ export interface ViewExamesPendentesProps {
     prazosMap: PrazosMap;
     cpfsAtendimentosConcluidos: Set<string>;
     onAtendimentosConcluidos: (cpfs: string[]) => void;
+    cpfsEnviadosDireto: Set<string>;
+    onAsosEnviadosDireto: (cpfs: string[]) => void;
 }
 
 export interface ViewExamesConcluidosProps {
@@ -137,6 +139,8 @@ export interface ViewExamesConcluidosProps {
     prazosMap: PrazosMap;
     cpfsAtendimentosConcluidos: Set<string>;
     onAtendimentosConcluidos: (cpfs: string[]) => void;
+    cpfsEnviadosDireto: Set<string>;
+    onAsosEnviadosDireto: (cpfs: string[]) => void;
 }
 
 export interface ViewDashboardProps {

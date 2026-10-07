@@ -41,6 +41,8 @@ O cabeçalho das views mantém as ações centralizadas em uma faixa compacta ac
 
 Em `/aso/assinatura-aso`, operadores podem selecionar e reenviar em massa ASOs enviados e pendências enviadas tanto nas abas específicas quanto na visão **Todos**. Os checkboxes usam borda e estado marcado de alto contraste. Toda ação confirmada pela API gera auditoria em `pacientes_assinatura_logs` com a identidade obtida da sessão do servidor.
 
+Nas views de `/aso/aso-pendente`, o envio direto persiste os CPFs no `localStorage`, isolados por unidade e por `processadoEm`. A identificação visual **Enviado direto** sobrevive ao F5 e a consultas da mesma sincronização; a lista é reiniciada automaticamente quando chega uma sincronização real com novo `processadoEm`.
+
 ### Vínculo com o atendimento
 
 As views de exames pendentes e concluídos consultam o status da recepção pelo hook `useStatusAtendimentos`. O vínculo prioriza CPF, depois nome e ficha sequencial. Quando há mais de um atendimento para o paciente, a data da ficha seleciona o registro correspondente; ficha exata, observação e atendimento mais recente funcionam como alternativas. As consultas ao Supabase são divididas em lotes com concorrência limitada para evitar URLs REST extensas e sobrecarga, todos os cadastros encontrados para o mesmo CPF são considerados e somente a requisição mais recente pode atualizar a tela.

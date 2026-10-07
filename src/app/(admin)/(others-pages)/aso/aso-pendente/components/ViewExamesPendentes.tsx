@@ -63,6 +63,8 @@ export function ViewExamesPendentes({
     prazosMap,
     cpfsAtendimentosConcluidos,
     onAtendimentosConcluidos,
+    cpfsEnviadosDireto,
+    onAsosEnviadosDireto,
 }: ViewExamesPendentesProps) {
     const pendencias = analytics?.funcionariosComExamesPendentes || [];
 
@@ -72,7 +74,6 @@ export function ViewExamesPendentes({
     const [sortKey, setSortKey] = useState<string>("nome");
     const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
     const [selectedCpfs, setSelectedCpfs] = useState<Set<string>>(new Set());
-    const [cpfsEnviadosDireto, setCpfsEnviadosDireto] = useState<Set<string>>(new Set());
 
     // Aba ativa: "pendentes" (ainda não montados) ou "montados" (já salvos/montados)
     const [abaAtiva, setAbaAtiva] = useState<"pendentes" | "montados">("pendentes");
@@ -590,7 +591,7 @@ export function ViewExamesPendentes({
             if (saveBd.error) throw saveBd.error;
 
             const cpfsEnviados = selecionados.map((f: any) => f.cpf || f.cpfFuncionario).filter(Boolean);
-            setCpfsEnviadosDireto((prev) => new Set([...prev, ...cpfsEnviados]));
+            onAsosEnviadosDireto(cpfsEnviados);
 
             toast.success(`${selecionados.length} ASO(s) enviado(s) com sucesso!`);
             setSelectedCpfs(new Set());
