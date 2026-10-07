@@ -34,6 +34,7 @@ import {
     ArrowUpDown,
     Save,
     Send,
+    X,
 } from "lucide-react";
 import { FuncionarioModal } from "./FuncionarioModal";
 import { ConfirmarAcaoDialog } from "./ConfirmarAcaoDialog";
@@ -43,9 +44,11 @@ import {
     compararValores,
     normalizarNomeExame,
     parseDateBR,
+    parseDateValue,
     adicionarDiasUteis,
     calcularStatusVencimentoVisual,
     exameEstaConcluido,
+    possuiAsoMontado,
 } from "../utils";
 import { toast } from "sonner";
 import { criarPacienteAssinatura, criarPayloadAcaoAso } from "@/lib/aso-assinatura";
@@ -76,6 +79,9 @@ export function ViewExamesPendentes({
 
     const [filtroMedico, setFiltroMedico] = useState("todos");
     const [filtroExameEspecifico, setFiltroExameEspecifico] = useState("todos");
+    const [filtroPrestador, setFiltroPrestador] = useState("todos");
+    const [dataInicio, setDataInicio] = useState("");
+    const [dataFim, setDataFim] = useState("");
     const [saving, setSaving] = useState(false);
     const [sendingAso, setSendingAso] = useState(false);
     const [concluindoAtendimento, setConcluindoAtendimento] = useState(false);
@@ -166,6 +172,12 @@ export function ViewExamesPendentes({
             const listaCompletaExames: any[] =
                 fDados?.aso?.listaExamesResumida || fDados?.listaExamesResumida || [];
 
+            const todosExames = listaCompletaExames.length > 0
+                ? listaCompletaExames
+                    .map((exame: any) => exame?.descricaoExame || exame?.nomeExame || exame?.nome)
+                    .filter(Boolean)
+                : examesReportados.filter(Boolean);
+
             const examesList = examesReportados.filter((nomeExame: string) => {
                 const nomeNormalizado = normalizarNomeExame(nomeExame);
                 const info = listaCompletaExames.find(
@@ -226,9 +238,22 @@ export function ViewExamesPendentes({
                 dataCriacaoGed,
                 dataFicha,
                 examesList,
+                todosExames,
                 examesDetalhados,
                 medicoExaminador,
                 sequencialFicha,
+                prestador:
+                    item.prestador ||
+                    fDados?.prestador ||
+                    fDados?.socResumo?.prestador ||
+                    fDados?.aso?.prestador ||
+                    "Não informado",
+                observacao:
+                    item.observacao ||
+                    fDados?.observacao ||
+                    fDados?.socResumo?.observacao ||
+                    fDados?.aso?.observacao ||
+                    "",
                 temPendenciaReal,
             };
         });
@@ -245,7 +270,10 @@ export function ViewExamesPendentes({
     const isFuncionarioMontado = (funcionario: any) => {
         if (!funcionario) return false;
         const cpf = funcionario.cpf || funcionario.cpfFuncionario;
-        return funcionariosSalvos?.has(cpf) || false;
+        return Boolean(
+            funcionariosSalvos?.has(cpf) ||
+            possuiAsoMontado(funcionario.observacao)
+        );
     };
 
     /* ============================================================
@@ -265,12 +293,20 @@ export function ViewExamesPendentes({
         const setE = new Set<string>();
 
         pendenciasVisiveis.forEach((f: any) => {
-            (f.examesDetalhados || []).forEach((e: any) => {
-                if (e?.nome) setE.add(e.nome);
+            (f.todosExames || []).forEach((exame: string) => {
+                if (exame) setE.add(exame);
             });
         });
 
         return Array.from(setE).sort();
+    }, [pendenciasVisiveis]);
+
+    const listaPrestadoresPendentes = useMemo(() => {
+        return Array.from(new Set<string>(
+            pendenciasVisiveis
+                .map((item: any) => item.prestador)
+                .filter((prestador: string) => prestador && prestador !== "Não informado")
+        )).sort((a, b) => a.localeCompare(b, "pt-BR"));
     }, [pendenciasVisiveis]);
 
     /* ============================================================
@@ -288,10 +324,18 @@ export function ViewExamesPendentes({
                 return false;
             }
 
+            if (filtroPrestador !== "todos" && item.prestador !== filtroPrestador) {
+                return false;
+            }
+
+            const dataFicha = parseDateValue(item.dataFicha);
+            if (dataInicio && (!dataFicha || dataFicha < new Date(`${dataInicio}T00:00:00`))) return false;
+            if (dataFim && (!dataFicha || dataFicha > new Date(`${dataFim}T23:59:59.999`))) return false;
+
             if (filtroExameEspecifico !== "todos") {
-                const possuiExame = (item.examesDetalhados || []).some(
-                    (exame: any) =>
-                        String(exame.nome || "").toLowerCase() === filtroExameEspecifico.toLowerCase()
+                const possuiExame = (item.todosExames || []).some(
+                    (exame: string) =>
+                        normalizarNomeExame(exame) === normalizarNomeExame(filtroExameEspecifico)
                 );
 
                 if (!possuiExame) return false;
@@ -299,7 +343,15 @@ export function ViewExamesPendentes({
 
             return true;
         });
-    }, [pendenciasVisiveis, filtroMedico, filtroExameEspecifico, cpfsAtendimentosConcluidos]);
+    }, [
+        pendenciasVisiveis,
+        filtroMedico,
+        filtroExameEspecifico,
+        filtroPrestador,
+        dataInicio,
+        dataFim,
+        cpfsAtendimentosConcluidos,
+    ]);
 
     /* ============================================================
        CONTADORES DAS ABAS
@@ -379,7 +431,7 @@ export function ViewExamesPendentes({
     ============================================================ */
     useEffect(() => {
         setPaginaAtual(1);
-    }, [busca, filtroTipoExame, filtroMedico, filtroExameEspecifico, abaAtiva, sortKey, sortDirection, prazosMap]);
+    }, [busca, filtroTipoExame, filtroMedico, filtroExameEspecifico, filtroPrestador, dataInicio, dataFim, abaAtiva, sortKey, sortDirection, prazosMap]);
 
     /* ============================================================
        GARANTE QUE A PÁGINA NÃO FIQUE INVÁLIDA
@@ -672,8 +724,8 @@ export function ViewExamesPendentes({
 
     return (
         <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm rounded-2xl overflow-hidden">
-            <CardHeader className="border-b border-gray-200 dark:border-gray-700 p-5">
-                <div className="flex flex-col gap-5">
+            <CardHeader className="border-b border-gray-200 dark:border-gray-700 p-3">
+                <div className="flex flex-col gap-2">
 
                     {/* FAIXA 1 — TÍTULO + ABAS */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -687,41 +739,35 @@ export function ViewExamesPendentes({
                             </CardTitle>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3">
-                            <div className="flex items-center gap-3 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3">
-                                <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-red-500/10 shrink-0">
-                                    <AlertCircle className="w-5 h-5 text-red-500" />
+                        <div className="grid grid-cols-2 gap-2">
+                            <div className="flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-1.5">
+                                <div className="flex items-center justify-center w-7 h-7 rounded-md bg-red-500/10 shrink-0">
+                                    <AlertCircle className="w-4 h-4 text-red-500" />
                                 </div>
 
                                 <div className="min-w-0">
                                     <div className="text-[9px] uppercase font-bold tracking-wide text-slate-400">
                                         ASOs Vencidos
                                     </div>
-                                    <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
-                                        Prazo expirado
-                                    </div>
                                 </div>
 
-                                <span className="ml-auto text-2xl font-black text-red-500">
+                                <span className="ml-auto text-lg font-black text-red-500">
                                     {indicadoresExamesPendentes.vencidos}
                                 </span>
                             </div>
 
-                            <div className="flex items-center gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
-                                <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-emerald-500/10 shrink-0">
-                                    <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                            <div className="flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-1.5">
+                                <div className="flex items-center justify-center w-7 h-7 rounded-md bg-emerald-500/10 shrink-0">
+                                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                                 </div>
 
                                 <div className="min-w-0">
                                     <div className="text-[9px] uppercase font-bold tracking-wide text-slate-400">
                                         ASOs no Prazo
                                     </div>
-                                    <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
-                                        Dentro do prazo
-                                    </div>
                                 </div>
 
-                                <span className="ml-auto text-2xl font-black text-emerald-500">
+                                <span className="ml-auto text-lg font-black text-emerald-500">
                                     {indicadoresExamesPendentes.noPrazo}
                                 </span>
                             </div>
@@ -770,10 +816,10 @@ export function ViewExamesPendentes({
 
 
                     {/* FAIXA 3 — BUSCA + FILTROS + AÇÕES */}
-                    <div className="flex flex-col lg:flex-row lg:items-center gap-3 pt-1 border-t border-slate-100 dark:border-slate-800">
-                        <div className="flex flex-col sm:flex-row gap-2 flex-1 min-w-0">
+                    <div className="flex flex-col gap-2 pt-1 border-t border-slate-100 dark:border-slate-800">
+                        <div className="flex w-full flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/70 p-2 dark:border-slate-700 dark:bg-slate-800/40">
                             {/* BUSCA */}
-                            <div className="relative w-full sm:w-64 shrink-0">
+                            <div className="relative min-w-56 flex-[1.35]">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                 <Input
                                     value={busca}
@@ -795,7 +841,7 @@ export function ViewExamesPendentes({
 
                             {/* MÉDICO */}
                             <Select value={filtroMedico} onValueChange={setFiltroMedico}>
-                                <SelectTrigger className="h-9 w-full sm:w-48 text-xs">
+                                <SelectTrigger className="h-9 w-full min-w-44 text-xs bg-white sm:w-44 xl:flex-1 dark:bg-slate-900">
                                     <SelectValue placeholder="Médico Examinador" />
                                 </SelectTrigger>
 
@@ -811,7 +857,7 @@ export function ViewExamesPendentes({
 
                             {/* EXAME */}
                             <Select value={filtroExameEspecifico} onValueChange={setFiltroExameEspecifico}>
-                                <SelectTrigger className="h-9 w-full sm:w-48 text-xs">
+                                <SelectTrigger className="h-9 w-full min-w-44 text-xs bg-white sm:w-44 xl:flex-1 dark:bg-slate-900">
                                     <SelectValue placeholder="Filtrar por Exame" />
                                 </SelectTrigger>
 
@@ -825,6 +871,44 @@ export function ViewExamesPendentes({
                                 </SelectContent>
                             </Select>
 
+                            <Select value={filtroPrestador} onValueChange={setFiltroPrestador}>
+                                <SelectTrigger className="h-9 w-full min-w-44 text-xs bg-white sm:w-44 xl:flex-1 dark:bg-slate-900">
+                                    <SelectValue placeholder="Credenciada" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="todos">Todas as credenciadas</SelectItem>
+                                    {listaPrestadoresPendentes.map((prestador) => (
+                                        <SelectItem key={prestador} value={prestador}>{prestador}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+
+                            <label className="flex h-9 min-w-52 flex-1 items-center gap-2 rounded-md border border-input bg-white px-2 text-[9px] font-bold uppercase text-slate-500 dark:bg-slate-900">
+                                <span className="whitespace-nowrap">De</span>
+                                <Input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} className="h-7 border-0 bg-transparent p-0 text-xs font-normal normal-case shadow-none focus-visible:ring-0" />
+                            </label>
+                            <label className="flex h-9 min-w-52 flex-1 items-center gap-2 rounded-md border border-input bg-white px-2 text-[9px] font-bold uppercase text-slate-500 dark:bg-slate-900">
+                                <span className="whitespace-nowrap">Até</span>
+                                <Input type="date" value={dataFim} min={dataInicio || undefined} onChange={(e) => setDataFim(e.target.value)} className="h-7 border-0 bg-transparent p-0 text-xs font-normal normal-case shadow-none focus-visible:ring-0" />
+                            </label>
+
+                            {(filtroMedico !== "todos" || filtroExameEspecifico !== "todos" || filtroPrestador !== "todos" || dataInicio || dataFim) && (
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    onClick={() => {
+                                        setFiltroMedico("todos");
+                                        setFiltroExameEspecifico("todos");
+                                        setFiltroPrestador("todos");
+                                        setDataInicio("");
+                                        setDataFim("");
+                                    }}
+                                    className="h-9 gap-1.5 text-[10px] font-bold uppercase text-slate-500"
+                                >
+                                    <X className="h-3.5 w-3.5" /> Limpar filtros
+                                </Button>
+                            )}
+
                             {busca && (
                                 <div className="flex items-center px-1 text-[10px] text-slate-400 whitespace-nowrap">
                                     {pendenciasProcessadas.length} resultado(s)
@@ -834,12 +918,12 @@ export function ViewExamesPendentes({
 
                         {/* AÇÕES (apenas na aba Pendentes) */}
                         {abaAtiva === "pendentes" && (
-                            <div className="flex gap-2 shrink-0">
+                            <div className="order-first flex w-full flex-wrap justify-center gap-2">
                                 <Button
                                     type="button"
                                     onClick={() => setAcaoParaConfirmar("salvar")}
                                     disabled={saving || selectedCpfs.size === 0}
-                                    className="h-9 px-4 text-[10px] font-black uppercase tracking-wide gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white"
+                                    className="h-8 px-3 text-[10px] font-black uppercase tracking-wide gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white"
                                 >
                                     {saving ? (
                                         <>
@@ -859,7 +943,7 @@ export function ViewExamesPendentes({
                                     type="button"
                                     onClick={() => setAcaoParaConfirmar("enviar")}
                                     disabled={sendingAso || selectedCpfs.size === 0}
-                                    className="h-9 px-4 text-[10px] font-black uppercase tracking-wide gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white"
+                                    className="h-8 px-3 text-[10px] font-black uppercase tracking-wide gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white"
                                 >
                                     {sendingAso ? (
                                         <>
@@ -879,7 +963,7 @@ export function ViewExamesPendentes({
                                     type="button"
                                     onClick={() => setAcaoParaConfirmar("concluido")}
                                     disabled={concluindoAtendimento || selectedCpfs.size === 0}
-                                    className="h-9 px-4 text-[10px] font-black uppercase tracking-wide gap-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white"
+                                    className="h-8 px-3 text-[10px] font-black uppercase tracking-wide gap-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white"
                                 >
                                     {concluindoAtendimento ? (
                                         <>
@@ -926,9 +1010,11 @@ export function ViewExamesPendentes({
                         {pendenciasPaginadas.length === 0 ? (
                             <TableRow>
                                 <TableCell colSpan={7} className="text-center py-8 text-xs text-slate-400">
-                                    {abaAtiva === "pendentes"
-                                        ? "Nenhum funcionário pendente para montagem."
-                                        : "Nenhum funcionário salvo ou com ASO montado nesta lista."}
+                                    {dataInicio || dataFim || filtroMedico !== "todos" || filtroExameEspecifico !== "todos" || filtroPrestador !== "todos" || busca
+                                        ? "Nenhum funcionário encontrado para os filtros informados."
+                                        : abaAtiva === "pendentes"
+                                            ? "Nenhum funcionário pendente para montagem."
+                                            : "Nenhum funcionário salvo ou com ASO montado nesta lista."}
                                 </TableCell>
                             </TableRow>
                         ) : (

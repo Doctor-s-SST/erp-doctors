@@ -718,6 +718,16 @@ export function exameIsIgnorado(
     return Boolean(prazosMap[nome]?.ignorar_exame);
 }
 
+export function parseDateValue(dateStr?: string | null): Date | null {
+    if (!dateStr) return null;
+
+    const dataBr = parseDateBR(dateStr);
+    if (dataBr) return dataBr;
+
+    const data = new Date(dateStr);
+    return Number.isNaN(data.getTime()) ? null : data;
+}
+
 export function getCorStatus(
     nome: string
 ): string {

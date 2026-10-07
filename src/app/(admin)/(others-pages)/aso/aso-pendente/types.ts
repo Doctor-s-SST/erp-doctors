@@ -69,6 +69,7 @@ export interface Funcionario {
     nomeFuncionario?: string;
     cpfFuncionario?: string;
     razaoSocial?: string;
+    prestador?: string;
     observacao?: string;
     aso?: Aso;
     documentosGed?: DocumentoGed[];

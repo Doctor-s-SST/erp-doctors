@@ -54,7 +54,8 @@ export default function IndicadoresSocged() {
 
     const [funcionariosSalvos, setFuncionariosSalvos] = useState<Set<string>>(() => {
         if (typeof window === "undefined") return new Set();
-        const cachedStr = sessionStorage.getItem("aso_funcionarios_salvos");
+        const cachedStr = sessionStorage.getItem("aso_funcionarios_salvos") ||
+            localStorage.getItem("aso_funcionarios_salvos");
         if (cachedStr) {
             try {
                 const parsed = JSON.parse(cachedStr);
@@ -439,15 +440,15 @@ export default function IndicadoresSocged() {
                                     const novoSet = new Set(prev);
                                     cpfs.forEach((cpf) => novoSet.add(cpf));
 
-                                    // Persiste no localStorage a seleção do usuário
+                                    // Mantém a classificação durante a sessão, inclusive após F5.
                                     const arr = Array.from(novoSet);
                                     try {
-                                        localStorage.setItem(
+                                        sessionStorage.setItem(
                                             "aso_funcionarios_salvos",
                                             JSON.stringify(arr)
                                         );
                                     } catch (e) {
-                                        console.warn("sessionStorage quota excedida (salvos):", e);
+                                        console.warn("Não foi possível persistir os ASOs salvos:", e);
                                     }
 
                                     return novoSet;
@@ -471,7 +472,7 @@ export default function IndicadoresSocged() {
                                     const novoSet = new Set(prev);
                                     cpfs.forEach((cpf) => novoSet.add(cpf));
 
-                                    // Persiste no sessionStorage a seleção do usuário
+                                    // Mantém a classificação durante a sessão, inclusive após F5.
                                     const arr = Array.from(novoSet);
                                     try {
                                         sessionStorage.setItem(
@@ -479,7 +480,7 @@ export default function IndicadoresSocged() {
                                             JSON.stringify(arr)
                                         );
                                     } catch (e) {
-                                        console.warn("sessionStorage quota excedida (salvos):", e);
+                                        console.warn("Não foi possível persistir os ASOs salvos:", e);
                                     }
 
                                     return novoSet;
