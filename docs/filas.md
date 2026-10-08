@@ -76,6 +76,12 @@ Os grupos aceitam `todos`, `algum`, `apenas_do_grupo` e `obrigatorio_mais_algum`
 6. Confirme isolamento por `unidade_id` e atualização SSE.
 7. Execute `npx tsc --noEmit`, lint direcionado e build.
 
+## Organização e desempenho
+
+As páginas de `sistema-filas` devem manter somente estado que participa da interface ou das regras operacionais. Atualizações em tempo real continuam centralizadas nos canais SSE; não mantenha consultas RPC manuais desativadas em paralelo. Em `senhas-recepcao`, o relógio da espera usa um timestamp atualizado por intervalo, evitando chamadas impuras durante a renderização, e os cabeçalhos ordenáveis são renderizados como função, sem criar um novo tipo de componente a cada ciclo.
+
+Os dashboards mensais armazenam apenas os agregados utilizados pelos gráficos. Os relatórios mantêm os dados detalhados porque eles alimentam filtros, expansão de linhas e exportação. Imports, variáveis, consultas e blocos comentados sem consumidores devem ser removidos durante a manutenção, preservando os contratos de RPC e n8n.
+
 ## Dívida técnica restante
 
 `[id]/page.tsx` ainda concentra orquestração e interface. A evolução recomendada é extrair, em entregas separadas e testáveis, hooks para SSE, exames, temporizadores e grupos, além de componentes para linha da tabela e modal de identificação.

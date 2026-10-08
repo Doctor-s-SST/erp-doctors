@@ -1051,7 +1051,7 @@ export default function FilaPage() {
                                         }
                                     }}
                                 >
-                                    <SelectTrigger className="h-8 w-[220px] border-0 shadow-none text-[9px] font-black uppercase tracking-widest focus:ring-0">
+                                    <SelectTrigger className="h-8 w-full border-0 shadow-none text-[9px] font-black uppercase tracking-widest focus:ring-0 sm:w-[220px]">
                                         <SelectValue placeholder="FILTRAR ESPECIALIDADES" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -1737,7 +1737,7 @@ export default function FilaPage() {
                         </div>
                     </DialogHeader>
 
-                    <div className="p-8 space-y-6">
+                    <div className="space-y-6 p-4 sm:p-8">
                         {/* SALA */}
                         <div className="space-y-3">
                             <Label className="text-[10px] font-black uppercase text-slate-500 ml-1">Sala de Atendimento</Label>
@@ -1812,7 +1812,7 @@ export default function FilaPage() {
 
             {/* Modal de Alerta de Tempo de Atendimento */}
             < Dialog open={showTempoAlerta} onOpenChange={setShowTempoAlerta} >
-                <DialogContent className="sm:max-w-[35vw] border-orange-500 border-3 overflow-hidden">
+                <DialogContent className="w-[calc(100vw-1rem)] max-w-[95vw] overflow-hidden border-3 border-orange-500 sm:max-w-xl xl:max-w-[35vw]">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2 text-orange-600">
                             <Clock className="w-5 h-5 animate-pulse" />

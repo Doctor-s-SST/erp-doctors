@@ -13,6 +13,10 @@ export default function FullWidthPageLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return <div>{children}
-    <Toaster richColors position="top-right" /></div>;
+  return (
+    <div className="min-h-dvh min-w-0 overflow-x-hidden">
+      {children}
+      <Toaster richColors position="top-right" />
+    </div>
+  );
 }

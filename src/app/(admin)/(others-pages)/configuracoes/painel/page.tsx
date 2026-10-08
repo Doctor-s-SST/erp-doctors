@@ -133,7 +133,7 @@ export default function UnidadeConfigPage() {
                 <Card className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 overflow-hidden shadow-sm">
                     <CardContent className="p-0">
 
-                        <div className="px-6 py-4 space-y-10 grid grid-cols-4 gap-4">
+                        <div className="grid grid-cols-1 gap-4 px-3 py-4 sm:grid-cols-2 sm:px-6 xl:grid-cols-4">
                             <div className="space-y-4">
                                 <FieldLabel htmlFor="switch-fala-andar" className="cursor-pointer">
                                     <Field

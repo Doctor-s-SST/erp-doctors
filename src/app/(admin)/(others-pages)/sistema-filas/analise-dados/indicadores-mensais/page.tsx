@@ -80,7 +80,7 @@ const CustomTooltipEspecialidades = ({ active, payload, label }: any) => {
                 </p>
 
                 <div className="flex flex-col gap-1.5">
-                    {salasAtivas.map((salaKey, idx) => {
+                    {salasAtivas.map((salaKey) => {
                         const valorSala = dadosEspecialidade[salaKey];
                         // const corItem = coresArray[idx % coresArray.length] || coresArray[0];
 
@@ -111,7 +111,6 @@ export default function IndicadoresMensais() {
     const [unidadeId, setUnidadeId] = useState("")
     const [loading, setLoading] = useState(false)
 
-    const [dadosRelatorio, setDadosRelatorio] = useState<any[]>([])
     const [dadosGraficos, setDadosGraficos] = useState<any>(null)
 
     const meses = [
@@ -200,14 +199,12 @@ export default function IndicadoresMensais() {
 
                 if (resposta.status === "empty") {
                     toast.warning(`0 atendimentos encontrados`);
-                    setDadosRelatorio([]);
                     setDadosGraficos(null);
                     terminou = true;
                 }
 
                 if (resposta.status === "done") {
                     terminou = true;
-                    setDadosRelatorio(resposta.data?.listaRelatorios || []);
                     setDadosGraficos(resposta.charts || null);
 
                     const totalProcessados = resposta.charts?.view_atendimento?.total_atendimentos_mes ?? 0;
@@ -538,13 +535,6 @@ function ViewExames({ charts }: { charts: any }) {
             </div>
         );
     }
-
-    const especialidadesData = charts.total_atendimentos_por_especialidade
-        ? Object.keys(charts.total_atendimentos_por_especialidade).map(key => ({
-            especialidade: key,
-            quantidade: charts.total_atendimentos_por_especialidade[key]
-        }))
-        : [];
 
     const temposEspecialidadeData = charts.tempo_medio_atendimento_por_especialidade
         ? Object.keys(charts.tempo_medio_atendimento_por_especialidade).map(key => ({

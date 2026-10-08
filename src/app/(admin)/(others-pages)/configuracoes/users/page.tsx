@@ -15,7 +15,6 @@ import {
   Loader2,
   Mail,
   Stethoscope,
-  Filter,
   Users,
   Plus,
   Monitor
@@ -106,7 +105,7 @@ export default function UsersManagementPage() {
           .single();
 
         if (profile) {
-          let idFinal = profile.unidade_id;
+          const idFinal = profile.unidade_id;
 
           setUnidadeId(idFinal);
           fetchUsers(idFinal);
@@ -281,7 +280,7 @@ export default function UsersManagementPage() {
                             <User className={`w-5 h-5 ${colorScheme.text}`} />
                           )}
                         </div>
-                        <div className="flex flex-row gap-5">
+                        <div className="flex flex-wrap gap-3 sm:gap-5">
                           <Button
                             variant="ghost"
                             size="icon"

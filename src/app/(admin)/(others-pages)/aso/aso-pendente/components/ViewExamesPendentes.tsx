@@ -703,7 +703,7 @@ export function ViewExamesPendentes({
         );
     }
 
-    const SortHeader = ({ label, sortKeyValue }: { label: string; sortKeyValue: string }) => (
+    const renderSortHeader = ({ label, sortKeyValue }: { label: string; sortKeyValue: string }) => (
         <TableHead
             className="font-bold text-xs uppercase text-slate-600 dark:text-slate-300 cursor-pointer select-none whitespace-nowrap transition-colors hover:text-slate-900 dark:hover:text-white"
             onClick={() => handleSort(sortKeyValue)}
@@ -998,12 +998,12 @@ export function ViewExamesPendentes({
                                 />
                             </TableHead>
 
-                            <SortHeader label="Funcionário" sortKeyValue="nome" />
-                            <SortHeader label="Empresa / Unidade" sortKeyValue="empresa" />
-                            <SortHeader label="Médico Examinador" sortKeyValue="medicoExaminador" />
-                            <SortHeader label="Seq. Ficha" sortKeyValue="sequencialFicha" />
-                            <SortHeader label="Data Ficha" sortKeyValue="dataFicha" />
-                            <SortHeader label="Exames Pendentes" sortKeyValue="examesList" />
+                            {renderSortHeader({ label: "Funcionário", sortKeyValue: "nome" })}
+                            {renderSortHeader({ label: "Empresa / Unidade", sortKeyValue: "empresa" })}
+                            {renderSortHeader({ label: "Médico Examinador", sortKeyValue: "medicoExaminador" })}
+                            {renderSortHeader({ label: "Seq. Ficha", sortKeyValue: "sequencialFicha" })}
+                            {renderSortHeader({ label: "Data Ficha", sortKeyValue: "dataFicha" })}
+                            {renderSortHeader({ label: "Exames Pendentes", sortKeyValue: "examesList" })}
                         </TableRow>
                     </TableHeader>
 

@@ -90,3 +90,15 @@ Priorize extração gradual, com testes de comportamento:
 ## Limpeza realizada em setembro de 2026
 
 Foram removidas páginas demonstrativas do template e seus componentes exclusivos: exemplos de gráficos, formulários, tabela, calendário, página vazia e elementos UI. Também foram removidos a tela privada `_aso` e seu endpoint exclusivo `relatorio-aso`. Não foram removidos componentes compartilhados com funcionalidades do produto.
+
+## Auditoria de `(others-pages)` em outubro de 2026
+
+Todas as rotas restantes de `(others-pages)` foram auditadas por referências e convenções do App Router. Os auxiliares de ASO (`components`, `hooks`, `types` e `utils`) possuem consumidores ativos e devem ser preservados. As pastas `(chart)`, `(forms)`, `(tables)`, `blank` e `calendar` estão vazias e não geram rotas nem artefatos no build.
+
+A limpeza removeu imports, variáveis e componentes locais comprovadamente sem uso nas configurações, assinatura de ASO e dashboard de atendimento. Os cabeçalhos ordenáveis que eram recriados durante a renderização passaram a ser funções de renderização, sem alterar filtros, ordenação ou a interface. Nenhum arquivo funcional foi excluído porque não foram encontrados arquivos-fonte órfãos com remoção segura.
+
+## Responsividade mínima
+
+As páginas de `(full-width-pages)` e `(others-pages)` devem funcionar sem rolagem horizontal global em telas estreitas. O padrão adotado é: `min-h-dvh` para telas completas, controles empilhados no mobile, grids iniciando em uma coluna, botões com quebra de linha, diálogos limitados à largura da viewport e tabelas extensas dentro de contêineres com `overflow-x-auto`.
+
+O painel de senhas preserva o layout horizontal em telas grandes e muda para destaque + histórico empilhados abaixo de `lg`. Tipografia crítica usa `clamp()` para continuar legível sem extrapolar a viewport. Essas adaptações são exclusivamente visuais: regras de fila, áudio, permissões, consultas, transições de estado e payloads não devem variar por breakpoint.

@@ -17,7 +17,6 @@ import {
 } from "lucide-react";
 
 import { toast } from "sonner";
-import { refresh } from "next/cache";
 
 export default function UnidadeConfigPage() {
     const [loading, setLoading] = useState(true);

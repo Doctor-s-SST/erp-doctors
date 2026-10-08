@@ -30,7 +30,6 @@ import {
     FileWarning,
     X,
     MailCheck,
-    CheckSquare,
     RotateCcw,
 } from "lucide-react";
 
@@ -541,7 +540,7 @@ export default function AssinaturaAsoPage() {
         }));
     };
 
-    const ThOrdenavel = ({
+    const renderThOrdenavel = ({
         label,
         coluna,
     }: {
@@ -634,7 +633,7 @@ export default function AssinaturaAsoPage() {
             <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 gap-1">
                 <CardHeader className="flex flex-col md:flex-row items-center gap-4 pb-4 border-b border-gray-100 dark:border-gray-800">
                     {/* CARDS DE CONTADORES */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 w-full">
+                    <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
                         {/* CARD 1: PARA ASSINAR */}
                         <div
                             onClick={() => toggleFiltro("ASSINAR")}
@@ -760,7 +759,7 @@ export default function AssinaturaAsoPage() {
                     </div>
                 </CardHeader>
 
-                <CardContent className="p-0">
+                <CardContent className="overflow-x-auto p-0">
                     <Table>
                         <TableHeader className="bg-slate-50 dark:bg-slate-800/50">
                             <TableRow>
@@ -780,9 +779,9 @@ export default function AssinaturaAsoPage() {
                                         />
                                     </TableHead>
                                 )}
-                                <ThOrdenavel label="Nome" coluna="nome_paciente" />
-                                <ThOrdenavel label="Sequencial da Ficha" coluna="sequencial_ficha" />
-                                <ThOrdenavel label="Data de Liberação" coluna="created_at" />
+                                {renderThOrdenavel({ label: "Nome", coluna: "nome_paciente" })}
+                                {renderThOrdenavel({ label: "Sequencial da Ficha", coluna: "sequencial_ficha" })}
+                                {renderThOrdenavel({ label: "Data de Liberação", coluna: "created_at" })}
                                 <TableHead className="font-bold text-xs uppercase">
                                     Observação
                                 </TableHead>
@@ -855,7 +854,7 @@ export default function AssinaturaAsoPage() {
                                             </TableCell>
 
                                             <TableCell className="text-right">
-                                                <div className="flex flex-row items-center justify-end gap-2">
+                                                <div className="flex flex-wrap items-center justify-end gap-2">
                                                     {isEspecialista && filtroStatus === "ASSINAR" && !item.acao && (
                                                         <>
                                                             <Button

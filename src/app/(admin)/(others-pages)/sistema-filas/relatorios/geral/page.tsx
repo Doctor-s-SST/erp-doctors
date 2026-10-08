@@ -2,8 +2,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import {
-    Monitor, Search, Clock, ChevronDown, ChevronUp,
-    Table as TableIcon, LogIn, ArrowUpDown, Calendar1,
+    Monitor, Search, ChevronDown, ChevronUp,
+    Table as TableIcon, ArrowUpDown, Calendar1,
     ArrowRightCircle,
     Loader2
 } from 'lucide-react';
@@ -268,7 +268,7 @@ export default function PaginaRelatorio() {
 
             }
         }
-        catch (error) {
+        catch {
             toast.error("Erro ao carregar dados.");
         } finally {
             setLoading(false);

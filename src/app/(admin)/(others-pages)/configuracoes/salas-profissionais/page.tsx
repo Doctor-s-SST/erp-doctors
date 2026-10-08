@@ -433,14 +433,14 @@ export default function ConfiguracoesPage() {
             <AccordionContent className="space-y-4 h-fit">
               <div className="flex flex-col md:flex-row bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-400 dark:border-gray-600 gap-3 shadow-sm items-center">
                 <div className="w-full flex flex-col items-start justify-between gap-5">
-                  <div className="w-full flex flex-row gap-3">
+                  <div className="flex w-full flex-col gap-3 sm:flex-row">
                     <Input
                       placeholder="Buscar profissional..."
                       value={busca}
                       className="w-50 border border-gray-400 dark:border-gray-600"
                       onChange={(e) => setBusca(e.target.value)}
                     />
-                    <div className="flex flex-row gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <Select
                         value={filtroEspecialidade}
                         onValueChange={setFiltroEspecialidade}
@@ -531,7 +531,7 @@ export default function ConfiguracoesPage() {
                 </div>
 
                 <div className="w-full flex flex-col items-center gap-3">
-                  <div className="w-full flex flex-row justify-center gap-4">
+                  <div className="flex w-full flex-wrap justify-center gap-4">
                     <Card className="w-25 h-18 py-2">
                       <CardContent className="px-3">
                         <span className="text-xs text-muted-foreground">

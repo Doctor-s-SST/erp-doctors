@@ -189,7 +189,7 @@ export default function SelecionarFila() {
         </div>
 
         {/* GRID */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mx-10 md:mx-15">
+        <div className="mx-0 grid grid-cols-1 gap-4 sm:mx-4 md:mx-10 md:grid-cols-3 xl:mx-15">
           {especialidades.map((esp) => (
             <Card
               key={esp.id}
@@ -233,7 +233,7 @@ export default function SelecionarFila() {
             </div>
           </DialogHeader>
 
-          <div className="p-8 space-y-6">
+          <div className="space-y-6 p-4 sm:p-8">
             {/* SALA */}
             <div className="space-y-3">
               <Label className="text-[10px] font-black uppercase text-slate-500 ml-1">Sala de Atendimento</Label>

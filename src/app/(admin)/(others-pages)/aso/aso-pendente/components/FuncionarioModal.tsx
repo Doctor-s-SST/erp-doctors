@@ -247,7 +247,7 @@ export function FuncionarioModal({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="flex !w-[55vw] !max-w-[95vw] max-h-[90vh] flex-col gap-0 overflow-hidden p-0 bg-white dark:bg-gray-950 border border-slate-200 dark:border-slate-800 shadow-2xl">
+            <DialogContent className="flex !w-[calc(100vw-1rem)] !max-w-[95vw] max-h-[90vh] flex-col gap-0 overflow-hidden p-0 bg-white dark:bg-gray-950 border border-slate-200 dark:border-slate-800 shadow-2xl sm:!w-[85vw] xl:!w-[55vw]">
                 {/* HEADER */}
                 <div className="shrink-0 border-b border-slate-200 dark:border-slate-800 bg-gradient-to-r from-slate-50 to-white dark:from-slate-900 dark:to-gray-950 px-6 py-5 pr-12">
                     <DialogHeader className="space-y-0">
@@ -290,7 +290,7 @@ export function FuncionarioModal({
                 {/* CONTEÚDO */}
                 <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 space-y-5">
                     {/* INDICADORES */}
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                         {/* TOTAL */}
                         <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 p-3">
                             <div className="flex items-center justify-between gap-2">

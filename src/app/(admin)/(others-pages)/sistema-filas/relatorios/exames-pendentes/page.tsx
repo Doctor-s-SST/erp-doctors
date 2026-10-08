@@ -2,9 +2,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import {
-    Monitor, Search, Clock, ChevronDown, ChevronUp,
-    Table as TableIcon, LogIn, ArrowUpDown, Calendar1,
-    ArrowRightCircle,
+    Monitor, Search, ChevronDown, ChevronUp,
+    Table as TableIcon, ArrowUpDown, Calendar1,
     Loader2,
     CheckCircle2
 } from 'lucide-react';
@@ -206,7 +205,7 @@ export default function PaginaRelatorio() {
             const normalizado = data.map((item: any) => item.json || item);
             setDadosRelatorio(normalizado);
             toast.success(`${normalizado.length} atendimentos.`);
-        } catch (error) {
+        } catch {
             toast.error("Erro ao carregar dados.");
         } finally {
             setLoading(false);

@@ -262,47 +262,47 @@ export default function PainelTV() {
   // TELA DE ATIVAÇÃO
   if (!ativado) {
     return (
-      <div className="h-screen w-screen flex flex-col items-center justify-center bg-[#3498db] text-white p-10 text-center">
+      <div className="flex min-h-dvh w-full flex-col items-center justify-center bg-[#3498db] p-5 text-center text-white sm:p-10">
         {unidadeLogo && (
           <img
             src={unidadeLogo}
             alt="Logo"
-            className="h-24 mb-10"
+            className="mb-6 h-16 max-w-full object-contain sm:mb-10 sm:h-24"
           />
         )}
-        <h1 className="text-4xl font-bold mb-4">Painel de Chamada Doctor&apos;s</h1>
+        <h1 className="mb-4 text-2xl font-bold sm:text-4xl">Painel de Chamada Doctor&apos;s</h1>
         <button
           onClick={() => setAtivado(true)}
-          className="px-12 py-6 bg-white text-[#3498db] rounded-full font-black text-3xl shadow-2xl hover:scale-110 active:scale-95 transition-all mb-6"
+          className="mb-6 w-full max-w-md rounded-full bg-white px-6 py-4 text-xl font-black text-[#3498db] shadow-2xl transition-all hover:scale-105 active:scale-95 sm:px-12 sm:py-6 sm:text-3xl"
         >
           ATIVAR ÁUDIO E INICIAR
         </button>
-        <p className="opacity-70 text-xl max-w-md">O navegador exige um clique para permitir que o sistema fale os nomes dos pacientes automaticamente.</p>
+        <p className="max-w-md text-base opacity-70 sm:text-xl">O navegador exige um clique para permitir que o sistema fale os nomes dos pacientes automaticamente.</p>
       </div>
     );
   }
 
   return (
-    <div className="h-screen w-screen bg-white overflow-hidden flex flex-col font-sans">
+    <div className="flex h-dvh w-full min-w-0 flex-col overflow-hidden bg-white font-sans">
       <audio ref={audioRef} src="/sounds/call-bell.wav" preload="auto" />
 
       {/* HEADER DESIGN EXATO */}
-      <header className="h-20 flex justify-between items-center px-5 py-2 bg-white shadow-[0px_2px_5px_0px_rgba(0,0,0,0.2)] z-10">
+      <header className="z-10 flex min-h-16 shrink-0 items-center justify-between gap-3 bg-white px-3 py-2 shadow-[0px_2px_5px_0px_rgba(0,0,0,0.2)] sm:h-20 sm:px-5">
         <div className="flex items-center gap-2">
           {unidadeLogo && (
-            <img src={unidadeLogo} alt="Logo" className="h-12" />
+            <img src={unidadeLogo} alt="Logo" className="h-9 max-w-32 object-contain sm:h-12 sm:max-w-none" />
           )}
         </div>
-        <p className="text-black font-medium text-lg capitalize">
+        <p className="text-right text-xs font-medium capitalize text-black sm:text-lg">
           {dataAtual.weekday}, {dataAtual.day} <span className="lowercase">de {dataAtual.month} de</span> {dataAtual.year}
         </p>
       </header>
 
       {/* CONTEÚDO PRINCIPAL */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
 
         {/* LADO ESQUERDO: DESTAQUE AZUL */}
-        <div className="flex-[3.1] flex p-5">
+        <div className="flex min-h-0 flex-[3.1] p-2 sm:p-4 lg:p-5">
           <AnimatePresence mode="wait">
             <motion.main
               key={ultimaChamada?.id || 'empty'}
@@ -313,25 +313,25 @@ export default function PainelTV() {
             >
               {ultimaChamada && (
                 <>
-                  <div className="text-[2.2em] absolute top-10 flex flex-col items-center text-white font-bold uppercase text-center">
+                  <div className="absolute top-3 flex flex-col items-center text-center text-base font-bold uppercase text-white sm:top-6 sm:text-2xl lg:top-10 lg:text-[2.2em]">
                     <h3 className="tracking-widest opacity-90">Senha Atual</h3>
-                    <p className="text-5xl mt-2">{ultimaChamada.senha_codigo}</p>
+                    <p className="mt-1 text-2xl sm:mt-2 sm:text-4xl lg:text-5xl">{ultimaChamada.senha_codigo}</p>
                   </div>
 
                   <div className="flex flex-col items-center w-full mt-0">
                     {ultimaChamada.nome_paciente ? (
-                      <h2 className="text-[6vw] leading-[1.1] font-black text-center px-10 uppercase drop-shadow-md break-words">
+                      <h2 className="break-words px-2 text-center text-[clamp(2rem,6vw,7rem)] font-black uppercase leading-[1.1] drop-shadow-md sm:px-10">
                         {ultimaChamada.nome_paciente}
                       </h2>
                     ) : (
-                      <h2 className="text-[19rem] leading-none font-black drop-shadow-lg tracking-tighter">
+                      <h2 className="text-[clamp(5rem,20vw,19rem)] font-black leading-none tracking-tighter drop-shadow-lg">
                         {ultimaChamada.senha_codigo}
                       </h2>
                     )}
                   </div>
 
-                  <div className="absolute bottom-12 text-7xl font-bold uppercase tracking-tight flex flex-col items-center">
-                    <div className="flex gap-8">
+                  <div className="absolute bottom-3 flex flex-col items-center text-2xl font-bold uppercase tracking-tight sm:bottom-6 sm:text-5xl lg:bottom-12 lg:text-7xl">
+                    <div className="flex gap-3 sm:gap-8">
                       <span>
                         {ultimaChamada.origem === 'RECEPCAO' ? 'Guichê' : 'Sala'}
                       </span>
@@ -341,7 +341,7 @@ export default function PainelTV() {
                     </div>
 
                     <div className="flex flex-col items-center mt-2">
-                      <span className="text-5xl tracking-tight">
+                      <span className="text-xl tracking-tight sm:text-3xl lg:text-5xl">
                         {ultimaChamada.origem === 'RECEPCAO'
                           ? "Recepção"
                           : falaAndar
@@ -358,19 +358,19 @@ export default function PainelTV() {
         </div>
 
         {/* LADO DIREITO: HISTÓRICO DESIGN EXATO */}
-        <aside className="shadow-[0px_4px_15px_0px_rgba(0,0,0,0.2)] flex-1 bg-white flex flex-col overflow-hidden">
+        <aside className="flex max-h-[38%] min-h-0 flex-1 flex-col overflow-hidden bg-white shadow-[0px_4px_15px_0px_rgba(0,0,0,0.2)] lg:max-h-none">
           <div className="p-3 border-b-2 border-[#3498db] mx-4">
-            <h3 className="text-2xl font-bold text-black text-center">Últimas Senhas Chamadas</h3>
+            <h3 className="text-center text-sm font-bold text-black sm:text-lg lg:text-2xl">Últimas Senhas Chamadas</h3>
           </div>
           <div className="flex-1 flex flex-col">
             {historico.slice(1, 6).map((item, idx) => (
               <div key={item.id + idx} className="flex-1 border-b border-gray-400 flex flex-col items-center justify-center p-2 last:border-0">
-                <p className="text-[3.5vw] font-black text-gray-800 leading-tight">{item.senha_codigo}</p>
-                <p className="text-[1.8vw] font-bold text-[#3498db] uppercase">
+                <p className="text-xl font-black leading-tight text-gray-800 sm:text-2xl lg:text-[3.5vw]">{item.senha_codigo}</p>
+                <p className="text-sm font-bold uppercase text-[#3498db] sm:text-base lg:text-[1.8vw]">
                   {item.origem === 'RECEPCAO' ? 'Guichê' : 'Sala'} {item.guiche}
                 </p>
                 {item.nome_paciente && (
-                  <p className="text-[1.4em] text-gray-400 font-medium w-full text-center uppercase italic px-4 truncate">{item.nome_paciente}</p>
+                  <p className="w-full truncate px-2 text-center text-xs font-medium uppercase italic text-gray-400 sm:text-base lg:px-4 lg:text-[1.4em]">{item.nome_paciente}</p>
                 )}
               </div>
             ))}
@@ -384,8 +384,8 @@ export default function PainelTV() {
       </div>
 
       {/* FOOTER MARQUEE DESIGN EXATO */}
-      <footer className="h-16 flex justify-between items-center px-5 py-2 bg-white shadow-[0px_0px_5px_2px_rgba(0,0,0,0.2)] z-10 overflow-hidden">
-        <div className="animate-marquee whitespace-nowrap text-black text-[18px] font-medium px-4">
+      <footer className="z-10 flex h-10 shrink-0 items-center justify-between overflow-hidden bg-white px-2 py-1 shadow-[0px_0px_5px_2px_rgba(0,0,0,0.2)] sm:h-16 sm:px-5 sm:py-2">
+        <div className="animate-marquee whitespace-nowrap px-4 text-sm font-medium text-black sm:text-[18px]">
           Aviso: Realizamos diversos exames, porém, você será chamado somente para salas correspondentes ao seu tipo de atendimento.
         </div>
       </footer>

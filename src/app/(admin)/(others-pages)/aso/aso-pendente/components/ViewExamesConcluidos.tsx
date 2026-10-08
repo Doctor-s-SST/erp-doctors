@@ -773,7 +773,7 @@ export function ViewExamesConcluidos({
         );
     }
 
-    const SortHeader = ({
+    const renderSortHeader = ({
         label,
         sortKeyValue,
     }: {
@@ -1060,27 +1060,15 @@ export function ViewExamesConcluidos({
                                 />
                             </TableHead>
 
-                            <SortHeader label="Funcionário" sortKeyValue="nome" />
-                            <SortHeader label="Empresa / Unidade" sortKeyValue="empresa" />
-                            <SortHeader label="Médico Examinador" sortKeyValue="medico" />
-                            <SortHeader label="Seq. Ficha" sortKeyValue="sequencialFicha" />
-                            <SortHeader label="Data Ficha" sortKeyValue="dataFicha" />
-                            <SortHeader
-                                label="Prazo ASO"
-                                sortKeyValue="prazoAso"
-                            />
-
-                            <SortHeader
-                                label="Vencimento"
-                                sortKeyValue="statusPrazo"
-                            />
-
-                            <SortHeader
-                                label="Status Atendimento"
-                                sortKeyValue="statusAtendimento"
-                            />
-
-                            <SortHeader label="Observação" sortKeyValue="observacao" />
+                            {renderSortHeader({ label: "Funcionário", sortKeyValue: "nome" })}
+                            {renderSortHeader({ label: "Empresa / Unidade", sortKeyValue: "empresa" })}
+                            {renderSortHeader({ label: "Médico Examinador", sortKeyValue: "medico" })}
+                            {renderSortHeader({ label: "Seq. Ficha", sortKeyValue: "sequencialFicha" })}
+                            {renderSortHeader({ label: "Data Ficha", sortKeyValue: "dataFicha" })}
+                            {renderSortHeader({ label: "Prazo ASO", sortKeyValue: "prazoAso" })}
+                            {renderSortHeader({ label: "Vencimento", sortKeyValue: "statusPrazo" })}
+                            {renderSortHeader({ label: "Status Atendimento", sortKeyValue: "statusAtendimento" })}
+                            {renderSortHeader({ label: "Observação", sortKeyValue: "observacao" })}
                         </TableRow>
                     </TableHeader>
 

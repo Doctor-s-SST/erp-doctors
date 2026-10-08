@@ -18,24 +18,10 @@ import { cn } from "@/lib/utils"
 import {
     Calendar as CalendarIcon,
     Activity,
-    BarChart3,
-    Clock,
-    Users,
     RefreshCcw,
-    LayoutDashboard,
-    Search,
-    FileText,
-    Hash
 } from "lucide-react"
 
 // Importe seus gráficos aqui (assumindo que foram criados anteriormente)
-import { GraficoAtendimentosHora } from "@/components/atendimento/dashboards/GraficoAtendimentosHora"
-import { GraficoAtendimentosPorRecep } from "@/components/atendimento/dashboards/GraficoAtendimentosPorRecep"
-import { GraficoAtendimentosPorEsp } from "@/components/atendimento/dashboards/GraficoAtendimentosPorEsp"
-import { GraficoAtendimentosPorSala } from "@/components/atendimento/dashboards/GraficoAtendimentosPorSala"
-import { GraficoTempoMedioEsp } from "@/components/atendimento/dashboards/GraficoTempoMedioEsp"
-import { GraficoTopEmpresas } from "@/components/atendimento/dashboards/GraficoTopEmpresas"
-import { GraficoTipoAtendimentoPaciente } from "@/components/atendimento/dashboards/GraficoTipoAtendimentoPaciente"
 import { GraficoPizza } from "@/components/atendimento/dashboards/diario/GraficoPizza"
 import { resolveDashboardAnalytics } from "@/lib/dashboard-analytics"
 
@@ -63,7 +49,7 @@ export default function DashboardPage() {
                     .single();
 
                 if (profile) {
-                    let idFinal = profile.unidade_id;
+                    const idFinal = profile.unidade_id;
                     setUnidadeId(idFinal);
                 }
             }
@@ -81,7 +67,7 @@ export default function DashboardPage() {
         "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
     ]
 
-    const { data, isLoading, isFetching } = useQuery({
+    const { data, isFetching } = useQuery({
         queryKey: [
             'dashboard',
             view,
@@ -319,14 +305,6 @@ export default function DashboardPage() {
 /* ==========================================================================
    VIEW GERAL (A que já tínhamos, otimizada)
    ========================================================================== */
-function formatMinutos(min: number | null | undefined): string {
-    if (!min || min <= 0) return "—"
-    const h = Math.floor(min / 60)
-    const m = Math.round(min % 60)
-    if (h > 0) return `${h}h ${m}m`
-    return `${m}m`
-}
-
 /* ==========================================================================
    VIEW DIÁRIA (Foco em Pizza e Senhas)
    ========================================================================== */
@@ -339,7 +317,7 @@ function ViewDiaria({ data }: any) {
 
     return (
         <div className="space-y-6">
-            <div className="w-full grid grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
                 <Card className="dark:bg-gray-900 border-gray-200 dark:border-gray-800">
                     <CardContent className="p-4">
                         <div className="w-full flex flex-col items-center gap-1">
@@ -417,7 +395,7 @@ function ViewDiaria({ data }: any) {
                 </div>
 
                 {/* ESPECIALIDADES */}
-                {especialidadesOrdenadas.map((esp: any, index: number) => (
+                {especialidadesOrdenadas.map((esp: any) => (
                     <div
                         key={esp.especialidade}
 
@@ -438,93 +416,6 @@ function ViewDiaria({ data }: any) {
    HELPERS / SUBCOMPONENTS
    ========================================================================== */
 
-interface BadgeProps {
-    label: string
-    color: string
-}
-
-function CardMetric({
-    title,
-    value,
-    sub,
-    icon,
-    color,
-    badge,
-}: {
-    title: string
-    value: string | number
-    sub?: string
-    icon: React.ReactNode
-    color: "emerald" | "blue" | "amber" | "purple"
-    badge?: BadgeProps
-}) {
-    const colorMap = {
-        emerald: {
-            bg: "bg-emerald-500/10 dark:bg-emerald-500/10",
-            icon: "text-emerald-500",
-            ring: "ring-emerald-500/20",
-        },
-        blue: {
-            bg: "bg-blue-500/10",
-            icon: "text-blue-400",
-            ring: "ring-blue-500/20",
-        },
-        amber: {
-            bg: "bg-amber-500/10",
-            icon: "text-amber-400",
-            ring: "ring-amber-500/20",
-        },
-        purple: {
-            bg: "bg-purple-500/10",
-            icon: "text-purple-400",
-            ring: "ring-purple-500/20",
-        },
-    }
-    const c = colorMap[color]
-
-    return (
-        <Card className="dark:bg-gray-900 border-gray-200 dark:border-gray-800">
-            <CardContent className="p-5">
-                <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                        <p className="text-[10px] font-black text-gray-500 dark:text-gray-500 uppercase tracking-widest mb-1">
-                            {title}
-                        </p>
-                        <p className="text-3xl font-black dark:text-white italic tracking-tight leading-none">
-                            {value}
-                        </p>
-                        {sub && (
-                            <p className="text-[10px] text-gray-400 mt-1.5 leading-relaxed">
-                                {sub}
-                            </p>
-                        )}
-                        {badge && (
-                            <p className={`text-[10px] font-bold mt-1 ${badge.color}`}>
-                                {badge.label}
-                            </p>
-                        )}
-                    </div>
-                    <div className={`p-2.5 rounded-xl ring-1 flex-shrink-0 ${c.bg} ${c.ring}`}>
-                        <span className={c.icon}>{icon}</span>
-                    </div>
-                </div>
-            </CardContent>
-        </Card>
-    )
-}
-
-function CardViewSimple({ title, chart }: { title: string; chart: React.ReactNode }) {
-    return (
-        <Card className="dark:bg-gray-900 border-gray-800">
-            <CardHeader className="pb-2 border-b dark:border-gray-800 mb-4">
-                <CardTitle className="text-[10px] font-black uppercase text-gray-500 dark:text-gray-100">
-                    {title}
-                </CardTitle>
-            </CardHeader>
-            <CardContent>{chart}</CardContent>
-        </Card>
-    )
-}
 function CardPizzaSmall({ title, data, aguardando = 0 }: any) {
     return (
         <Card className={`w-full dark:bg-gray-900 border-gray-800`}>

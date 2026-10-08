@@ -1,22 +1,21 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
-import { useEffect, useState, useRef, useMemo, JSXElementConstructor, Key, ReactElement, ReactNode, ReactPortal } from "react"
+import { useEffect, useState, useRef, useMemo } from "react"
 import { supabase } from "@/lib/supabase"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
-import { FileEdit, CheckCircle2, RefreshCw, User, Monitor, XCircle, Filter, ArrowUpDown, Clock, PlusCircle, MonitorCheck, UploadCloud, Save, Building2, Stethoscope, BellRing, Loader2, X, Search, Printer, Plus, ClipboardPlus, ClipboardList, Activity } from "lucide-react"
+import { FileEdit, CheckCircle2, RefreshCw, User, Monitor, XCircle, Filter, ArrowUpDown, Clock, PlusCircle, MonitorCheck, UploadCloud, Save, Building2, Stethoscope, BellRing, Loader2, X, Search, Printer, Plus, ClipboardList, Activity } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useReactToPrint } from "react-to-print";
 import { TemplateFicha } from "@/components/atendimento/ficha-impressao/TemplateFicha";
 import { StatusSenhaRecep } from "@/components/atendimento/status-senha-recep/StatusSenhaRecep"
-import { on } from "events"
 
 type Atendimento = {
     id: string;
@@ -62,20 +61,18 @@ export default function RecepcaoPage() {
     const [loadingRecepcionistas, setLoadingRecepcionistas] = useState(true)
     const componentRef = useRef<HTMLDivElement>(null);
     const [showSuggestions, setShowSuggestions] = useState(false);
-    const [userRole, setUserRole] = useState<string | null>(null);
     const [selectedAtendimento, setSelectedAtendimento] = useState<Atendimento | null>(null)
     const [isDetailsOpen, setIsDetailsOpen] = useState(false)
     const [unidadeId, setUnidadeId] = useState<string | null>(null);
-    const [unidadeNome, setUnidadeNome] = useState<string>("");
     const [profile, setProfile] = useState<any>({});
 
 
     // Este estado serve apenas para forçar o componente a atualizar a cada minuto
-    const [tick, setTick] = useState(0);
+    const [agora, setAgora] = useState(() => Date.now());
 
     useEffect(() => {
         const timer = setInterval(() => {
-            setTick((prev) => prev + 1);
+            setAgora(Date.now());
         }, 30000);
 
         return () => clearInterval(timer);
@@ -141,7 +138,7 @@ export default function RecepcaoPage() {
 
                 if (error) throw error;
                 setRecepcionistas(data || []);
-            } catch (err) {
+            } catch {
             } finally {
                 setLoadingRecepcionistas(false);
             }
@@ -224,7 +221,7 @@ export default function RecepcaoPage() {
                     .single();
 
                 if (profile) {
-                    let idFinal = profile.unidade_id;
+                    const idFinal = profile.unidade_id;
 
                     // 2. Lógica de Admin (igual à ConfiguracoesPage)
                     // if (profile.role === 'admin') {
@@ -237,7 +234,6 @@ export default function RecepcaoPage() {
                     // }
 
                     setUnidadeId(idFinal);
-                    setUnidadeNome((profile.unidades as any)?.flag || "");
                     setProfile(profile)
 
                     // 3. Gerenciamento da Sessão de Guichê
@@ -286,7 +282,6 @@ export default function RecepcaoPage() {
         // 2. DINÂMICO: Se ainda está em aberto, calcula a diferença agora.
         // Como o 'tick' lá em cima muda a cada minuto, esta parte será re-executada.
         const dataCriacao = new Date(item.created_at).getTime();
-        const agora = Date.now();
         const diffMs = agora - dataCriacao;
         const min = Math.max(0, Math.floor(diffMs / 1000 / 60));
 
@@ -412,22 +407,7 @@ export default function RecepcaoPage() {
 
             return finalComp;
         });
-    }, [data, filtroTipo, filtroPesquisa, ordenacao, unidadeId]);
-
-    async function fetchData(idForcado?: string) {
-        const idParaBuscar = idForcado || unidadeId;
-
-        // Se não tiver ID e não for forçado, não faz nada
-        if (!idParaBuscar) return;
-
-        const { data: result, error } = await supabase.rpc("get_painel_recepcao_novo", {
-            p_unidade_id: idParaBuscar
-        });
-
-        if (!error && result) {
-            setData(result);
-        }
-    }
+    }, [data, filtroTipo, filtroPesquisa, ordenacao, agora]);
 
     useEffect(() => {
         if (!unidadeId) return;
@@ -493,14 +473,6 @@ export default function RecepcaoPage() {
     async function handleSalvarDadosFicha() {
         if (!importModal.item) return;
         setLoadingAction("saving_ficha");
-
-        const idTriagem = especialidades.find(e =>
-            e.nome.toLowerCase().includes("triagem")
-        )?.id;
-
-        const especialidadesFinal = idTriagem
-            ? Array.from(new Set([idTriagem, ...formFicha.especialidadesSelecionadas]))
-            : formFicha.especialidadesSelecionadas;
 
         const { error } = await supabase.rpc("registrar_dados_ficha_novo", {
             p_atendimento_id: importModal.item.id,
@@ -658,7 +630,7 @@ export default function RecepcaoPage() {
             toast.success(`Senha ${senhaGerada} gerada!`);
             // fetchData();
 
-        } catch (err) {
+        } catch {
             toast.error("Erro ao gerar senha");
         } finally {
             generatingRef.current = false;
@@ -686,8 +658,9 @@ export default function RecepcaoPage() {
             delete timersRef.current[id];
         }
         setFinalizandoIds(prev => {
-            const { [id]: _, ...rest } = prev;
-            return rest;
+            const atualizado = { ...prev };
+            delete atualizado[id];
+            return atualizado;
         });
     };
 
@@ -716,8 +689,9 @@ export default function RecepcaoPage() {
                         p_especialidades_ids: idsParaFinalizar
                     });
 
-                    const { [id]: _, ...rest } = prev;
-                    return rest;
+                    const atualizado = { ...prev };
+                    delete atualizado[id];
+                    return atualizado;
                 }
 
                 return { ...prev, [id]: tempoAtual - 1 };
@@ -727,7 +701,7 @@ export default function RecepcaoPage() {
         timersRef.current[id] = interval;
     };
 
-    const ThOrdenavel = ({ label, coluna }: { label: string, coluna: keyof Atendimento | 'tempo_espera' }) => (
+    const renderThOrdenavel = (label: string, coluna: keyof Atendimento | 'tempo_espera') => (
         <th
             className={`text-left p-4 font-black uppercase tracking-[0.15em] text-[9px] cursor-pointer transition-colors ${ordenacao.coluna === coluna ? 'text-blue-500' : 'hover:text-blue-500'}`}
             onClick={() => handleSort(coluna)}
@@ -809,7 +783,7 @@ export default function RecepcaoPage() {
 
             toast.success("Ficha processada com sucesso!", { id: toastId });
 
-        } catch (error: any) {
+        } catch {
             toast.error("Falha na importação", { id: toastId });
         } finally {
             setLoadingAction(null);
@@ -951,7 +925,7 @@ export default function RecepcaoPage() {
                     id: toastId
                 });
             }
-        } catch (error) {
+        } catch {
             toast.error("Falha ao buscar ficha", {
                 id: toastId
             });
@@ -964,27 +938,6 @@ export default function RecepcaoPage() {
         contentRef: componentRef,
         documentTitle: `Ficha_${formFicha.sequencial}`,
     });
-
-    useEffect(() => {
-
-        async function getRole() {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) {
-                const { data, error } = await supabase
-                    .from('profiles')
-                    .select('role')
-                    .eq('id', user.id)
-                    .single();
-
-                if (data && !error) {
-                    setUserRole(data.role);
-                } else {
-                    setUserRole("user");
-                }
-            }
-        }
-        getRole();
-    }, []);
 
     const obterIdsConsolidados = () => {
         return especialidades
@@ -1074,7 +1027,7 @@ export default function RecepcaoPage() {
                         </div>
 
                         {/* LADO DIREITO: BOTÕES DE GERAR SENHA E ATUALIZAR */}
-                        <div className="flex flex-row justify-end items-center gap-2 w-full">
+                            <div className="flex w-full flex-wrap items-center justify-end gap-2">
                             <div
                                 className="flex h-8 items-center gap-1 bg-blue-600 text-muted p-1 rounded-full hover:bg-blue-500 hover:text-white cursor-pointer transition-all shrink-0 "
                                 onClick={() => gerarSenha("NORMAL")}
@@ -1103,18 +1056,6 @@ export default function RecepcaoPage() {
                                 </Button>
                             </div>
 
-                            {/* <div
-                                className="flex h-8 items-center gap-1 bg-green-500 text-muted p-1 rounded-full hover:bg-green-700 hover:text-white cursor-pointer transition-all shrink-0"
-                            >
-                                <RefreshCw className={`w-5 h-5 font-bold ml-1 ${loadingAction ? 'animate-spin' : ''}`} />
-                                <Button
-                                    size="sm"
-                                    className="uppercase bg-transparent font-bold text-[12px] tracking-widest pl-0"
-                                    onClick={() => fetchData()}
-                                >
-                                    Atualizar
-                                </Button>
-                            </div> */}
                             <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                                 <RefreshCw className="w-3 h-3 animate-spin" />
                                 <span>
@@ -1130,13 +1071,13 @@ export default function RecepcaoPage() {
                                 <table className="w-full text-[13px]">
                                     <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
                                         <tr>
-                                            <ThOrdenavel label="Senha" coluna="senha_codigo" />
-                                            <ThOrdenavel label="Nome" coluna="nome" />
-                                            <ThOrdenavel label="Sequencial Ficha" coluna="ficha_sequencial" />
-                                            <ThOrdenavel label="Chegada" coluna="created_at" />
-                                            <ThOrdenavel label="Tempo Espera" coluna="tempo_espera" />
-                                            <ThOrdenavel label="Status" coluna="status" />
-                                            <ThOrdenavel label="Guichê" coluna="guiche" />
+                                            {renderThOrdenavel("Senha", "senha_codigo")}
+                                            {renderThOrdenavel("Nome", "nome")}
+                                            {renderThOrdenavel("Sequencial Ficha", "ficha_sequencial")}
+                                            {renderThOrdenavel("Chegada", "created_at")}
+                                            {renderThOrdenavel("Tempo Espera", "tempo_espera")}
+                                            {renderThOrdenavel("Status", "status")}
+                                            {renderThOrdenavel("Guichê", "guiche")}
                                             <th className="text-right p-4 font-bold uppercase tracking-widest text-[10px]">Ações</th>
                                         </tr>
                                     </thead>

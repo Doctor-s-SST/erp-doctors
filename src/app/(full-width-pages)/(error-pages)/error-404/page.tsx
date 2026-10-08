@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 
 export default function Error404() {
   return (
-    <div className="relative flex flex-col items-center justify-center min-h-screen p-6 overflow-hidden z-1">
+    <div className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden p-4 pb-20 sm:p-6 z-1">
       <GridShape />
       <div className="mx-auto w-full max-w-[242px] text-center sm:max-w-[472px]">
         <h1 className="mb-8 font-bold text-gray-800 text-title-md dark:text-white/90 xl:text-title-2xl">
@@ -45,9 +45,8 @@ export default function Error404() {
           Voltar para página de inicio
         </Link>
       </div>
-      {/* <!-- Footer --> */}
-      <p className="absolute text-sm text-center text-gray-500 -translate-x-1/2 bottom-6 left-1/2 dark:text-gray-400">
-        &copy; {new Date().getFullYear()} - Doctor's
+      <p className="absolute bottom-5 left-1/2 w-full -translate-x-1/2 px-4 text-center text-sm text-gray-500 dark:text-gray-400 sm:bottom-6">
+        &copy; {new Date().getFullYear()} - Doctor&apos;s
       </p>
     </div>
   );

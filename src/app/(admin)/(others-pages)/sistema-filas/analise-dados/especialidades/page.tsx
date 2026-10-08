@@ -8,7 +8,6 @@ import { toast } from "sonner"
 // UI Components
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 
 // Icons
 import {
@@ -102,7 +101,6 @@ export default function IndicadoresMensais() {
     const [unidadeId, setUnidadeId] = useState("")
     const [loading, setLoading] = useState(false)
 
-    const [dadosRelatorio, setDadosRelatorio] = useState<any[]>([])
     const [dadosGraficos, setDadosGraficos] = useState<any>(null)
     const [especialidadesSelecionadas, setEspecialidadesSelecionadas] = useState<string[]>([])
 
@@ -209,14 +207,12 @@ export default function IndicadoresMensais() {
 
                 if (resposta.status === "empty") {
                     toast.warning(`0 atendimentos encontrados`);
-                    setDadosRelatorio([]);
                     setDadosGraficos(null);
                     terminou = true;
                 }
 
                 if (resposta.status === "done") {
                     terminou = true;
-                    setDadosRelatorio(resposta.data?.listaRelatorios || []);
                     setDadosGraficos(resposta.charts || null);
 
                     const totalProcessados = resposta.charts?.view_atendimento?.total_atendimentos_mes ?? 0;

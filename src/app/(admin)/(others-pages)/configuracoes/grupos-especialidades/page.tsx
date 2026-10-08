@@ -5,20 +5,12 @@ import { supabase } from "@/lib/supabase";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-
 import {
-    Building2,
-    ImagePlus,
     Loader2,
-    Save,
-    ShieldCheck,
-    ImageIcon,
     Layers3,
 } from "lucide-react";
 
 import { toast } from "sonner";
-import { refresh } from "next/cache";
 import { Badge } from "@/components/ui/badge";
 import { DialogGrupoEspecialidade } from "@/components/grupos/DialogGrupoEspecialidade";
 

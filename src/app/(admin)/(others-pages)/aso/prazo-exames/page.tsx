@@ -394,7 +394,7 @@ export default function PrazosAsoPage() {
             </header>
 
             <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 gap-1">
-                <CardHeader className="flex flex-row items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-800">
+                <CardHeader className="flex flex-col items-start justify-between gap-3 border-b border-gray-100 pb-3 dark:border-gray-800 sm:flex-row sm:items-center">
                     <CardTitle className="text-xs font-black uppercase text-slate-700 dark:text-slate-200">
                         <div className="flex flex-col gap-1">
                             <p> Prazos Cadastrados ({prazos.length})</p>
@@ -414,7 +414,7 @@ export default function PrazosAsoPage() {
                         />
                     </Button>
                 </CardHeader>
-                <CardContent className="p-0">
+                <CardContent className="overflow-x-auto p-0">
                     <Table>
                         <TableHeader className="bg-slate-50 dark:bg-slate-800/50">
                             <TableRow>
