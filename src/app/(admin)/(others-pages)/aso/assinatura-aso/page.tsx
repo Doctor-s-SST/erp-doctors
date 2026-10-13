@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useState, useMemo, useCallback } from "react";
+import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 
@@ -44,6 +44,142 @@ import { ConfirmarAcaoModal } from "./components/ConfirmarAcaoModal";
 import { RegistrarPendenciaModal } from "./components/RegistrarPendenciaModal";
 import { EnviarPendenciasModal } from "./components/EnviarPendenciasModal";
 import { criarPayloadAcaoAso, criarPayloadAcoesAso, AcaoAso } from "@/lib/aso-assinatura";
+import { mensagemErrosFuncionarios } from "@/lib/resultado-acao-aso";
+
+
+type ObjetoJson = Record<string, unknown>;
+type ProblemaAcao = {
+    id: string;
+    nome: string;
+    ficha: string;
+    acao: string;
+    etapa: string;
+    mensagem: string;
+    execucao?: string;
+    origem: "n8n" | "resposta" | "banco";
+};
+type ResultadoAcao = {
+    confirmados: Pacientes[];
+    problemas: ProblemaAcao[];
+};
+type StatusLocal = "ASSINADO" | "PENDENCIA" | "ENVIADO" | "PENDENCIA_ENVIADA";
+
+const objetoJson = (v: unknown): v is ObjetoJson =>
+    typeof v === "object" && v !== null && !Array.isArray(v);
+const textoSeguro = (v: unknown): string =>
+    typeof v === "string" || typeof v === "number" ? String(v).trim() : "";
+
+function problemaDoPaciente(
+    paciente: Pacientes,
+    acao: string,
+    mensagem: string,
+    origem: ProblemaAcao["origem"],
+    etapa: string,
+    execucao?: string
+): ProblemaAcao {
+    return {
+        id: paciente.id ?? "",
+        nome: paciente.nome_paciente || "Paciente sem nome",
+        ficha: textoSeguro(paciente.sequencial_ficha),
+        acao, mensagem, origem, etapa, execucao,
+    };
+}
+
+// Contrato final do webhook: [] ou [{ paciente, acao, etapa, mensagem }].
+// Também aceita { problematicos: [...] }, se a rota mantiver esse envelope.
+function interpretarRetornoN8n(
+    retorno: unknown,
+    enviados: Pacientes[],
+    acao: AcaoAso
+): ResultadoAcao {
+    const invalido = () => new Error(
+        "A resposta recebida não permite confirmar o resultado. Confira a execução antes de repetir a ação."
+    );
+    if (objetoJson(retorno) && (
+        retorno.success === false || retorno.sucesso === false ||
+        (retorno.error !== undefined && retorno.error !== false && retorno.error !== null) ||
+        (retorno.erro !== undefined && retorno.erro !== false && retorno.erro !== null)
+    )) throw invalido();
+    const lista = Array.isArray(retorno)
+        ? retorno
+        : objetoJson(retorno) && Array.isArray(retorno.problematicos)
+            ? retorno.problematicos : null;
+    if (!lista) throw invalido();
+
+    const falhas = new Map<number, ProblemaAcao>();
+    for (const valor of lista) {
+        if (!objetoJson(valor)) throw invalido();
+        // Uma lista de sucessos/itens genéricos não é uma lista de problemas.
+        if (valor.erro === false || valor.problema === false || valor.success === true) throw invalido();
+        if (textoSeguro(valor.acao) && textoSeguro(valor.acao) !== acao) throw invalido();
+        const p = objetoJson(valor.paciente) ? valor.paciente : {};
+        const campos = ["id", "codigo_empresa_soc", "codigo_ged_soc", "sequencial_ficha", "unidade_id"]
+            .filter(campo => textoSeguro(p[campo]));
+        const temIdentidade = campos.includes("id") || (
+            campos.includes("codigo_empresa_soc") &&
+            (campos.includes("codigo_ged_soc") || campos.includes("sequencial_ficha"))
+        );
+        const temIndice = Object.prototype.hasOwnProperty.call(valor, "indice");
+        if (temIndice && (
+            typeof valor.indice !== "number" || !Number.isInteger(valor.indice) ||
+            valor.indice < 0 || valor.indice >= enviados.length
+        )) throw invalido();
+        if (!temIdentidade && !temIndice) throw invalido();
+
+        const candidatos = enviados.map((paciente, indice) => ({ paciente, indice }))
+            .filter(({ paciente, indice }) => {
+                if (temIndice && indice !== valor.indice) return false;
+                const local = paciente as unknown as ObjetoJson;
+                return campos.every(campo => textoSeguro(local[campo]) === textoSeguro(p[campo]));
+            });
+        // Falha não identificada/ambígua bloqueia a inferência de sucesso do lote inteiro.
+        if (candidatos.length !== 1) throw invalido();
+        const { paciente, indice } = candidatos[0];
+        const mensagem = textoSeguro(valor.mensagem) || "O processamento deste paciente não foi concluído.";
+        const problema = problemaDoPaciente(
+            paciente, acao, mensagem, "n8n",
+            textoSeguro(valor.etapa) || "processamento",
+            textoSeguro(valor.execucao) || undefined
+        );
+        const anterior = falhas.get(indice);
+        if (anterior) {
+            problema.mensagem = [...new Set([anterior.mensagem, mensagem])].join(" | ");
+            problema.etapa = [...new Set([anterior.etapa, problema.etapa])].join(" / ");
+        }
+        falhas.set(indice, problema);
+    }
+    return {
+        confirmados: enviados.filter((_, indice) => !falhas.has(indice)),
+        problemas: [...falhas.values()],
+    };
+}
+
+async function solicitarAcaoN8n(
+    payload: unknown,
+    enviados: Pacientes[],
+    acao: AcaoAso
+): Promise<ResultadoAcao> {
+    let response: Response;
+    try {
+        response = await fetch("/api/enviar-asos-concluidos", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        });
+    } catch {
+        throw new Error("A conexão foi interrompida e o resultado não foi confirmado. Confira a execução antes de reenviar.");
+    }
+    if (!response.ok) {
+        throw new Error(`A API retornou HTTP ${response.status}. O resultado não foi confirmado; confira a execução antes de repetir.`);
+    }
+    let retorno: unknown;
+    try {
+        retorno = await response.json();
+    } catch {
+        throw new Error("A API não retornou um JSON válido. O resultado não foi confirmado; confira a execução antes de repetir.");
+    }
+    return interpretarRetornoN8n(retorno, enviados, acao);
+}
 
 const BADGE_CONFIG: Record<string, { label: string; className: string }> = {
     ASSINADO: { label: "Assinado", className: "bg-blue-600 text-white" },
@@ -80,6 +216,12 @@ export default function AssinaturaAsoPage() {
 
     const [itemSelecionado, setItemSelecionado] = useState<Pacientes | null>(null);
     const [enviando, setEnviando] = useState(false);
+
+    const requisicaoEmAndamento = useRef(false);
+    const [problemasAcao, setProblemasAcao] = useState<ProblemaAcao[]>([]);
+    const [resumoAcao, setResumoAcao] = useState<{
+        total: number; concluidos: number; problemas: number;
+    } | null>(null);
 
     // Permissões
     const isAdmin = role === "admin";
@@ -164,8 +306,8 @@ export default function AssinaturaAsoPage() {
     const abrirPendencias = (itens: Pacientes[], modo: "REGISTRAR" | "ENVIAR" | "REENVIAR") => {
         setModoPendencia(modo);
         setPendenciasParaEnviar(itens);
-        setObservacoesEnvioPendencia(Object.fromEntries(
-            itens.flatMap((item) => item.id ? [[item.id, item.observacao || ""]] : [])
+        setObservacoesEnvioPendencia(prev => Object.fromEntries(
+            itens.flatMap(item => item.id ? [[item.id, prev[item.id] ?? item.observacao ?? ""]] : [])
         ));
     };
 
@@ -173,6 +315,7 @@ export default function AssinaturaAsoPage() {
     const abrirReenvioPendencias = (itens: Pacientes[]) => abrirPendencias(itens, "REENVIAR");
 
     const fecharEnvioPendencias = () => {
+        if (requisicaoEmAndamento.current) return;
         setPendenciasParaEnviar([]);
         setObservacoesEnvioPendencia({});
     };
@@ -184,6 +327,7 @@ export default function AssinaturaAsoPage() {
     };
 
     const fecharConfirmModal = () => {
+        if (requisicaoEmAndamento.current) return;
         setTipoConfirmacao(null);
         setItemSelecionado(null);
     };
@@ -277,127 +421,119 @@ export default function AssinaturaAsoPage() {
         );
     };
 
-    async function enviarAcaoAso(
-        pacientesParaEnviar: Pacientes[],
-        acao: AcaoAso,
-        observacao?: string
-    ) {
-        const response = await fetch("/api/enviar-asos-concluidos", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify(criarPayloadAcaoAso(pacientesParaEnviar, acao, observacao)),
-        });
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error("Erro na API:", errorText);
-            throw new Error("Falha ao notificar a API");
+    // Uma única interpretação de retorno para todas as ações da página.
+    const executarAcao = async ({
+        itens, acao, payload, statusLocal, observacoes, textoSucesso,
+    }: {
+        itens: Pacientes[];
+        acao: AcaoAso;
+        payload: unknown;
+        statusLocal?: StatusLocal;
+        observacoes?: Record<string, string>;
+        textoSucesso: string;
+    }): Promise<boolean> => {
+        if (requisicaoEmAndamento.current || !itens.length) return false;
+        if (itens.some(item => !item.id)) {
+            toast.error("Existem pacientes sem identificação. Atualize a página antes de continuar.");
+            return false;
         }
+        requisicaoEmAndamento.current = true;
+        setEnviando(true);
+        setProblemasAcao([]);
+        setResumoAcao(null);
+        try {
+            const resultado = await solicitarAcaoN8n(payload, itens, acao);
+            const problemas = [...resultado.problemas];
+            const atualizados: Array<{ id: string; dados: Partial<Pacientes> }> = [];
 
-        return response.json();
-    }
+            // Só os pacientes confirmados pelo n8n podem mudar de status no banco.
+            // Cada gravação tem resultado próprio, inclusive quando outra falha.
+            if (statusLocal) {
+                const gravacoes = await Promise.allSettled(resultado.confirmados.map(async paciente => {
+                    const dados: Partial<Pacientes> = { acao: statusLocal };
+                    const observacao = observacoes?.[paciente.id!];
+                    if (observacao !== undefined) dados.observacao = observacao;
+                    const { data, error } = await supabase.from("pacientes_assinatura")
+                        .update(dados).eq("id", paciente.id!).select("id");
+                    if (error || !data?.length) throw new Error("Gravação não confirmada.");
+                    return { id: paciente.id!, dados };
+                }));
+                gravacoes.forEach((gravacao, indice) => {
+                    if (gravacao.status === "fulfilled") {
+                        atualizados.push(gravacao.value);
+                    } else {
+                        problemas.push(problemaDoPaciente(
+                            resultado.confirmados[indice], acao,
+                            "A ação foi confirmada pelo n8n, mas o status não pôde ser salvo nesta página. Confira o cadastro; não repita o envio apenas para corrigir o status.",
+                            "banco", "atualizar_status"
+                        ));
+                    }
+                });
+                setPacientes(prev => prev.map(paciente => {
+                    const atualizado = atualizados.find(item => item.id === paciente.id);
+                    return atualizado ? { ...paciente, ...atualizado.dados } : paciente;
+                }));
+            }
 
-    const registrarAcao = async (
-        ids: string[],
-        acao: "ASSINADO" | "PENDENCIA" | "ENVIADO" | "PENDENCIA_ENVIADA",
-        observacao?: string
-    ) => {
-        const payload: Partial<Pacientes> = { acao };
-        if (observacao) payload.observacao = observacao;
-
-        const { error } = await supabase
-            .from("pacientes_assinatura")
-            .update(payload)
-            .in("id", ids);
-
-        if (error) throw error;
-
-        setPacientes((prev: any) =>
-            prev.map((p: any) => (ids.includes(p.id) ? { ...p, ...payload } : p))
-        );
+            // Remove da seleção todo sucesso externo, mesmo se a gravação local falhar.
+            // Isso evita incluir esse paciente novamente no próximo envio em massa.
+            const idsConfirmados = new Set(resultado.confirmados.map(item => item.id!));
+            setSelecionadosEmMassa(prev => prev.filter(id => !idsConfirmados.has(id)));
+            const concluidos = statusLocal ? atualizados.length : resultado.confirmados.length;
+            setProblemasAcao(problemas);
+            setResumoAcao({ total: itens.length, concluidos, problemas: problemas.length });
+            if (!problemas.length) {
+                toast.success(`${concluidos} ${textoSucesso}`);
+            } else {
+                toast.error(mensagemErrosFuncionarios(problemas.map(problema => problema.nome)));
+            }
+        } catch (error) {
+            const mensagem = error instanceof Error ? error.message : "Não foi possível confirmar o resultado da operação.";
+            setProblemasAcao(itens.map(item => problemaDoPaciente(
+                item, acao, mensagem, "resposta", "confirmar_resultado"
+            )));
+            setResumoAcao({ total: itens.length, concluidos: 0, problemas: itens.length });
+            toast.error(mensagem);
+        } finally {
+            requisicaoEmAndamento.current = false;
+            setEnviando(false);
+        }
+        return true;
     };
 
     // Confirmar Ação Individual
     const confirmarAcao = async () => {
         if (!itemSelecionado?.id || !tipoConfirmacao) return;
-
-        const acao: AcaoAso =
-            tipoConfirmacao === "ASSINATURA"
-                ? "ASSINADO"
-                : tipoConfirmacao === "REENVIO_ASO"
-                    ? "REENVIAR-ASO"
-                    : "ENVIADO";
-
-        setEnviando(true);
-        try {
-            await enviarAcaoAso([itemSelecionado], acao);
-            if (tipoConfirmacao !== "REENVIO_ASO") {
-                await registrarAcao([itemSelecionado.id], acao as any);
-            }
-
-            toast.success(
-                tipoConfirmacao === "ASSINATURA"
-                    ? "ASO assinado!"
-                    : tipoConfirmacao === "REENVIO_ASO"
-                        ? "ASO reenviado com sucesso!"
-                        : "ASO enviado!"
-            );
-            fecharConfirmModal();
-        } catch (err) {
-            console.error(err);
-            toast.error("Erro ao registrar a ação do ASO.");
-        } finally {
-            setEnviando(false);
-        }
+        const tipo = tipoConfirmacao;
+        const acao: AcaoAso = tipo === "ASSINATURA" ? "ASSINADO"
+            : tipo === "REENVIO_ASO" ? "REENVIAR-ASO" : "ENVIADO";
+        const realizado = await executarAcao({
+            itens: [itemSelecionado], acao,
+            payload: criarPayloadAcaoAso([itemSelecionado], acao),
+            statusLocal: tipo === "REENVIO_ASO" ? undefined : tipo === "ASSINATURA" ? "ASSINADO" : "ENVIADO",
+            textoSucesso: tipo === "ASSINATURA" ? "ASO(s) marcado(s) como assinado(s)!"
+                : tipo === "REENVIO_ASO" ? "ASO(s) reenviado(s) com sucesso!" : "ASO(s) enviado(s) com sucesso!",
+        });
+        if (realizado) fecharConfirmModal();
     };
 
-    // Confirmar Envio em Massa
     const enviarEmMassa = async (tipo: "ASO" | "PENDENCIA") => {
         const acaoAtual = tipo === "ASO" ? "ASSINADO" : "PENDENCIA";
-        const itensParaEnviar = pacientes.filter((p) => p.id && selecionadosEmMassa.includes(p.id) && p.acao === acaoAtual);
-        const ids = itensParaEnviar.flatMap((p) => p.id ? [p.id] : []);
-        if (!itensParaEnviar.length) return;
-        if (tipo === "PENDENCIA") {
-            abrirEnvioPendencias(itensParaEnviar);
-            return;
-        }
-
-        setEnviando(true);
-        try {
-            await enviarAcaoAso(itensParaEnviar, "ENVIADO");
-            await registrarAcao(ids, "ENVIADO");
-
-            toast.success(`${itensParaEnviar.length} ASO(s) enviados com sucesso!`);
-            setSelecionadosEmMassa((prev) => prev.filter((id) => !ids.includes(id)));
-        } catch (err) {
-            console.error(err);
-            toast.error("Erro ao realizar o envio em massa dos ASOs.");
-        } finally {
-            setEnviando(false);
-        }
+        const itens = pacientes.filter(p => p.id && selecionadosEmMassa.includes(p.id) && p.acao === acaoAtual);
+        if (!itens.length) return;
+        if (tipo === "PENDENCIA") { abrirEnvioPendencias(itens); return; }
+        await executarAcao({
+            itens, acao: "ENVIADO", payload: criarPayloadAcaoAso(itens, "ENVIADO"),
+            statusLocal: "ENVIADO", textoSucesso: "ASO(s) enviado(s) com sucesso!",
+        });
     };
 
     const assinarEmMassa = async () => {
-        const itens = pacientes.filter(
-            (p) => p.id && selecionadosEmMassa.includes(p.id) && !p.acao
-        );
-        const ids = itens.flatMap((p) => p.id ? [p.id] : []);
-        if (!itens.length) return;
-
-        setEnviando(true);
-        try {
-            await enviarAcaoAso(itens, "ASSINADO");
-            await registrarAcao(ids, "ASSINADO");
-            setSelecionadosEmMassa((prev) => prev.filter((id) => !ids.includes(id)));
-            toast.success(`${itens.length} ASO(s) marcado(s) como assinado(s)!`);
-        } catch (error) {
-            console.error(error);
-            toast.error("Erro ao registrar as assinaturas em massa.");
-        } finally {
-            setEnviando(false);
-        }
+        const itens = pacientes.filter(p => p.id && selecionadosEmMassa.includes(p.id) && !p.acao);
+        await executarAcao({
+            itens, acao: "ASSINADO", payload: criarPayloadAcaoAso(itens, "ASSINADO"),
+            statusLocal: "ASSINADO", textoSucesso: "ASO(s) marcado(s) como assinado(s)!",
+        });
     };
 
     const abrirPendenciasEmMassa = () => {
@@ -408,89 +544,39 @@ export default function AssinaturaAsoPage() {
     };
 
     const confirmarEnvioPendencias = async () => {
-        const itens = pendenciasParaEnviar.filter((item) => item.id);
-        if (itens.some((item) => !observacoesEnvioPendencia[item.id!]?.trim())) {
+        const itens = pendenciasParaEnviar.filter(item => item.id);
+        if (!itens.length) return;
+        if (itens.some(item => !observacoesEnvioPendencia[item.id!]?.trim())) {
             toast.warning("Informe a justificativa de todos os pacientes.");
             return;
         }
-
-        setEnviando(true);
-        try {
-            const registrando = modoPendencia === "REGISTRAR";
-            const reenviando = modoPendencia === "REENVIAR";
-            const acaoApi: AcaoAso = registrando
-                ? "PENDENCIA"
-                : reenviando
-                    ? "REENVIAR-PENDENCIA"
-                    : "ENVIAR-PENDENCIA";
-
-            const response = await fetch("/api/enviar-asos-concluidos", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(criarPayloadAcoesAso(itens.map((paciente) => ({
-                    paciente,
-                    acao: acaoApi,
-                    observacao: observacoesEnvioPendencia[paciente.id!].trim(),
-                })))),
-            });
-            if (!response.ok) throw new Error("Falha ao enviar pendências");
-
-            const statusBd = registrando ? ("PENDENCIA" as const) : ("PENDENCIA_ENVIADA" as const);
-
-            const resultados = await Promise.all(itens.map((paciente) => supabase
-                .from("pacientes_assinatura")
-                .update({
-                    acao: statusBd,
-                    observacao: observacoesEnvioPendencia[paciente.id!].trim(),
-                })
-                .eq("id", paciente.id!)));
-            const erro = resultados.find((resultado) => resultado.error)?.error;
-            if (erro) throw erro;
-
-            const ids = itens.map((item) => item.id!);
-            setPacientes((prev) => prev.map((paciente) => paciente.id && ids.includes(paciente.id)
-                ? {
-                    ...paciente,
-                    acao: statusBd,
-                    observacao: observacoesEnvioPendencia[paciente.id].trim(),
-                }
-                : paciente));
-            setSelecionadosEmMassa((prev) => prev.filter((id) => !ids.includes(id)));
-            toast.success(
-                registrando
-                    ? `${itens.length} pendência(s) registrada(s) com sucesso!`
-                    : reenviando
-                        ? `${itens.length} pendência(s) reenviada(s) com sucesso!`
-                        : `${itens.length} pendência(s) enviada(s) com sucesso!`
-            );
-            fecharEnvioPendencias();
-        } catch (error) {
-            console.error(error);
-            toast.error("Erro ao enviar as pendências.");
-        } finally {
-            setEnviando(false);
+        const registrando = modoPendencia === "REGISTRAR";
+        const reenviando = modoPendencia === "REENVIAR";
+        const acao: AcaoAso = registrando ? "PENDENCIA" : reenviando ? "REENVIAR-PENDENCIA" : "ENVIAR-PENDENCIA";
+        const observacoes = Object.fromEntries(itens.map(item => [item.id!, observacoesEnvioPendencia[item.id!].trim()]));
+        const realizado = await executarAcao({
+            itens, acao,
+            payload: criarPayloadAcoesAso(itens.map(paciente => ({
+                paciente, acao, observacao: observacoes[paciente.id!],
+            }))),
+            statusLocal: registrando ? "PENDENCIA" : "PENDENCIA_ENVIADA",
+            observacoes,
+            textoSucesso: registrando ? "pendência(s) registrada(s) com sucesso!"
+                : reenviando ? "pendência(s) reenviada(s) com sucesso!" : "pendência(s) enviada(s) com sucesso!",
+        });
+        if (realizado) {
+            // Fecha o modal para mostrar os problemas. Mantém justificativas para nova abertura.
+            setPendenciasParaEnviar([]);
         }
     };
 
     const reenviarAsoEmMassa = async () => {
-        const itensParaReenviar = pacientes.filter(
-            (p) => p.id && selecionadosEmMassa.includes(p.id) && (p.acao === "ENVIADO" || p.acao === "ENVIADO_DIRETO")
-        );
-        if (!itensParaReenviar.length) return;
-
-        const ids = itensParaReenviar.flatMap((p) => (p.id ? [p.id] : []));
-
-        setEnviando(true);
-        try {
-            await enviarAcaoAso(itensParaReenviar, "REENVIAR-ASO");
-            toast.success(`${itensParaReenviar.length} ASO(s) reenviado(s) com sucesso!`);
-            setSelecionadosEmMassa((prev) => prev.filter((id) => !ids.includes(id)));
-        } catch (err) {
-            console.error(err);
-            toast.error("Erro ao reenviar os ASOs.");
-        } finally {
-            setEnviando(false);
-        }
+        const itens = pacientes.filter(p => p.id && selecionadosEmMassa.includes(p.id)
+            && (p.acao === "ENVIADO" || p.acao === "ENVIADO_DIRETO"));
+        await executarAcao({
+            itens, acao: "REENVIAR-ASO", payload: criarPayloadAcaoAso(itens, "REENVIAR-ASO"),
+            textoSucesso: "ASO(s) reenviado(s) com sucesso!",
+        });
     };
 
     const reenviarPendenciaEmMassa = () => {
@@ -504,27 +590,17 @@ export default function AssinaturaAsoPage() {
 
     const confirmarPendencia = async () => {
         if (!itemSelecionado?.id) return;
-
         if (!justificativa.trim()) {
             toast.warning("Informe a justificativa da pendência.");
             return;
         }
-
-        setEnviando(true);
-        try {
-            await enviarAcaoAso([itemSelecionado], "PENDENCIA", justificativa.trim());
-            await registrarAcao([itemSelecionado.id], "PENDENCIA", justificativa.trim());
-
-            toast.success("Pendência registrada e empresa notificada!");
-            setPendenciaOpen(false);
-            setItemSelecionado(null);
-            setJustificativa("");
-        } catch (err) {
-            console.error(err);
-            toast.error("Erro ao registrar a pendência do ASO.");
-        } finally {
-            setEnviando(false);
-        }
+        const realizado = await executarAcao({
+            itens: [itemSelecionado], acao: "PENDENCIA",
+            payload: criarPayloadAcaoAso([itemSelecionado], "PENDENCIA", justificativa.trim()),
+            statusLocal: "PENDENCIA", observacoes: { [itemSelecionado.id]: justificativa.trim() },
+            textoSucesso: "pendência(s) registrada(s) com sucesso!",
+        });
+        if (realizado) { setPendenciaOpen(false); setItemSelecionado(null); }
     };
 
     const handleCopy = (text: string) => {
@@ -629,6 +705,40 @@ export default function AssinaturaAsoPage() {
                     </div>
                 )}
             </header>
+
+            {enviando && (
+                <div role="status" aria-live="polite" className="rounded-lg border border-blue-300 bg-blue-50 p-4 text-sm text-blue-900 dark:bg-blue-950 dark:text-blue-100">
+                    Processando os pacientes. Aguarde o resultado antes de repetir a ação.
+                </div>
+            )}
+
+            {resumoAcao && (
+                <section aria-label="Resultado da última operação" aria-live="polite"
+                    className={`rounded-lg border p-4 ${resumoAcao.problemas
+                        ? "border-amber-300 bg-amber-50 text-amber-950 dark:bg-amber-950 dark:text-amber-100"
+                        : "border-green-300 bg-green-50 text-green-950 dark:bg-green-950 dark:text-green-100"}`}>
+                    <div className="flex items-center justify-between gap-3">
+                        <p className="font-semibold text-sm">
+                            {resumoAcao.concluidos} de {resumoAcao.total} funcionário(s) concluído(s)
+                        </p>
+                        <Button type="button" variant="ghost" size="sm" aria-label="Fechar resultado"
+                            onClick={() => { setResumoAcao(null); setProblemasAcao([]); }}>
+                            <X className="h-4 w-4" />
+                        </Button>
+                    </div>
+                    {problemasAcao.length > 0 && (
+                        <>
+                            <p className="mt-2 text-xs">Não foi possível processar:</p>
+                            <ul className="mt-2 space-y-1 max-h-80 overflow-y-auto">
+                                {problemasAcao.map((problema, indice) => (
+                                    <li key={`${problema.id}-${indice}`} className="text-sm font-semibold">{problema.nome}</li>
+                                ))}
+                            </ul>
+                        </>
+                    )}
+                </section>
+            )}
+
 
             <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 gap-1">
                 <CardHeader className="flex flex-col md:flex-row items-center gap-4 pb-4 border-b border-gray-100 dark:border-gray-800">
@@ -748,7 +858,8 @@ export default function AssinaturaAsoPage() {
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                onClick={fetchPacientes}
+                                disabled={enviando || loading}
+                                onClick={() => void fetchPacientes()}
                                 className="h-9 w-9 shrink-0"
                             >
                                 <RefreshCw
@@ -774,7 +885,7 @@ export default function AssinaturaAsoPage() {
                                                 )
                                             }
                                             onCheckedChange={toggleSelectAll}
-                                            disabled={elegiveisParaAcao.length === 0}
+                                            disabled={enviando || elegiveisParaAcao.length === 0}
                                             className="h-5 w-5 border-2 border-slate-500 bg-white shadow-sm data-[state=checked]:border-blue-600 data-[state=checked]:bg-blue-600 dark:border-slate-400 dark:bg-slate-900"
                                         />
                                     </TableHead>
@@ -821,6 +932,7 @@ export default function AssinaturaAsoPage() {
                                                 <TableCell className="text-center">
                                                     {canSelect && (
                                                         <Checkbox
+                                                            disabled={enviando}
                                                             checked={isSelected}
                                                             onCheckedChange={() => toggleSelectItem(item.id)}
                                                             className="h-5 w-5 border-2 border-slate-500 bg-white shadow-sm data-[state=checked]:border-blue-600 data-[state=checked]:bg-blue-600 dark:border-slate-400 dark:bg-slate-900"
@@ -860,7 +972,7 @@ export default function AssinaturaAsoPage() {
                                                             <Button
                                                                 variant="ghost"
                                                                 size="sm"
-                                                                onClick={() => abrirConfirmarAssinatura(item)}
+                                                                disabled={enviando} onClick={() => abrirConfirmarAssinatura(item)}
                                                                 className="w-fit px-2 flex gap-2 font-medium text-green-600 bg-green-500/10 hover:bg-green-500/20 hover:text-green-600 border border-green-500/30"
                                                             >
                                                                 <FilePenLine className="w-4 h-4" />
@@ -869,7 +981,7 @@ export default function AssinaturaAsoPage() {
                                                             <Button
                                                                 variant="ghost"
                                                                 size="sm"
-                                                                onClick={() => abrirPendencia(item)}
+                                                                disabled={enviando} onClick={() => abrirPendencia(item)}
                                                                 className="w-fit px-2 flex gap-2 font-medium text-red-600 bg-red-500/10 hover:bg-red-500/20 hover:text-red-600 border border-red-500/30"
                                                             >
                                                                 <MessageCircleWarning className="w-4 h-4" />
@@ -882,7 +994,7 @@ export default function AssinaturaAsoPage() {
                                                         <Button
                                                             variant="ghost"
                                                             size="sm"
-                                                            onClick={() => abrirConfirmarEnvio(item)}
+                                                            disabled={enviando} onClick={() => abrirConfirmarEnvio(item)}
                                                             className="w-fit px-2 flex gap-2 font-medium text-blue-600 bg-blue-500/10 hover:bg-blue-500/20 hover:text-blue-600 border border-blue-500/30 ml-auto"
                                                         >
                                                             <Send className="w-4 h-4" />
@@ -891,7 +1003,7 @@ export default function AssinaturaAsoPage() {
                                                     )}
 
                                                     {isOperador && filtroStatus === "ENVIAR" && item.acao === "PENDENCIA" && (
-                                                        <Button variant="ghost" size="sm" onClick={() => abrirEnvioPendencias([item])} className="w-fit px-2 flex gap-2 font-medium text-red-600 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 ml-auto">
+                                                        <Button variant="ghost" size="sm" disabled={enviando} onClick={() => abrirEnvioPendencias([item])} className="w-fit px-2 flex gap-2 font-medium text-red-600 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 ml-auto">
                                                             <MessageCircleWarning className="w-4 h-4" />
                                                             <span>Enviar pendência</span>
                                                         </Button>
@@ -902,7 +1014,7 @@ export default function AssinaturaAsoPage() {
                                                         <Button
                                                             variant="ghost"
                                                             size="sm"
-                                                            onClick={() => abrirConfirmarReenvioAso(item)}
+                                                            disabled={enviando} onClick={() => abrirConfirmarReenvioAso(item)}
                                                             className="w-fit px-2 flex gap-1.5 font-medium text-cyan-600 bg-cyan-500/10 hover:bg-cyan-500/20 hover:text-cyan-600 border border-cyan-500/30"
                                                             title="Reenviar ASO"
                                                         >
@@ -916,7 +1028,7 @@ export default function AssinaturaAsoPage() {
                                                         <Button
                                                             variant="ghost"
                                                             size="sm"
-                                                            onClick={() => abrirReenvioPendencias([item])}
+                                                            disabled={enviando} onClick={() => abrirReenvioPendencias([item])}
                                                             className="w-fit px-2 flex gap-1.5 font-medium text-violet-600 bg-violet-500/10 hover:bg-violet-500/20 hover:text-violet-600 border border-violet-500/30"
                                                             title="Reenviar pendência"
                                                         >
@@ -966,7 +1078,7 @@ export default function AssinaturaAsoPage() {
                 justificativa={justificativa}
                 enviando={enviando}
                 onJustificativaChange={setJustificativa}
-                onClose={() => setPendenciaOpen(false)}
+                onClose={() => { if (!requisicaoEmAndamento.current) setPendenciaOpen(false); }}
                 onConfirm={confirmarPendencia}
             />
 

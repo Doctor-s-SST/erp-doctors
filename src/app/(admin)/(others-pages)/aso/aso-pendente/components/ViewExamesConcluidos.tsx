@@ -53,6 +53,7 @@ import {
     normalizarNomeExame,
 } from "../utils";
 import { criarPacienteAssinatura, criarPayloadAcaoAso } from "@/lib/aso-assinatura";
+import { interpretarRespostaAcaoAso, mensagemErrosFuncionarios } from "@/lib/resultado-acao-aso";
 
 type FuncionarioComPrazo = FuncionarioItem & {
     prazoAso: { maiorPrazo: number; dataBase: Date; dataLimite: Date } | null;
@@ -635,22 +636,18 @@ export function ViewExamesConcluidos({
                 body: JSON.stringify(criarPayloadAcaoAso(pacientes, "LIBERAR", "ASO montado")),
             });
 
-            if (!response.ok) {
-                throw new Error("Erro ao enviar funcionários.");
+            const resultado = await interpretarRespostaAcaoAso(response, pacientes);
+            const confirmados = resultado.confirmados;
+
+            if (confirmados.length) {
+                const saveBd = await supabase.from("pacientes_assinatura").insert(confirmados);
+                if (saveBd.error) {
+                    toast.error("Erro ao salvar funcionários.");
+                    return;
+                }
             }
 
-            const saveBd = await supabase
-                .from("pacientes_assinatura")
-                .insert(pacientes);
-
-            if (saveBd.error) {
-                toast.error("Erro ao salvar funcionários.");
-                return;
-            }
-
-            await response.json();
-
-            const cpfsSalvos = selecionados.map((f) => f.cpf!);
+            const cpfsSalvos = resultado.indicesConfirmados.map(indice => selecionados[indice].cpf!);
             onFuncionariosSalvos(cpfsSalvos);
 
             setSelectedCpfs((prev) => {
@@ -659,9 +656,8 @@ export function ViewExamesConcluidos({
                 return novo;
             });
 
-            toast.success(
-                `${selecionados.length} funcionário(s) salvo(s) com sucesso!`
-            );
+            if (cpfsSalvos.length) toast.success(`${cpfsSalvos.length} funcionário(s) salvo(s) com sucesso!`);
+            if (resultado.nomesComErro.length) toast.error(mensagemErrosFuncionarios(resultado.nomesComErro));
         } catch {
             toast.error(
                 "Não foi possível salvar os funcionários selecionados."
@@ -690,16 +686,28 @@ export function ViewExamesConcluidos({
                 body: JSON.stringify(criarPayloadAcaoAso(pacientes, "LIBERAR-ENVIAR")),
             });
 
-            if (!response.ok) throw new Error("Erro ao enviar ASO.");
+            const resultado = await interpretarRespostaAcaoAso(response, pacientes);
+            const confirmados = resultado.confirmados.map(item => ({
+                ...item,
+                acao: "ENVIADO_DIRETO" as const,
+                observacao: "Enviado direto",
+            }));
 
-            const saveBd = await supabase.from("pacientes_assinatura").insert(pacientes);
-            if (saveBd.error) throw saveBd.error;
+            if (confirmados.length) {
+                const saveBd = await supabase.from("pacientes_assinatura").insert(confirmados);
+                if (saveBd.error) throw saveBd.error;
+            }
 
-            const cpfsEnviados = selecionados.map((f) => f.cpf!).filter(Boolean);
+            const cpfsEnviados = resultado.indicesConfirmados.map(indice => selecionados[indice].cpf!).filter(Boolean);
             onAsosEnviadosDireto(cpfsEnviados);
 
-            toast.success(`${selecionados.length} ASO(s) enviado(s) com sucesso!`);
-            setSelectedCpfs(new Set());
+            if (cpfsEnviados.length) toast.success(`${cpfsEnviados.length} ASO(s) enviado(s) com sucesso!`);
+            if (resultado.nomesComErro.length) toast.error(mensagemErrosFuncionarios(resultado.nomesComErro));
+            const indicesConfirmados = new Set(resultado.indicesConfirmados);
+            setSelectedCpfs(new Set(
+                selecionados.filter((_, indice) => !indicesConfirmados.has(indice))
+                    .map(f => f.cpf!).filter(Boolean)
+            ));
         } catch {
             toast.error("Não foi possível enviar os ASOs selecionados.");
         } finally {
@@ -735,15 +743,21 @@ export function ViewExamesConcluidos({
                 body: JSON.stringify(criarPayloadAcaoAso(pacientes, "CONCLUIDO", "Concluído")),
             });
 
-            if (!response.ok) throw new Error("Erro ao concluir atendimento.");
+            const resultado = await interpretarRespostaAcaoAso(response, pacientes);
+            const selecionadosConfirmados = resultado.indicesConfirmados.map(indice => selecionados[indice]);
 
             onAtendimentosConcluidos(
-                selecionados
+                selecionadosConfirmados
                     .map((funcionario) => funcionario.cpf || funcionario.cpfFuncionario)
                     .filter((cpf): cpf is string => Boolean(cpf))
             );
-            toast.success(`${selecionados.length} atendimento(s) enviado(s) como concluído(s)!`);
-            setSelectedCpfs(new Set());
+            if (selecionadosConfirmados.length) toast.success(`${selecionadosConfirmados.length} atendimento(s) enviado(s) como concluído(s)!`);
+            if (resultado.nomesComErro.length) toast.error(mensagemErrosFuncionarios(resultado.nomesComErro));
+            const indicesConfirmados = new Set(resultado.indicesConfirmados);
+            setSelectedCpfs(new Set(
+                selecionados.filter((_, indice) => !indicesConfirmados.has(indice))
+                    .map(funcionario => funcionario.cpf!).filter(Boolean)
+            ));
         } catch (error) {
             console.error("Erro ao concluir atendimentos:", error);
             toast.error("Não foi possível concluir os atendimentos selecionados.");
