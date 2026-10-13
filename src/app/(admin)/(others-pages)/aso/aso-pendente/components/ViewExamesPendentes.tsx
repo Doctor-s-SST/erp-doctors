@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -52,7 +52,11 @@ import {
 } from "../utils";
 import { toast } from "sonner";
 import { criarPacienteAssinatura, criarPayloadAcaoAso } from "@/lib/aso-assinatura";
-import { interpretarRespostaAcaoAso, mensagemErrosFuncionarios } from "@/lib/resultado-acao-aso";
+import {
+    interpretarRespostaAcaoAso,
+    mensagemErrosFuncionarios,
+    solicitarResultadoAcaoAso,
+} from "@/lib/resultado-acao-aso";
 
 export function ViewExamesPendentes({
     analytics,
@@ -88,6 +92,8 @@ export function ViewExamesPendentes({
     const [sendingAso, setSendingAso] = useState(false);
     const [concluindoAtendimento, setConcluindoAtendimento] = useState(false);
     const [acaoParaConfirmar, setAcaoParaConfirmar] = useState<"salvar" | "enviar" | "concluido" | null>(null);
+    const operacaoEmAndamento = useRef(false);
+    const processandoAcao = saving || sendingAso || concluindoAtendimento;
 
     /* ============================================================
        PAGINAÇÃO
@@ -488,11 +494,13 @@ export function ViewExamesPendentes({
        SALVAR EM LOTE
     ============================================================ */
     const handleSaveSelection = async () => {
+        if (operacaoEmAndamento.current) return;
         if (selectedCpfs.size === 0) {
             toast.warning("Selecione ao menos um funcionário para salvar.");
             return;
         }
 
+        operacaoEmAndamento.current = true;
         setSaving(true);
 
         try {
@@ -510,13 +518,10 @@ export function ViewExamesPendentes({
                 observacao: "ASO montado",
             }));
 
-            const response = await fetch("/api/enviar-asos-concluidos", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(criarPayloadAcaoAso(pacientes, "LIBERAR", "ASO montado")),
-            });
-
-            const resultado = await interpretarRespostaAcaoAso(response, pacientes, "LIBERAR");
+            const retorno = await solicitarResultadoAcaoAso(
+                criarPayloadAcaoAso(pacientes, "LIBERAR", "ASO montado")
+            );
+            const resultado = interpretarRespostaAcaoAso(retorno, pacientes, "LIBERAR");
             const confirmados = resultado.confirmados;
 
             if (confirmados.length) {
@@ -538,19 +543,24 @@ export function ViewExamesPendentes({
 
             if (cpfsSalvos.length) toast.success(`${cpfsSalvos.length} funcionário(s) salvo(s) com sucesso!`);
             if (resultado.nomesComErro.length) toast.error(mensagemErrosFuncionarios(resultado.nomesComErro));
-        } catch {
-            toast.error("Não foi possível salvar os funcionários selecionados.");
+        } catch (error) {
+            toast.error(error instanceof Error
+                ? error.message
+                : "Não foi possível salvar os funcionários selecionados.");
         } finally {
+            operacaoEmAndamento.current = false;
             setSaving(false);
         }
     };
 
     const handleEnviarAso = async () => {
+        if (operacaoEmAndamento.current) return;
         if (selectedCpfs.size === 0) {
             toast.warning("Selecione ao menos um funcionário para enviar o ASO.");
             return;
         }
 
+        operacaoEmAndamento.current = true;
         setSendingAso(true);
 
         try {
@@ -577,13 +587,10 @@ export function ViewExamesPendentes({
                 observacao: "Enviado direto",
             }));
 
-            const response = await fetch("/api/enviar-asos-concluidos", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(criarPayloadAcaoAso(pacientes, "LIBERAR-ENVIAR")),
-            });
-
-            const resultado = await interpretarRespostaAcaoAso(response, pacientes, "LIBERAR-ENVIAR");
+            const retorno = await solicitarResultadoAcaoAso(
+                criarPayloadAcaoAso(pacientes, "LIBERAR-ENVIAR")
+            );
+            const resultado = interpretarRespostaAcaoAso(retorno, pacientes, "LIBERAR-ENVIAR");
             const confirmados = resultado.confirmados.map(item => ({
                 ...item,
                 acao: "ENVIADO_DIRETO" as const,
@@ -608,18 +615,23 @@ export function ViewExamesPendentes({
             ));
         } catch (error) {
             console.error("Erro ao enviar ASOs:", error);
-            toast.error("Não foi possível enviar os ASOs selecionados.");
+            toast.error(error instanceof Error
+                ? error.message
+                : "Não foi possível enviar os ASOs selecionados.");
         } finally {
+            operacaoEmAndamento.current = false;
             setSendingAso(false);
         }
     };
 
     const handleAtendimentoConcluiido = async () => {
+        if (operacaoEmAndamento.current) return;
         if (selectedCpfs.size === 0) {
             toast.warning("Selecione ao menos um funcionário.");
             return;
         }
 
+        operacaoEmAndamento.current = true;
         setConcluindoAtendimento(true);
 
         try {
@@ -636,13 +648,10 @@ export function ViewExamesPendentes({
                 criarPacienteAssinatura(funcionario, unidadeId)
             );
 
-            const response = await fetch("/api/enviar-asos-concluidos", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(criarPayloadAcaoAso(pacientes, "CONCLUIDO", "Concluído")),
-            });
-
-            const resultado = await interpretarRespostaAcaoAso(response, pacientes, "CONCLUIDO");
+            const retorno = await solicitarResultadoAcaoAso(
+                criarPayloadAcaoAso(pacientes, "CONCLUIDO", "Concluído")
+            );
+            const resultado = interpretarRespostaAcaoAso(retorno, pacientes, "CONCLUIDO");
             const selecionadosConfirmados = resultado.indicesConfirmados.map(indice => selecionados[indice]);
 
             onAtendimentosConcluidos(
@@ -659,8 +668,11 @@ export function ViewExamesPendentes({
             ));
         } catch (error) {
             console.error("Erro ao concluir atendimentos:", error);
-            toast.error("Não foi possível concluir os atendimentos selecionados.");
+            toast.error(error instanceof Error
+                ? error.message
+                : "Não foi possível concluir os atendimentos selecionados.");
         } finally {
+            operacaoEmAndamento.current = false;
             setConcluindoAtendimento(false);
         }
     };
@@ -940,7 +952,7 @@ export function ViewExamesPendentes({
                                 <Button
                                     type="button"
                                     onClick={() => setAcaoParaConfirmar("salvar")}
-                                    disabled={saving || selectedCpfs.size === 0}
+                                    disabled={processandoAcao || selectedCpfs.size === 0}
                                     className="h-8 px-3 text-[10px] font-black uppercase tracking-wide gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white"
                                 >
                                     {saving ? (
@@ -960,7 +972,7 @@ export function ViewExamesPendentes({
                                 <Button
                                     type="button"
                                     onClick={() => setAcaoParaConfirmar("enviar")}
-                                    disabled={sendingAso || selectedCpfs.size === 0}
+                                    disabled={processandoAcao || selectedCpfs.size === 0}
                                     className="h-8 px-3 text-[10px] font-black uppercase tracking-wide gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white"
                                 >
                                     {sendingAso ? (
@@ -980,7 +992,7 @@ export function ViewExamesPendentes({
                                 <Button
                                     type="button"
                                     onClick={() => setAcaoParaConfirmar("concluido")}
-                                    disabled={concluindoAtendimento || selectedCpfs.size === 0}
+                                    disabled={processandoAcao || selectedCpfs.size === 0}
                                     className="h-8 px-3 text-[10px] font-black uppercase tracking-wide gap-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white"
                                 >
                                     {concluindoAtendimento ? (

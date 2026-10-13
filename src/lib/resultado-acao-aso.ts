@@ -2,6 +2,10 @@ import type { AcaoAso, PacienteAssinaturaPayload } from "@/lib/aso-assinatura";
 
 type ObjetoJson = Record<string, unknown>;
 
+const INTERVALO_POLLING_MS = 2500;
+const TIMEOUT_POLLING_MS = 15 * 60 * 1000;
+const MAX_FALHAS_CONSECUTIVAS = 4;
+
 export type ResultadoAcaoAso = {
     confirmados: PacienteAssinaturaPayload[];
     indicesConfirmados: number[];
@@ -16,6 +20,131 @@ const comoObjeto = (valor: unknown): ObjetoJson | null =>
 const texto = (valor: unknown) =>
     typeof valor === "string" || typeof valor === "number" ? String(valor).trim() : "";
 
+const esperar = (tempoMs: number) => new Promise<void>(resolve => setTimeout(resolve, tempoMs));
+
+async function lerJson(response: Response, contexto: string): Promise<unknown> {
+    try {
+        return await response.json();
+    } catch {
+        throw new Error(`${contexto} não retornou um JSON válido.`);
+    }
+}
+
+function normalizarEnvelopeJob(valor: unknown): ObjetoJson | null {
+    const normalizado = Array.isArray(valor) && valor.length === 1 ? valor[0] : valor;
+    return comoObjeto(normalizado);
+}
+
+function extrairResultadoConcluido(valor: unknown, jobId: string): unknown[] | null {
+    const envelope = normalizarEnvelopeJob(valor);
+    if (!envelope || texto(envelope.status).toLowerCase() !== "done") return null;
+    if (texto(envelope.jobId) && texto(envelope.jobId) !== jobId) {
+        throw new Error("A consulta retornou o resultado de outro processamento.");
+    }
+    if (!Array.isArray(envelope.problematicos)) {
+        throw new Error("O processamento terminou sem uma lista válida de itens problemáticos.");
+    }
+    return envelope.problematicos;
+}
+
+/** Aguarda o resultado final sem reenviar a operação original. */
+export async function aguardarJobN8n(jobId: string): Promise<unknown[]> {
+    const inicio = Date.now();
+    let falhasConsecutivas = 0;
+
+    while (Date.now() - inicio < TIMEOUT_POLLING_MS) {
+        await esperar(INTERVALO_POLLING_MS);
+
+        try {
+            const response = await fetch(`/api/consulta-relatorios?id=${encodeURIComponent(jobId)}`, {
+                method: "GET",
+                cache: "no-store",
+            });
+            if (!response.ok) {
+                throw new Error(`A consulta do processamento retornou HTTP ${response.status}.`);
+            }
+
+            const retorno = await lerJson(response, "A consulta do processamento");
+            const problematicos = extrairResultadoConcluido(retorno, jobId);
+            if (problematicos) return problematicos;
+
+            const envelope = normalizarEnvelopeJob(retorno);
+            if (!envelope) throw new Error("A consulta retornou um formato inesperado.");
+
+            const status = texto(envelope.status).toLowerCase();
+            if (texto(envelope.jobId) && texto(envelope.jobId) !== jobId) {
+                throw new Error("A consulta retornou outro processamento.");
+            }
+            if (status === "error") {
+                throw new ErroFinalJobN8n(
+                    texto(envelope.mensagem) || "O n8n informou que o processamento não foi concluído."
+                );
+            }
+            if (status !== "processing") {
+                throw new ErroFinalJobN8n("A consulta retornou um status de processamento inesperado.");
+            }
+
+            falhasConsecutivas = 0;
+        } catch (error) {
+            if (error instanceof ErroFinalJobN8n) throw error;
+            falhasConsecutivas += 1;
+            if (falhasConsecutivas >= MAX_FALHAS_CONSECUTIVAS) {
+                throw new Error(
+                    "O processamento pode continuar no n8n, mas não foi possível consultar seu resultado. Não repita a operação antes de verificar a execução."
+                );
+            }
+        }
+    }
+
+    throw new Error(
+        "O processamento excedeu o tempo máximo de 15 minutos e o resultado não foi confirmado. Não repita a operação antes de verificar a execução."
+    );
+}
+
+class ErroFinalJobN8n extends Error { }
+
+/** Inicia a ação e converte o resultado assíncrono no array final do contrato antigo. */
+export async function solicitarResultadoAcaoAso(payload: unknown): Promise<unknown[]> {
+    let response: Response;
+    try {
+        response = await fetch("/api/enviar-asos-concluidos", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        });
+    } catch {
+        throw new Error("A operação não pôde ser iniciada e nenhum resultado foi confirmado.");
+    }
+
+    const retorno = await lerJson(response, "A API de envio");
+    if (!response.ok) {
+        throw new Error(`A API não iniciou a operação (HTTP ${response.status}).`);
+    }
+
+    const envelope = normalizarEnvelopeJob(retorno);
+    const status = texto(envelope?.status).toLowerCase();
+
+    // Compatibilidade segura durante a transição: array de problemas ou envelope antigo.
+    // Um array unitário contendo status é resposta de job do n8n, não lista de problemas.
+    if (Array.isArray(retorno) && !["processing", "done", "error"].includes(status)) return retorno;
+    if (envelope && !status && Array.isArray(envelope.problematicos)) return envelope.problematicos;
+    if (!envelope) throw new Error("A API não retornou uma confirmação válida de início.");
+
+    const jobId = texto(envelope.jobId);
+    if (status === "done") {
+        if (!jobId) throw new Error("A API concluiu a operação sem identificar o processamento.");
+        return extrairResultadoConcluido(envelope, jobId)!;
+    }
+    if (status === "error") {
+        throw new Error(texto(envelope.mensagem) || "O n8n não conseguiu iniciar o processamento.");
+    }
+    if (status !== "processing" || !jobId) {
+        throw new Error("A API não retornou status processing e jobId válidos.");
+    }
+
+    return aguardarJobN8n(jobId);
+}
+
 const camposIdentificadores = [
     "id",
     "codigo_empresa_soc",
@@ -25,22 +154,11 @@ const camposIdentificadores = [
 ] as const;
 
 /** Interpreta o contrato do webhook: [] ou uma lista (eventualmente em `problematicos`) com os itens que falharam. */
-export async function interpretarRespostaAcaoAso(
-    response: Response,
+export function interpretarRespostaAcaoAso(
+    retorno: unknown,
     enviados: PacienteAssinaturaPayload[],
     acaoEsperada: AcaoAso
-): Promise<ResultadoAcaoAso> {
-    let retorno: unknown;
-    try {
-        retorno = await response.json();
-    } catch {
-        throw new Error("A API não retornou uma resposta válida.");
-    }
-
-    if (!response.ok) {
-        throw new Error("A API não conseguiu concluir a operação.");
-    }
-
+): ResultadoAcaoAso {
     const envelope = comoObjeto(retorno);
     const lista = Array.isArray(retorno)
         ? retorno

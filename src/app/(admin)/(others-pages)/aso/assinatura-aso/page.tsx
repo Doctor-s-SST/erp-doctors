@@ -44,7 +44,7 @@ import { ConfirmarAcaoModal } from "./components/ConfirmarAcaoModal";
 import { RegistrarPendenciaModal } from "./components/RegistrarPendenciaModal";
 import { EnviarPendenciasModal } from "./components/EnviarPendenciasModal";
 import { criarPayloadAcaoAso, criarPayloadAcoesAso, AcaoAso } from "@/lib/aso-assinatura";
-import { mensagemErrosFuncionarios } from "@/lib/resultado-acao-aso";
+import { mensagemErrosFuncionarios, solicitarResultadoAcaoAso } from "@/lib/resultado-acao-aso";
 
 
 type ObjetoJson = Record<string, unknown>;
@@ -159,25 +159,7 @@ async function solicitarAcaoN8n(
     enviados: Pacientes[],
     acao: AcaoAso
 ): Promise<ResultadoAcao> {
-    let response: Response;
-    try {
-        response = await fetch("/api/enviar-asos-concluidos", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-        });
-    } catch {
-        throw new Error("A conexão foi interrompida e o resultado não foi confirmado. Confira a execução antes de reenviar.");
-    }
-    if (!response.ok) {
-        throw new Error(`A API retornou HTTP ${response.status}. O resultado não foi confirmado; confira a execução antes de repetir.`);
-    }
-    let retorno: unknown;
-    try {
-        retorno = await response.json();
-    } catch {
-        throw new Error("A API não retornou um JSON válido. O resultado não foi confirmado; confira a execução antes de repetir.");
-    }
+    const retorno = await solicitarResultadoAcaoAso(payload);
     return interpretarRetornoN8n(retorno, enviados, acao);
 }
 
