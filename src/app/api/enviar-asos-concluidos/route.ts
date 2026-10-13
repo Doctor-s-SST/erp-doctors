@@ -50,33 +50,39 @@ export async function POST(req: NextRequest) {
 
     const data = await n8nResponse.json();
 
-    const supabase = await createClient();
-    const uuidValido = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    const logs = selecionados.map((item) => {
-      const pacienteId = String(item.paciente?.id || "");
+    try {
+      const supabase = await createClient();
+      const uuidValido = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      const logs = selecionados.map((item) => {
+        const pacienteId = String(item.paciente?.id || "");
 
-      return {
-        paciente_assinatura_id: uuidValido.test(pacienteId) ? pacienteId : null,
-        unidade_id: auth.unidadeId,
-        nome_paciente: item.paciente?.nome_paciente || null,
-        sequencial_ficha: item.paciente?.sequencial_ficha || null,
-        acao: item.acao,
-        observacao: item.observacao || null,
-        usuario_id: auth.user.id,
-        usuario_email: auth.user.email || null,
-      };
-    });
+        return {
+          paciente_assinatura_id: uuidValido.test(pacienteId) ? pacienteId : null,
+          unidade_id: auth.unidadeId,
+          nome_paciente: item.paciente?.nome_paciente || null,
+          sequencial_ficha: item.paciente?.sequencial_ficha || null,
+          acao: item.acao,
+          observacao: item.observacao || null,
+          usuario_id: auth.user.id,
+          usuario_email: auth.user.email || null,
+        };
+      });
 
-    const { error: logError } = await supabase
-      .from("pacientes_assinatura_logs")
-      .insert(logs);
+      const { error: logError } = await supabase
+        .from("pacientes_assinatura_logs")
+        .insert(logs);
 
-    if (logError) {
-      // O envio ao n8n já ocorreu; não devolva erro para evitar reenvio duplicado.
+      if (logError) {
+        // O envio ao n8n já ocorreu; não devolva erro para evitar reenvio duplicado.
+        console.error("Erro ao registrar auditoria de ASO:", logError);
+      }
+    } catch (logError) {
+      // O n8n já respondeu. A auditoria é uma etapa secundária e não pode
+      // transformar o resultado confirmado em erro, incentivando um reenvio.
       console.error("Erro ao registrar auditoria de ASO:", logError);
     }
 
-    return NextResponse.json(data);
+    return NextResponse.json(data, { status: n8nResponse.status });
 
   } catch (error) {
     console.error("Erro interno no backend:", error);

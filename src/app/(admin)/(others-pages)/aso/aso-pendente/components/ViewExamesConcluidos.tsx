@@ -636,7 +636,7 @@ export function ViewExamesConcluidos({
                 body: JSON.stringify(criarPayloadAcaoAso(pacientes, "LIBERAR", "ASO montado")),
             });
 
-            const resultado = await interpretarRespostaAcaoAso(response, pacientes);
+            const resultado = await interpretarRespostaAcaoAso(response, pacientes, "LIBERAR");
             const confirmados = resultado.confirmados;
 
             if (confirmados.length) {
@@ -686,7 +686,7 @@ export function ViewExamesConcluidos({
                 body: JSON.stringify(criarPayloadAcaoAso(pacientes, "LIBERAR-ENVIAR")),
             });
 
-            const resultado = await interpretarRespostaAcaoAso(response, pacientes);
+            const resultado = await interpretarRespostaAcaoAso(response, pacientes, "LIBERAR-ENVIAR");
             const confirmados = resultado.confirmados.map(item => ({
                 ...item,
                 acao: "ENVIADO_DIRETO" as const,
@@ -743,7 +743,7 @@ export function ViewExamesConcluidos({
                 body: JSON.stringify(criarPayloadAcaoAso(pacientes, "CONCLUIDO", "Concluído")),
             });
 
-            const resultado = await interpretarRespostaAcaoAso(response, pacientes);
+            const resultado = await interpretarRespostaAcaoAso(response, pacientes, "CONCLUIDO");
             const selecionadosConfirmados = resultado.indicesConfirmados.map(indice => selecionados[indice]);
 
             onAtendimentosConcluidos(

@@ -1,4 +1,4 @@
-import type { PacienteAssinaturaPayload } from "@/lib/aso-assinatura";
+import type { AcaoAso, PacienteAssinaturaPayload } from "@/lib/aso-assinatura";
 
 type ObjetoJson = Record<string, unknown>;
 
@@ -27,7 +27,8 @@ const camposIdentificadores = [
 /** Interpreta o contrato do webhook: [] ou uma lista (eventualmente em `problematicos`) com os itens que falharam. */
 export async function interpretarRespostaAcaoAso(
     response: Response,
-    enviados: PacienteAssinaturaPayload[]
+    enviados: PacienteAssinaturaPayload[],
+    acaoEsperada: AcaoAso
 ): Promise<ResultadoAcaoAso> {
     let retorno: unknown;
     try {
@@ -55,16 +56,30 @@ export async function interpretarRespostaAcaoAso(
     for (const itemBruto of lista) {
         const item = comoObjeto(itemBruto);
         if (!item) throw new Error("A API retornou um item de erro inválido.");
+        if (item.erro !== true) {
+            throw new Error("A API retornou um item que não está identificado como erro.");
+        }
+        if (texto(item.acao) && texto(item.acao) !== acaoEsperada) {
+            throw new Error("A API retornou um erro referente a outra ação.");
+        }
 
         const pacienteApi = comoObjeto(item.paciente) ?? item;
         const indiceInformado = Number.isInteger(item.indice) ? Number(item.indice) : null;
         const identificadores = camposIdentificadores.filter(campo => texto(pacienteApi[campo]));
+        const temIdentidadeSuficiente = identificadores.includes("id") || (
+            identificadores.includes("codigo_empresa_soc") &&
+            (identificadores.includes("codigo_ged_soc") || identificadores.includes("sequencial_ficha"))
+        );
+
+        if (!temIdentidadeSuficiente && indiceInformado === null) {
+            throw new Error("A API retornou um funcionário sem identificação suficiente.");
+        }
 
         const candidatos = enviados
             .map((paciente, indice) => ({ paciente, indice }))
             .filter(({ paciente, indice }) => {
                 if (indiceInformado !== null && indice !== indiceInformado) return false;
-                if (!identificadores.length) return false;
+                if (!identificadores.length && indiceInformado === null) return false;
                 const local = paciente as unknown as ObjetoJson;
                 return identificadores.every(campo => texto(local[campo]) === texto(pacienteApi[campo]));
             });
