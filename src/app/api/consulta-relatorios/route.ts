@@ -26,16 +26,21 @@ export async function GET(req: NextRequest) {
             }
         );
 
-        if (!res.ok) {
-            const errorText = await res.text();
-            console.error("Erro n8n consulta-relatorios:", errorText);
+        const respostaTexto = await res.text();
+        let retorno: unknown;
+        try {
+            retorno = JSON.parse(respostaTexto);
+        } catch {
+            console.error("Resposta não JSON do n8n em consulta-relatorios:", respostaTexto);
             return NextResponse.json(
-                { error: "n8n recusou a requisição" },
-                { status: res.status }
+                { error: "O n8n não retornou um JSON válido." },
+                { status: 502 }
             );
         }
 
-        const retorno = await res.json();
+        // Preserve integralmente o contrato do n8n, inclusive quando um proxy
+        // atribuir 502/504 a uma resposta que já contenha o resultado do job.
+        // A validação fail-safe de status, jobId e problematicos ocorre no front.
         return NextResponse.json(retorno, { status: res.status });
     } catch (error) {
         console.error("Erro ao consultar processamento no n8n:", error);

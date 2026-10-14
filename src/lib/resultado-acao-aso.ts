@@ -4,7 +4,7 @@ type ObjetoJson = Record<string, unknown>;
 
 const INTERVALO_POLLING_MS = 2500;
 const TIMEOUT_POLLING_MS = 15 * 60 * 1000;
-const MAX_FALHAS_CONSECUTIVAS = 4;
+const MAX_FALHAS_CONSECUTIVAS = 8;
 
 export type ResultadoAcaoAso = {
     confirmados: PacienteAssinaturaPayload[];
@@ -60,13 +60,11 @@ export async function aguardarJobN8n(jobId: string): Promise<unknown[]> {
                 method: "GET",
                 cache: "no-store",
             });
-            if (!response.ok) {
-                throw new Error(`A consulta do processamento retornou HTTP ${response.status}.`);
-            }
-
             const retorno = await lerJson(response, "A consulta do processamento");
             const problematicos = extrairResultadoConcluido(retorno, jobId);
-            if (problematicos) return problematicos;
+            // Um resultado terminal completo é uma confirmação mais específica
+            // que um 502/504 eventualmente atribuído por um proxy intermediário.
+            if (problematicos !== null) return problematicos;
 
             const envelope = normalizarEnvelopeJob(retorno);
             if (!envelope) throw new Error("A consulta retornou um formato inesperado.");
@@ -79,6 +77,9 @@ export async function aguardarJobN8n(jobId: string): Promise<unknown[]> {
                 throw new ErroFinalJobN8n(
                     texto(envelope.mensagem) || "O processamento não foi concluído."
                 );
+            }
+            if (!response.ok) {
+                throw new Error(`A consulta do processamento retornou HTTP ${response.status}.`);
             }
             if (status !== "processing") {
                 throw new ErroFinalJobN8n("A consulta retornou um status de processamento inesperado.");
@@ -117,12 +118,24 @@ export async function solicitarResultadoAcaoAso(payload: unknown): Promise<unkno
     }
 
     const retorno = await lerJson(response, "A API de envio");
+    const envelope = normalizarEnvelopeJob(retorno);
+    const status = texto(envelope?.status).toLowerCase();
+    const jobId = texto(envelope?.jobId);
+
+    // Um job identificado permite continuar de forma segura mesmo se um proxy
+    // intermediário tiver atribuído um status HTTP de gateway à resposta.
+    if (status === "done") {
+        if (!jobId) throw new Error("A API concluiu a operação sem identificar o processamento.");
+        return extrairResultadoConcluido(envelope, jobId)!;
+    }
+    if (status === "error") {
+        throw new Error(texto(envelope?.mensagem) || "Erro ao iniciar o processamento.");
+    }
+    if (status === "processing" && jobId) return aguardarJobN8n(jobId);
+
     if (!response.ok) {
         throw new Error(`A API não iniciou a operação (HTTP ${response.status}).`);
     }
-
-    const envelope = normalizarEnvelopeJob(retorno);
-    const status = texto(envelope?.status).toLowerCase();
 
     // Compatibilidade segura durante a transição: array de problemas ou envelope antigo.
     // Um array unitário contendo status é resposta de job do n8n, não lista de problemas.
@@ -130,14 +143,6 @@ export async function solicitarResultadoAcaoAso(payload: unknown): Promise<unkno
     if (envelope && !status && Array.isArray(envelope.problematicos)) return envelope.problematicos;
     if (!envelope) throw new Error("A API não retornou uma confirmação válida de início.");
 
-    const jobId = texto(envelope.jobId);
-    if (status === "done") {
-        if (!jobId) throw new Error("A API concluiu a operação sem identificar o processamento.");
-        return extrairResultadoConcluido(envelope, jobId)!;
-    }
-    if (status === "error") {
-        throw new Error(texto(envelope.mensagem) || "Erro ao iniciar o processamento.");
-    }
     if (status !== "processing" || !jobId) {
         throw new Error("A API não retornou status processing e jobId válidos.");
     }

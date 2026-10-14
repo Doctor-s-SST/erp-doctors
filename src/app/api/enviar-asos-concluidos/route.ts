@@ -39,16 +39,24 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({ selecionados }),
     });
 
-    if (!n8nResponse.ok) {
-      const errorText = await n8nResponse.text();
-      console.error("Erro n8n:", errorText);
+    const respostaTexto = await n8nResponse.text();
+    let data: unknown;
+    try {
+      data = JSON.parse(respostaTexto);
+    } catch {
+      console.error("Resposta não JSON do n8n ao iniciar ação de ASO:", respostaTexto);
       return NextResponse.json(
-        { error: "n8n recusou a requisição" },
-        { status: n8nResponse.status }
+        { error: "O n8n não retornou um JSON válido." },
+        { status: 502 }
       );
     }
 
-    const data = await n8nResponse.json();
+    // O client ainda poderá validar um processing/done completo neste body.
+    // Para respostas HTTP não exitosas, não registre auditoria como se o início
+    // tivesse sido confirmado apenas pelo código de transporte.
+    if (!n8nResponse.ok) {
+      return NextResponse.json(data, { status: n8nResponse.status });
+    }
 
     try {
       const supabase = await createClient();
