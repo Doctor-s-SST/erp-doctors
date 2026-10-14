@@ -10,6 +10,7 @@ import {
     Layers,
     Stethoscope,
     Microscope,
+    PauseCircle,
 } from "lucide-react";
 import {
     ResponsiveContainer,
@@ -290,6 +291,8 @@ export function ViewDashboard({
     });
 
     const totalComStatus = vencidos + noPrazo;
+    const totalAsos = funcionarios.filter(possuiAso).length;
+    const suspensos = Math.max(0, totalAsos - totalComStatus);
     const percentualVencidos =
         totalComStatus > 0 ? (vencidos / totalComStatus) * 100 : 0;
 
@@ -363,7 +366,7 @@ export function ViewDashboard({
             {/* =====================================================
                 RESUMO PRINCIPAL
             ===================================================== */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
 
                 {/* ASOS NO PRAZO */}
                 <Card className="border-emerald-200 bg-white shadow-sm dark:border-emerald-900/40 dark:bg-gray-900">
@@ -377,8 +380,8 @@ export function ViewDashboard({
                                     {noPrazo}
                                 </p>
                                 <p className="mt-1 text-[10px] font-bold text-emerald-500">
-                                    {totalComStatus > 0
-                                        ? ((noPrazo / totalComStatus) * 100).toFixed(1)
+                                    {totalAsos > 0
+                                        ? ((noPrazo / totalAsos) * 100).toFixed(1)
                                         : "0.0"}
                                     % do total
                                 </p>
@@ -402,7 +405,7 @@ export function ViewDashboard({
                                     {vencidos}
                                 </p>
                                 <p className="mt-1 text-[10px] font-bold text-red-500">
-                                    {percentualVencidos.toFixed(1)}% do total
+                                    {totalAsos > 0 ? ((vencidos / totalAsos) * 100).toFixed(1) : "0.0"}% do total
                                 </p>
                             </div>
                             <div className="rounded-xl bg-red-500/10 p-2.5">
@@ -413,6 +416,27 @@ export function ViewDashboard({
                 </Card>
 
                 {/* MÉDIA DE DIAS DOS ASOS VENCIDOS */}
+                <Card className="border-amber-200 bg-white shadow-sm dark:border-amber-900/40 dark:bg-gray-900">
+                    <CardContent className="p-4">
+                        <div className="flex items-start justify-between">
+                            <div>
+                                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                                    ASO suspenso
+                                </p>
+                                <p className="mt-1 text-3xl font-black tracking-tight text-amber-500">
+                                    {suspensos}
+                                </p>
+                                <p className="mt-1 text-[10px] font-bold text-amber-500">
+                                    {totalAsos > 0 ? ((suspensos / totalAsos) * 100).toFixed(1) : "0.0"}% do total
+                                </p>
+                            </div>
+                            <div className="rounded-xl bg-amber-500/10 p-2.5">
+                                <PauseCircle className="h-5 w-5 text-amber-500" />
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+
                 <Card className="border-violet-200 bg-white shadow-sm dark:border-red-900/40 dark:bg-gray-900">
                     <CardContent className="p-4">
                         <div className="flex items-start justify-between">

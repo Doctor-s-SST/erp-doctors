@@ -77,7 +77,7 @@ export async function aguardarJobN8n(jobId: string): Promise<unknown[]> {
             }
             if (status === "error") {
                 throw new ErroFinalJobN8n(
-                    texto(envelope.mensagem) || "O n8n informou que o processamento não foi concluído."
+                    texto(envelope.mensagem) || "O processamento não foi concluído."
                 );
             }
             if (status !== "processing") {
@@ -90,7 +90,7 @@ export async function aguardarJobN8n(jobId: string): Promise<unknown[]> {
             falhasConsecutivas += 1;
             if (falhasConsecutivas >= MAX_FALHAS_CONSECUTIVAS) {
                 throw new Error(
-                    "O processamento pode continuar no n8n, mas não foi possível consultar seu resultado. Não repita a operação antes de verificar a execução."
+                    "O processamento pode continuar, mas não foi possível consultar seu resultado. Não repita a operação antes de verificar a execução."
                 );
             }
         }
@@ -136,7 +136,7 @@ export async function solicitarResultadoAcaoAso(payload: unknown): Promise<unkno
         return extrairResultadoConcluido(envelope, jobId)!;
     }
     if (status === "error") {
-        throw new Error(texto(envelope.mensagem) || "O n8n não conseguiu iniciar o processamento.");
+        throw new Error(texto(envelope.mensagem) || "Erro ao iniciar o processamento.");
     }
     if (status !== "processing" || !jobId) {
         throw new Error("A API não retornou status processing e jobId válidos.");

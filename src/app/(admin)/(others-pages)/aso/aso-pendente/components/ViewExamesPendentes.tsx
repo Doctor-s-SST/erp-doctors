@@ -34,10 +34,12 @@ import {
     ArrowUpDown,
     Save,
     Send,
+    SlidersHorizontal,
     X,
 } from "lucide-react";
 import { FuncionarioModal } from "./FuncionarioModal";
 import { ConfirmarAcaoDialog } from "./ConfirmarAcaoDialog";
+import { correspondeAoGrupoExames, FiltroGrupoExames, GrupoFiltroExames } from "./FiltroGrupoExames";
 import { ViewExamesPendentesProps } from "../types";
 import {
     classificarTipoExame,
@@ -92,6 +94,7 @@ export function ViewExamesPendentes({
     const [sendingAso, setSendingAso] = useState(false);
     const [concluindoAtendimento, setConcluindoAtendimento] = useState(false);
     const [acaoParaConfirmar, setAcaoParaConfirmar] = useState<"salvar" | "enviar" | "concluido" | null>(null);
+    const [grupoExames, setGrupoExames] = useState<GrupoFiltroExames | null>(null);
     const operacaoEmAndamento = useRef(false);
     const processandoAcao = saving || sendingAso || concluindoAtendimento;
 
@@ -348,6 +351,7 @@ export function ViewExamesPendentes({
 
                 if (!possuiExame) return false;
             }
+            if (!correspondeAoGrupoExames(item.todosExames || [], grupoExames)) return false;
 
             return true;
         });
@@ -359,6 +363,7 @@ export function ViewExamesPendentes({
         dataInicio,
         dataFim,
         cpfsAtendimentosConcluidos,
+        grupoExames,
     ]);
 
     /* ============================================================
@@ -846,16 +851,36 @@ export function ViewExamesPendentes({
 
 
                     {/* FAIXA 3 — BUSCA + FILTROS + AÇÕES */}
-                    <div className="flex flex-col gap-2 pt-1 border-t border-slate-100 dark:border-slate-800">
-                        <div className="flex w-full flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/70 p-2 dark:border-slate-700 dark:bg-slate-800/40">
+                    <div className="flex flex-col gap-2 border-t border-slate-100 pt-2 dark:border-slate-800">
+                        <div className="w-full rounded-xl border border-slate-200 bg-slate-50/70 p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800/40">
+                            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex min-w-0 items-center gap-2">
+                                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400">
+                                        <SlidersHorizontal className="h-4 w-4" />
+                                    </span>
+                                    <div className="min-w-0">
+                                        <p className="text-xs font-bold text-slate-700 dark:text-slate-200">Filtros</p>
+                                        <p className="truncate text-[10px] text-slate-400">Refine os ASOs exibidos na lista</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    {busca && <span className="text-[10px] text-slate-400">{pendenciasProcessadas.length} resultado(s)</span>}
+                                    {(busca || filtroMedico !== "todos" || filtroExameEspecifico !== "todos" || filtroPrestador !== "todos" || grupoExames || dataInicio || dataFim) && (
+                                        <Button type="button" variant="ghost" onClick={() => { setBusca(""); setFiltroMedico("todos"); setFiltroExameEspecifico("todos"); setFiltroPrestador("todos"); setGrupoExames(null); setDataInicio(""); setDataFim(""); }} className="h-8 gap-1.5 px-2 text-[10px] font-bold uppercase text-slate-500 hover:text-slate-800 dark:hover:text-slate-200">
+                                            <X className="h-3.5 w-3.5" /> Limpar
+                                        </Button>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
                             {/* BUSCA */}
-                            <div className="relative min-w-56 flex-[1.35]">
+                            <div className="relative min-w-0 sm:col-span-2 lg:col-span-1 2xl:col-span-2">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                 <Input
                                     value={busca}
                                     onChange={(e) => setBusca(e.target.value)}
                                     placeholder="Buscar por nome, empresa..."
-                                    className="h-9 pl-9 pr-9 text-xs bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+                                    className="h-10 bg-white pl-9 pr-9 text-xs dark:bg-slate-900"
                                 />
 
                                 {busca && (
@@ -871,7 +896,7 @@ export function ViewExamesPendentes({
 
                             {/* MÉDICO */}
                             <Select value={filtroMedico} onValueChange={setFiltroMedico}>
-                                <SelectTrigger className="h-9 w-full min-w-44 text-xs bg-white sm:w-44 xl:flex-1 dark:bg-slate-900">
+                                <SelectTrigger className="h-10 w-full min-w-0 bg-white text-xs dark:bg-slate-900">
                                     <SelectValue placeholder="Médico Examinador" />
                                 </SelectTrigger>
 
@@ -887,7 +912,7 @@ export function ViewExamesPendentes({
 
                             {/* EXAME */}
                             <Select value={filtroExameEspecifico} onValueChange={setFiltroExameEspecifico}>
-                                <SelectTrigger className="h-9 w-full min-w-44 text-xs bg-white sm:w-44 xl:flex-1 dark:bg-slate-900">
+                                <SelectTrigger className="h-10 w-full min-w-0 bg-white text-xs dark:bg-slate-900">
                                     <SelectValue placeholder="Filtrar por Exame" />
                                 </SelectTrigger>
 
@@ -901,8 +926,12 @@ export function ViewExamesPendentes({
                                 </SelectContent>
                             </Select>
 
+                            <div className="min-w-0 sm:col-span-2 lg:col-span-1 2xl:col-span-2">
+                                <FiltroGrupoExames unidadeId={unidadeId} examesDisponiveis={listaExamesPendentes} grupoSelecionado={grupoExames} onGrupoSelecionadoChange={setGrupoExames} />
+                            </div>
+
                             <Select value={filtroPrestador} onValueChange={setFiltroPrestador}>
-                                <SelectTrigger className="h-9 w-full min-w-44 text-xs bg-white sm:w-44 xl:flex-1 dark:bg-slate-900">
+                                <SelectTrigger className="h-10 w-full min-w-0 bg-white text-xs dark:bg-slate-900">
                                     <SelectValue placeholder="Credenciada" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -913,37 +942,16 @@ export function ViewExamesPendentes({
                                 </SelectContent>
                             </Select>
 
-                            <label className="flex h-9 min-w-52 flex-1 items-center gap-2 rounded-md border border-input bg-white px-2 text-[9px] font-bold uppercase text-slate-500 dark:bg-slate-900">
+                            <label className="flex h-10 min-w-0 items-center gap-2 rounded-md border border-input bg-white px-3 text-[9px] font-bold uppercase text-slate-500 dark:bg-slate-900">
                                 <span className="whitespace-nowrap">De</span>
                                 <Input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} className="h-7 border-0 bg-transparent p-0 text-xs font-normal normal-case shadow-none focus-visible:ring-0" />
                             </label>
-                            <label className="flex h-9 min-w-52 flex-1 items-center gap-2 rounded-md border border-input bg-white px-2 text-[9px] font-bold uppercase text-slate-500 dark:bg-slate-900">
+                            <label className="flex h-10 min-w-0 items-center gap-2 rounded-md border border-input bg-white px-3 text-[9px] font-bold uppercase text-slate-500 dark:bg-slate-900">
                                 <span className="whitespace-nowrap">Até</span>
                                 <Input type="date" value={dataFim} min={dataInicio || undefined} onChange={(e) => setDataFim(e.target.value)} className="h-7 border-0 bg-transparent p-0 text-xs font-normal normal-case shadow-none focus-visible:ring-0" />
                             </label>
 
-                            {(filtroMedico !== "todos" || filtroExameEspecifico !== "todos" || filtroPrestador !== "todos" || dataInicio || dataFim) && (
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    onClick={() => {
-                                        setFiltroMedico("todos");
-                                        setFiltroExameEspecifico("todos");
-                                        setFiltroPrestador("todos");
-                                        setDataInicio("");
-                                        setDataFim("");
-                                    }}
-                                    className="h-9 gap-1.5 text-[10px] font-bold uppercase text-slate-500"
-                                >
-                                    <X className="h-3.5 w-3.5" /> Limpar filtros
-                                </Button>
-                            )}
-
-                            {busca && (
-                                <div className="flex items-center px-1 text-[10px] text-slate-400 whitespace-nowrap">
-                                    {pendenciasProcessadas.length} resultado(s)
-                                </div>
-                            )}
+                            </div>
                         </div>
 
                         {/* AÇÕES (apenas na aba Pendentes) */}
