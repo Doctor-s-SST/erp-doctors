@@ -21,25 +21,13 @@ import {
 
 // Types & Utils
 import { ViewType, FiltroTipoExame, PrazosMap } from "./types";
-import { classificarTipoExame, asoEstaConcluido, asoEstaPendente, possuiAso, normalizarNomeExame } from "./utils";
+import { classificarTipoExame, asoEstaConcluido, asoEstaPendente, possuiAso, normalizarNomeExame, obterIdentificadorFuncionario } from "./utils";
 
 // Subcomponents
 import { ViewDashboard } from "./components/ViewDashboard";
 import { ViewExamesPendentes } from "./components/ViewExamesPendentes";
 import { ViewExamesConcluidos } from "./components/ViewExamesConcluidos";
 import { useConjuntoPersistido } from "./hooks/useConjuntoPersistido";
-
-function obterCpfFuncionario(item: any): string {
-    return String(
-        item?.cpf ||
-        item?.cpfFuncionario ||
-        item?.socResumo?.cpf ||
-        item?.socResumo?.cpfFuncionario ||
-        item?.aso?.cpf ||
-        item?.aso?.cpfFuncionario ||
-        ""
-    );
-}
 
 export default function IndicadoresSocged() {
     const [view, setView] = useState<ViewType>("geral");
@@ -205,8 +193,7 @@ export default function IndicadoresSocged() {
     ============================================================ */
     const dadosRelatorioVisiveis = useMemo(() => {
         return dadosRelatorio.filter((item) => {
-            const cpf = obterCpfFuncionario(item);
-            return !cpf || !cpfsAtendimentosConcluidos.has(cpf);
+            return !cpfsAtendimentosConcluidos.has(obterIdentificadorFuncionario(item));
         });
     }, [dadosRelatorio, cpfsAtendimentosConcluidos]);
 
@@ -219,8 +206,7 @@ export default function IndicadoresSocged() {
         return {
             ...dadosGraficos,
             funcionariosComExamesPendentes: pendentes.filter((item: any) => {
-                const cpf = obterCpfFuncionario(item);
-                return !cpf || !cpfsAtendimentosConcluidos.has(cpf);
+                return !cpfsAtendimentosConcluidos.has(obterIdentificadorFuncionario(item));
             }),
         };
     }, [dadosGraficos, cpfsAtendimentosConcluidos]);

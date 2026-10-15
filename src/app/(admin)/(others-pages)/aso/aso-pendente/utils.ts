@@ -149,6 +149,37 @@ export function normalizarNomeExame(
         .toLowerCase();
 }
 
+export function obterCpfFuncionario(funcionario: any): string {
+    return String(
+        funcionario?.cpf ||
+        funcionario?.cpfFuncionario ||
+        funcionario?.socResumo?.cpf ||
+        funcionario?.socResumo?.cpfFuncionario ||
+        funcionario?.socResumo?.aso?.cpf ||
+        funcionario?.socResumo?.aso?.cpfFuncionario ||
+        funcionario?.aso?.cpf ||
+        funcionario?.aso?.cpfFuncionario ||
+        ""
+    ).trim();
+}
+
+export function obterIdentificadorFuncionario(funcionario: any): string {
+    const cpf = obterCpfFuncionario(funcionario);
+    if (cpf) return cpf;
+
+    const aso = funcionario?.aso || funcionario?.socResumo?.aso || funcionario?.socResumo || funcionario || {};
+    const codigoEmpresa = String(funcionario?.codigoEmpresa || aso?.codigoEmpresa || "").trim();
+    const codigoFuncionario = String(funcionario?.codigoFuncionario || aso?.codigoFuncionario || "").trim();
+    const sequencialFicha = String(
+        funcionario?.sequencialFicha ||
+        funcionario?.sequencial_ficha ||
+        aso?.sequencialFicha ||
+        ""
+    ).trim();
+
+    return `aso:${codigoEmpresa}:${codigoFuncionario}:${sequencialFicha}`;
+}
+
 export function exameEstaConcluido(
     exame: any,
     prazosMap: PrazosMap = {}
