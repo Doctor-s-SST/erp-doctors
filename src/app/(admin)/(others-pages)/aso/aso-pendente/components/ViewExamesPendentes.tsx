@@ -50,6 +50,8 @@ import {
     calcularStatusVencimentoVisual,
     exameEstaConcluido,
     possuiAsoMontado,
+    obterCpfFuncionario,
+    obterIdentificadorFuncionario,
 } from "../utils";
 import { toast } from "sonner";
 import { criarPacienteAssinatura, criarPayloadAcaoAso } from "@/lib/aso-assinatura";
@@ -139,10 +141,7 @@ export function ViewExamesPendentes({
             const res = item.socResumo || item;
             if (!res) return;
 
-            const cpf = res.cpfFuncionario || res.cpf || item.cpfFuncionario || item.cpf;
-            if (!cpf) return;
-
-            map.set(cpf, item);
+            map.set(obterIdentificadorFuncionario(item), item);
         });
 
         return map;
@@ -157,8 +156,7 @@ export function ViewExamesPendentes({
         }
 
         return pendencias.filter((item: any) => {
-            const cpf = item.cpfFuncionario || item.cpf;
-            const funcionario = funcionariosMapeados.get(cpf) || item;
+            const funcionario = funcionariosMapeados.get(obterIdentificadorFuncionario(item)) || item;
 
             return classificarTipoExame(funcionario, prazosMap) === filtroTipoExame;
         });
@@ -170,8 +168,9 @@ export function ViewExamesPendentes({
     ============================================================ */
     const pendenciasComStatus = useMemo(() => {
         return pendenciasFiltradas.map((item: any) => {
-            const cpf = item.cpfFuncionario || item.cpf;
-            const fDados = funcionariosMapeados.get(cpf);
+            const identificador = obterIdentificadorFuncionario(item);
+            const fDados = funcionariosMapeados.get(identificador);
+            const cpf = obterCpfFuncionario(fDados || item);
 
             const nome =
                 item.nomeFuncionario ||
@@ -255,6 +254,7 @@ export function ViewExamesPendentes({
             return {
                 ...item,
                 cpf,
+                identificador,
                 nome,
                 empresa,
                 codigoEmpresa,
@@ -293,9 +293,8 @@ export function ViewExamesPendentes({
     ============================================================ */
     const isFuncionarioMontado = (funcionario: any) => {
         if (!funcionario) return false;
-        const cpf = funcionario.cpf || funcionario.cpfFuncionario;
         return Boolean(
-            funcionariosSalvos?.has(cpf) ||
+            funcionariosSalvos?.has(obterIdentificadorFuncionario(funcionario)) ||
             possuiAsoMontado(funcionario.observacao)
         );
     };
@@ -340,7 +339,7 @@ export function ViewExamesPendentes({
     ============================================================ */
     const pendenciasComFiltros = useMemo(() => {
         return pendenciasVisiveis.filter((item: any) => {
-            if (cpfsAtendimentosConcluidos.has(item.cpf || item.cpfFuncionario)) {
+            if (cpfsAtendimentosConcluidos.has(obterIdentificadorFuncionario(item))) {
                 return false;
             }
 
@@ -465,8 +464,8 @@ export function ViewExamesPendentes({
        SELEÇÃO
     ============================================================ */
     const cpfsSelecionaveis = pendenciasProcessadas
-        .filter((f: any) => !isFuncionarioMontado(f) && !cpfsEnviadosDireto.has(f.cpf))
-        .map((f: any) => f.cpf)
+        .filter((f: any) => !isFuncionarioMontado(f) && !cpfsEnviadosDireto.has(obterIdentificadorFuncionario(f)))
+        .map(obterIdentificadorFuncionario)
         .filter(Boolean);
 
     const allChecked =
@@ -485,7 +484,7 @@ export function ViewExamesPendentes({
     };
 
     const handleSelectOne = (cpf: string, checked: boolean) => {
-        const funcionario = pendenciasVisiveis.find((f: any) => f.cpf === cpf);
+        const funcionario = pendenciasVisiveis.find((f: any) => obterIdentificadorFuncionario(f) === cpf);
 
         if (!funcionario || isFuncionarioMontado(funcionario) || cpfsEnviadosDireto.has(cpf)) return;
 
@@ -515,7 +514,7 @@ export function ViewExamesPendentes({
 
         try {
             const selecionados = pendenciasVisiveis.filter(
-                (f: any) => selectedCpfs.has(f.cpf) && !isFuncionarioMontado(f)
+                (f: any) => selectedCpfs.has(obterIdentificadorFuncionario(f)) && !isFuncionarioMontado(f)
             );
 
             if (selecionados.length === 0) {
@@ -524,7 +523,7 @@ export function ViewExamesPendentes({
             }
 
             const pacientes = selecionados.map((f: any) => ({
-                ...criarPacienteAssinatura(funcionariosMapeados.get(f.cpf) || f, unidadeId),
+                ...criarPacienteAssinatura(funcionariosMapeados.get(obterIdentificadorFuncionario(f)) || f, unidadeId),
                 observacao: "ASO montado",
             }));
 
@@ -542,7 +541,7 @@ export function ViewExamesPendentes({
                 }
             }
 
-            const cpfsSalvos = resultado.indicesConfirmados.map(indice => selecionados[indice].cpf);
+            const cpfsSalvos = resultado.indicesConfirmados.map(indice => obterIdentificadorFuncionario(selecionados[indice]));
             onFuncionariosSalvos(cpfsSalvos);
 
             setSelectedCpfs((prev) => {
@@ -575,15 +574,18 @@ export function ViewExamesPendentes({
 
         try {
             const selecionados = pendenciasVisiveis
-                .filter((f: any) => selectedCpfs.has(f.cpf))
+                .filter((f: any) => selectedCpfs.has(obterIdentificadorFuncionario(f)))
                 .map((f: any) => {
                     /*
                      * Preferimos o funcionário completo vindo de
                      * todosFuncionarios. Isso mantém o mesmo formato
                      * usado pela ViewExamesConcluidos.
                      */
-                    const completo = funcionariosMapeados.get(f.cpf);
-                    return completo || f;
+                    const completo = funcionariosMapeados.get(obterIdentificadorFuncionario(f));
+                    return {
+                        ...(completo || f),
+                        identificador: obterIdentificadorFuncionario(f),
+                    };
                 });
 
             if (!selecionados.length) {
@@ -613,7 +615,7 @@ export function ViewExamesPendentes({
             }
 
             const cpfsEnviados = resultado.indicesConfirmados
-                .map(indice => selecionados[indice].cpf || selecionados[indice].cpfFuncionario).filter(Boolean);
+                .map(indice => obterIdentificadorFuncionario(selecionados[indice])).filter(Boolean);
             onAsosEnviadosDireto(cpfsEnviados);
 
             if (cpfsEnviados.length) toast.success(`${cpfsEnviados.length} ASO(s) enviado(s) com sucesso!`);
@@ -621,7 +623,7 @@ export function ViewExamesPendentes({
             const indicesConfirmados = new Set(resultado.indicesConfirmados);
             setSelectedCpfs(new Set(
                 selecionados.filter((_: any, indice: number) => !indicesConfirmados.has(indice))
-                    .map((f: any) => f.cpf || f.cpfFuncionario).filter(Boolean)
+                    .map(obterIdentificadorFuncionario).filter(Boolean)
             ));
         } catch (error) {
             console.error("Erro ao enviar ASOs:", error);
@@ -646,8 +648,11 @@ export function ViewExamesPendentes({
 
         try {
             const selecionados = pendenciasVisiveis
-                .filter((f: any) => selectedCpfs.has(f.cpf))
-                .map((f: any) => funcionariosMapeados.get(f.cpf) || f);
+                .filter((f: any) => selectedCpfs.has(obterIdentificadorFuncionario(f)))
+                .map((f: any) => ({
+                    ...(funcionariosMapeados.get(obterIdentificadorFuncionario(f)) || f),
+                    identificador: obterIdentificadorFuncionario(f),
+                }));
 
             if (!selecionados.length) {
                 toast.warning("Nenhum funcionário válido foi selecionado.");
@@ -666,7 +671,7 @@ export function ViewExamesPendentes({
 
             onAtendimentosConcluidos(
                 selecionadosConfirmados
-                    .map((funcionario: any) => funcionario.cpf || funcionario.cpfFuncionario)
+                    .map(obterIdentificadorFuncionario)
                     .filter(Boolean)
             );
             if (selecionadosConfirmados.length) toast.success(`${selecionadosConfirmados.length} atendimento(s) enviado(s) como concluído(s)!`);
@@ -674,7 +679,7 @@ export function ViewExamesPendentes({
             const indicesConfirmados = new Set(resultado.indicesConfirmados);
             setSelectedCpfs(new Set(
                 selecionados.filter((_: any, indice: number) => !indicesConfirmados.has(indice))
-                    .map((funcionario: any) => funcionario.cpf || funcionario.cpfFuncionario).filter(Boolean)
+                    .map(obterIdentificadorFuncionario).filter(Boolean)
             ));
         } catch (error) {
             console.error("Erro ao concluir atendimentos:", error);
@@ -960,13 +965,14 @@ export function ViewExamesPendentes({
                             </TableRow>
                         ) : (
                             pendenciasPaginadas.map((item: any, idx: number) => {
+                                const identificador = obterIdentificadorFuncionario(item);
                                 const jaMontado = isFuncionarioMontado(item);
-                                const isSelected = selectedCpfs.has(item.cpf);
-                                const enviadoDireto = cpfsEnviadosDireto.has(item.cpf);
+                                const isSelected = selectedCpfs.has(identificador);
+                                const enviadoDireto = cpfsEnviadosDireto.has(identificador);
 
                                 return (
                                     <TableRow
-                                        key={`${item.cpf}-${idx}`}
+                                        key={`${identificador}-${idx}`}
                                         className={`transition-colors ${enviadoDireto
                                             ? "bg-cyan-500/[0.08] hover:bg-cyan-500/[0.12]"
                                             : jaMontado
@@ -992,7 +998,7 @@ export function ViewExamesPendentes({
                                                 <Checkbox
                                                     checked={isSelected}
                                                     onCheckedChange={(checked) =>
-                                                        handleSelectOne(item.cpf, !!checked)
+                                                        handleSelectOne(identificador, !!checked)
                                                     }
                                                 />
                                             )}
@@ -1002,7 +1008,7 @@ export function ViewExamesPendentes({
                                         <TableCell>
                                             <button
                                                 type="button"
-                                                onClick={() => handleRowClick(item.cpf, item)}
+                                                onClick={() => handleRowClick(identificador, item)}
                                                 className="text-left group flex items-center gap-2.5"
                                             >
                                                 <span

@@ -164,6 +164,9 @@ export function obterCpfFuncionario(funcionario: any): string {
 }
 
 export function obterIdentificadorFuncionario(funcionario: any): string {
+    const identificadorExistente = String(funcionario?.identificador || "").trim();
+    if (identificadorExistente) return identificadorExistente;
+
     const cpf = obterCpfFuncionario(funcionario);
     if (cpf) return cpf;
 
