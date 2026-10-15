@@ -972,7 +972,10 @@ export default function FilaPage() {
         const { error } = await supabase
             .from('atendimento_exames')
             .update({
-                finaliza_em: fimDate.toISOString()
+                finaliza_em: fimDate.toISOString(),
+                sala: item.sala || especialidadeNome,
+                num_sala: session?.sala || item.num_sala,
+                profissional: session?.profissional || item.profissional,
             })
             .eq('id', item.id);
 
