@@ -20,9 +20,17 @@ export type TipoConfirmacao = "ASSINATURA" | "ENVIO" | "ENVIO_PENDENCIA" | "REEN
 
 export type TipoFiltroStatus = "TODOS" | "ASSINAR" | "ENVIAR" | "PENDENCIA" | "ENVIADO";
 
+export type TipoFiltroEnvio = "TODOS" | "ENVIADO" | "ENVIADO_DIRETO";
+
+export type TipoFiltroParaEnviar = "TODOS" | "ASSINADO" | "PENDENCIA";
+
 export interface ContadoresStatus {
     paraAssinar: number;
     paraEnviar: number;
+    assinadosParaEnviar: number;
+    pendenciasParaEnviar: number;
     pendencias: number;
     enviados: number;
+    enviadosFluxo: number;
+    enviadosDireto: number;
 }

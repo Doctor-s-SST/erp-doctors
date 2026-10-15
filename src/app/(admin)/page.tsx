@@ -1,7 +1,7 @@
 "use client"
 
 import { Card, CardContent } from "@/components/ui/card"
-import { Users, ClipboardList, Stethoscope, BarChart3, Settings, Monitor, Kanban, Ticket, UserRoundCog, DoorOpen } from "lucide-react"
+import { Stethoscope, BarChart3, Monitor, Kanban, Ticket, UserRoundCog, DoorOpen } from "lucide-react"
 import { useRouter } from "next/navigation"
 
 const modules = [
@@ -58,7 +58,7 @@ export default function Home() {
         {/* HEADER */}
         <div className="text-center mb-10 space-y-3">
           <h1 className="text-4xl font-bold text-slate-900 dark:text-white tracking-tight">
-            Doctor's SST
+            Doctor&apos;s SST
           </h1>
           <p className="text-sm text-slate-500 max-w-md mx-auto">
             Sistema de Gestão Integrada para Saúde e Segurança do Trabalho
@@ -95,7 +95,7 @@ export default function Home() {
 
         {/* FOOTER */}
         <div className="mt-12 text-[11px] text-slate-400 text-center">
-          © {new Date().getFullYear()} Doctor's Saúde e Segurança do Trabalho
+          © {new Date().getFullYear()} Doctor&apos;s Saúde e Segurança do Trabalho
         </div>
       </div>
     </main>

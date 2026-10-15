@@ -5,7 +5,7 @@ import { useSidebar } from "@/context/SidebarContext";
 import AppHeader from "@/layout/AppHeader";
 import AppSidebar from "@/layout/AppSidebar";
 import Backdrop from "@/layout/Backdrop";
-import React, { useState } from "react";
+import React from "react";
 import { Toaster } from "sonner";
 
 export default function AdminLayoutClient({

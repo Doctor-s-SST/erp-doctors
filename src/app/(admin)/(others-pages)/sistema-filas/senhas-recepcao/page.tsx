@@ -16,33 +16,16 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useReactToPrint } from "react-to-print";
 import { TemplateFicha } from "@/components/atendimento/ficha-impressao/TemplateFicha";
 import { StatusSenhaRecep } from "@/components/atendimento/status-senha-recep/StatusSenhaRecep"
-
-type Atendimento = {
-    id: string;
-    senha_codigo: string;
-    tipo_senha: string;
-    nome: string;
-    ficha_sequencial: string;
-    created_at: string;
-    status: string | null;
-    guiche: string;
-    atendente: string;
-    tempo_espera_min: number;
-    ficha_preenchida: boolean;
-    tem_exames: any[];
-    sala_atual?: string | null
-    num_sala?: string | null
-    profissional?: string | null
-    tipo_exame: string
-    // unidadeId: string
-    encaixe: boolean
-    codigo_empresa: string
-}
-
-type ConfigOrdenacao = {
-    coluna: keyof Atendimento | 'tempo_espera'
-    direcao: 'asc' | 'desc'
-}
+import type {
+    AtendimentoRecepcao as Atendimento,
+    ConfigOrdenacaoRecepcao as ConfigOrdenacao,
+    EspecialidadeRecepcao,
+    ProfileRecepcao,
+} from "./types"
+import {
+    formatarHoraRecepcao as getHora,
+    formatarNomeRecepcao as formatarNome,
+} from "./utils"
 
 export default function RecepcaoPage() {
     const [data, setData] = useState<Atendimento[]>([])
@@ -64,7 +47,7 @@ export default function RecepcaoPage() {
     const [selectedAtendimento, setSelectedAtendimento] = useState<Atendimento | null>(null)
     const [isDetailsOpen, setIsDetailsOpen] = useState(false)
     const [unidadeId, setUnidadeId] = useState<string | null>(null);
-    const [profile, setProfile] = useState<any>({});
+    const [profile, setProfile] = useState<ProfileRecepcao>({});
 
 
     // Este estado serve apenas para forçar o componente a atualizar a cada minuto
@@ -81,8 +64,7 @@ export default function RecepcaoPage() {
     // ESTADOS DO MODAL DE IMPORTAÇÃO
     const [sequencialInput, setSequencialInput] = useState("");
     const [importModal, setImportModal] = useState<{ open: boolean, item: Atendimento | null }>({ open: false, item: null })
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const [especialidades, setEspecialidades] = useState<any[]>([])
+    const [especialidades, setEspecialidades] = useState<EspecialidadeRecepcao[]>([])
     const initialFormFicha = {
         sequencial: "",
         arquivo: null as File | null,
@@ -148,11 +130,6 @@ export default function RecepcaoPage() {
         fetchRecepcionistas();
 
     }, [unidadeId]); // <--- O efeito reage à mudança da unidade
-
-    const formatarNome = (str: string) => {
-        if (!str) return ""
-        return str.toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
-    }
 
     const sugestoesExames = useMemo(() => {
         const lista: string[] = [];
@@ -298,11 +275,6 @@ export default function RecepcaoPage() {
         if (minutos < 30) return "text-orange-600";  // 20-30 min: Laranja (Urgente)
         return "text-red-600 animate-pulse";         // +30 min: Vermelho Pulsante (Crítico)
     };
-
-    const getHora = (date: string) => {
-        if (!date) return "--:--"
-        return new Date(date).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
-    }
 
     function getStatusBadge(status: string | null) {
         const statusSeguro = status || "SEM_STATUS";

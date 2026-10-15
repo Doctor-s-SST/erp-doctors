@@ -12,6 +12,12 @@ import * as XLSX from 'xlsx-js-style';
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { supabase } from '@/lib/supabase';
+import {
+    calcularPeriodoRelatorio,
+    normalizarTextoRelatorio,
+    parseAcionamentoToDate,
+    parseTempoToSegundos,
+} from '../../shared/relatorios';
 
 import { DialogGrupoEspecialidade } from '@/components/grupos/DialogGrupoEspecialidade';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -99,84 +105,8 @@ export default function PaginaRelatorio() {
     }, [filtros.dataInicio, filtros.dataFim, filtros.horaInicio, filtros.horaFim, filtros.unidadeId]);
 
     useEffect(() => {
-        if (periodo === 'todos') {
-            setFiltros(prev => ({ ...prev, horaInicio: '07:00', horaFim: '17:59' }));
-        }
-        if (periodo === 'manha') {
-            setFiltros(prev => ({ ...prev, horaInicio: '07:00', horaFim: '13:00' }));
-        }
-        if (periodo === 'tarde') {
-            setFiltros(prev => ({ ...prev, horaInicio: '13:01', horaFim: '17:59' }));
-        }
-
-        if (dias === 'hoje') {
-            const hoje = new Date();
-            const dataStr = hoje.toISOString().split('T')[0];
-            setFiltros(prev => ({ ...prev, dataInicio: dataStr, dataFim: dataStr }));
-        }
-        if (dias === 'ontem') {
-            const ontem = new Date();
-            ontem.setDate(ontem.getDate() - 1);
-            const dataStr = ontem.toISOString().split('T')[0];
-            setFiltros(prev => ({ ...prev, dataInicio: dataStr, dataFim: dataStr }));
-        }
-        if (dias === 'semana') {
-            const hoje = new Date();
-
-            const dataFim = new Date(hoje);
-            const dataInicio = new Date(hoje);
-            dataInicio.setDate(dataInicio.getDate() - 6);
-
-            setFiltros(prev => ({
-                ...prev,
-                dataInicio: dataInicio.toISOString().split('T')[0],
-                dataFim: dataFim.toISOString().split('T')[0]
-            }));
-        }
-
-        if (dias === 'quinzena') {
-            const hoje = new Date();
-
-            const dataFim = new Date(hoje);
-            const dataInicio = new Date(hoje);
-            dataInicio.setDate(dataInicio.getDate() - 14);
-
-            setFiltros(prev => ({
-                ...prev,
-                dataInicio: dataInicio.toISOString().split('T')[0],
-                dataFim: dataFim.toISOString().split('T')[0]
-            }));
-        }
-
-        if (dias === 'mes') {
-            const hoje = new Date();
-
-            const dataFim = new Date(hoje);
-            const dataInicio = new Date(hoje);
-            dataInicio.setDate(dataInicio.getDate() - 29);
-
-            setFiltros(prev => ({
-                ...prev,
-                dataInicio: dataInicio.toISOString().split('T')[0],
-                dataFim: dataFim.toISOString().split('T')[0]
-            }));
-        }
+        setFiltros(prev => ({ ...prev, ...calcularPeriodoRelatorio(periodo, dias) }));
     }, [periodo, dias]);
-
-    // Converte data "DD/MM/YYYY HH:mm:ss" para Date objeto
-    const parseAcionamentoToDate = (str: string) => {
-        const [d, t] = str.split(' ');
-        const [day, month, year] = d.split('/');
-        return new Date(`${year}-${month}-${day}T${t}`);
-    };
-
-    const parseTempoToSegundos = (tempoStr: string) => {
-        if (!tempoStr || tempoStr === '---') return 0;
-        const h = parseInt(tempoStr.match(/(\d+)h/)?.[1] || '0');
-        const m = parseInt(tempoStr.match(/(\d+)m/)?.[1] || '0');
-        const s = parseInt(tempoStr.match(/(\d+)s/)?.[1] || '0');
-        return h * 3600 + m * 60 + s;
-    };
 
     const handleSort = (key: string) => {
         let direction: 'asc' | 'desc' = 'asc';
@@ -217,12 +147,7 @@ export default function PaginaRelatorio() {
         return grupos.find(g => String(g.id) === String(grupoSelecionado)) || null;
     }, [grupos, grupoSelecionado]);
 
-    const normalizar = (texto: string) =>
-        (texto || '')
-            .toLowerCase()
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '')
-            .trim();
+    const normalizar = normalizarTextoRelatorio;
 
     const dadosFiltradosOrdenados = useMemo(() => {
         let items = [...dadosRelatorio];

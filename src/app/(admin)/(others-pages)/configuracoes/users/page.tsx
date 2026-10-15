@@ -21,32 +21,16 @@ import {
 } from "lucide-react";
 import UserFormDialog from "@/components/user/UserFormDialog";
 import { toast } from "sonner";
-
-// MAPA DE CORES POR ROLE
-const ROLE_COLORS: any = {
-  admin: { bg: "bg-blue-500", light: "bg-blue-500/10", text: "text-blue-500", border: "hover:border-blue-500/30" },
-  recepcao: { bg: "bg-orange-500", light: "bg-orange-500/10", text: "text-orange-500", border: "hover:border-orange-500/30" },
-  especialista: { bg: "bg-emerald-500", light: "bg-emerald-500/10", text: "text-emerald-500", border: "hover:border-emerald-500/30" },
-  painel: { bg: "bg-yellow-500", light: "bg-yellow-500/10", text: "text-yellow-500", border: "hover:border-yellow-500/30" },
-  operador: { bg: "bg-red-500", light: "bg-red-500/10", text: "text-red-500", border: "hover:border-red-500/30" },
-  all: { bg: "bg-gray-900", light: "bg-slate-100", text: "text-slate-600" }
-};
-
-const ROLE_ORDER: any = {
-  admin: 1,
-  recepcao: 2,
-  especialista: 3,
-  operador: 4,
-  painel: 5,
-};
+import type { UsuarioConfiguracao } from "../types";
+import { filtrarUsuarios, mensagemErroConfiguracao, ordenarUsuarios, ROLE_COLORS } from "../utils";
 
 export default function UsersManagementPage() {
-  const [users, setUsers] = useState<any[]>([]);
+  const [users, setUsers] = useState<UsuarioConfiguracao[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [activeRole, setActiveRole] = useState("all"); // Filtro de Role
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [selectedUser, setSelectedUser] = useState<UsuarioConfiguracao | null>(null);
   const [activeStatus, setActiveStatus] = useState("ativos");
 
   const [unidadeId, setUnidadeId] = useState<string | null>(null);
@@ -72,22 +56,15 @@ export default function UsersManagementPage() {
 
       if (pError || eError) throw new Error("Falha ao carregar dados");
 
-      const enrichedUsers = profilesData?.map(user => ({
+      const enrichedUsers: UsuarioConfiguracao[] = profilesData?.map(user => ({
         ...user,
         full_name: `${user.first_name || ""} ${user.last_name || ""}`.trim(),
         especialidade_nome: espData?.find(e => e.id === user.especialidade_id)?.nome || "GERAL"
       })) || [];
 
-      const sortedUsers = enrichedUsers.sort((a, b) => {
-        const pesoA = ROLE_ORDER[a.role] || 4;
-        const pesoB = ROLE_ORDER[b.role] || 4;
-        if (pesoA !== pesoB) return pesoA - pesoB;
-        return a.full_name.localeCompare(b.full_name);
-      });
-
-      setUsers(sortedUsers);
-    } catch (error: any) {
-      toast.error(error.message);
+      setUsers(ordenarUsuarios(enrichedUsers));
+    } catch (error: unknown) {
+      toast.error(mensagemErroConfiguracao(error));
     } finally {
       setLoading(false);
     }
@@ -116,29 +93,13 @@ export default function UsersManagementPage() {
     fetchUserContext();
   }, []);
 
-  const handleEdit = (user: any) => {
+  const handleEdit = (user: UsuarioConfiguracao) => {
     setSelectedUser(user);
     setIsDialogOpen(true);
   };
 
   // Lógica de Filtragem combinada (Search + Role)
-  const filteredUsers = users.filter((u) => {
-    const matchesSearch =
-      u.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.email?.toLowerCase().includes(searchTerm.toLowerCase());
-
-    const matchesRole =
-      activeRole === "all" || u.role === activeRole;
-
-    const matchesStatus =
-      activeStatus === "todos"
-        ? true
-        : activeStatus === "ativos"
-          ? u.ativo
-          : !u.ativo;
-
-    return matchesSearch && matchesRole && matchesStatus;
-  });
+  const filteredUsers = filtrarUsuarios(users, searchTerm, activeRole, activeStatus);
 
   return (
     <div className="min-h-fit mt-2 space-y-8 bg-gray-500/20 rounded-xl p-2">
@@ -252,7 +213,7 @@ export default function UsersManagementPage() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {filteredUsers.map((user) => {
-              const colorScheme = ROLE_COLORS[user.role] || ROLE_COLORS.especialista;
+              const colorScheme = ROLE_COLORS[user.role || ""] || ROLE_COLORS.especialista;
 
               return (
                 <Card

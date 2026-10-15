@@ -7,20 +7,12 @@ import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 import { Loader2, Save, ShieldCheck } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-
-type ProfileType = {
-  email: string;
-  first_name: string;
-  last_name: string;
-  role: string;
-  unidade_id?: string;
-  especialidade: {
-    nome: string;
-  };
-};
+import type { ProfileData } from "./types";
+import { mensagemErroProfile, validarAlteracaoSenha } from "./utils";
+import { CampoProfile } from "./components/CampoProfile";
 
 export default function Profile() {
-  const [profileData, setProfileData] = useState<ProfileType | null>(null);
+  const [profileData, setProfileData] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [logoCompacta, setLogoCompacta] = useState("");
   const [senhaAtual, setSenhaAtual] = useState("");
@@ -30,17 +22,12 @@ export default function Profile() {
 
   const alterarSenha = async () => {
     try {
-      if (!novaSenha) {
-        return toast.error("Informe a nova senha");
-      }
-
-      if (novaSenha.length < 6) {
-        return toast.error("A senha deve possuir pelo menos 6 caracteres");
-      }
-
-      if (novaSenha !== confirmarSenha) {
-        return toast.error("As senhas não coincidem");
-      }
+      const erroValidacao = validarAlteracaoSenha({
+        atual: senhaAtual,
+        nova: novaSenha,
+        confirmacao: confirmarSenha,
+      });
+      if (erroValidacao) return toast.error(erroValidacao);
 
       setSavingPassword(true);
 
@@ -48,9 +35,11 @@ export default function Profile() {
         data: { user }
       } = await supabase.auth.getUser();
 
+      if (!user?.email) return toast.error("Usuário não identificado");
+
       const { error: loginError } =
         await supabase.auth.signInWithPassword({
-          email: user?.email!,
+          email: user.email,
           password: senhaAtual,
         });
 
@@ -69,8 +58,8 @@ export default function Profile() {
       setConfirmarSenha("");
 
       toast.success("Senha alterada com sucesso!");
-    } catch (error: any) {
-      toast.error(error.message);
+    } catch (error: unknown) {
+      toast.error(mensagemErroProfile(error));
     } finally {
       setSavingPassword(false);
     }
@@ -109,6 +98,16 @@ export default function Profile() {
         nomeEspecialidade = esp?.nome || "";
       }
 
+      if (profile?.unidade_id) {
+        const { data: unidade } = await supabase
+          .from("unidades")
+          .select("logo_icone_url")
+          .eq("id", profile.unidade_id)
+          .single();
+
+        setLogoCompacta(unidade?.logo_icone_url || "");
+      }
+
       setProfileData({
         email: profile?.email || "",
         first_name: profile?.first_name || "",
@@ -127,26 +126,8 @@ export default function Profile() {
   };
 
   useEffect(() => {
-    fetchUserContext();
+    queueMicrotask(() => void fetchUserContext());
   }, []);
-
-  useEffect(() => {
-    if (!profileData?.unidade_id) return;
-
-    const carregarLogo = async () => {
-      const { data: unidade } = await supabase
-        .from("unidades")
-        .select("logo_icone_url")
-        .eq("id", profileData.unidade_id)
-        .single();
-
-      if (unidade?.logo_icone_url) {
-        setLogoCompacta(unidade.logo_icone_url);
-      }
-    };
-
-    carregarLogo();
-  }, [profileData?.unidade_id]);
 
   if (loading) {
     return (
@@ -258,41 +239,9 @@ export default function Profile() {
 
                 <div className="grid md:grid-cols-2 gap-4">
 
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase text-slate-500">
-                      Nome
-                    </label>
-
-                    <Input
-                      value={profileData?.first_name}
-                      disabled
-                      className="h-12"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase text-slate-500">
-                      Sobrenome
-                    </label>
-
-                    <Input
-                      value={profileData?.last_name}
-                      disabled
-                      className="h-12"
-                    />
-                  </div>
-
-                  <div className="md:col-span-2 space-y-2">
-                    <label className="text-[10px] font-black uppercase text-slate-500">
-                      E-mail
-                    </label>
-
-                    <Input
-                      value={profileData?.email}
-                      disabled
-                      className="h-12"
-                    />
-                  </div>
+                  <CampoProfile label="Nome" value={profileData.first_name} />
+                  <CampoProfile label="Sobrenome" value={profileData.last_name} />
+                  <CampoProfile label="E-mail" value={profileData.email} className="space-y-2 md:col-span-2" />
 
                 </div>
               </div>

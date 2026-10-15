@@ -201,18 +201,17 @@ export function FiltroGrupoExames({
             </div>
 
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                <DialogContent className="max-w-2xl overflow-hidden p-0">
+                <DialogContent className="flex max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-2xl flex-col overflow-hidden p-0 sm:w-full">
                     <DialogHeader>
-                        <div className="border-b bg-slate-900 p-5 text-white dark:bg-slate-950">
-                            <DialogTitle className="flex items-center gap-3 text-white">
+                        <div className="border-b bg-slate-900 p-4 pr-12 text-white dark:bg-slate-950 sm:p-5 sm:pr-12">
+                            <DialogTitle className="flex items-center gap-2 text-sm text-white sm:gap-3 sm:text-base">
                                 <span className="rounded-lg bg-white/15 p-2"><Layers3 className="h-5 w-5" /></span>
                                 {editando ? "Editar grupo de exames" : "Novo grupo de exames"}
                             </DialogTitle>
-                            <p className="mt-2 text-xs text-slate-300">Escolha o comportamento do filtro e os exames que fazem parte do grupo.</p>
                         </div>
                     </DialogHeader>
 
-                    <div className="space-y-4 p-5 pt-2">
+                    <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-3 pt-2 sm:p-5 sm:pt-2">
                         <div className="space-y-1.5">
                             <label className="text-[10px] font-black uppercase tracking-wider text-slate-500">Nome do grupo</label>
                             <Input value={nome} onChange={event => setNome(event.target.value)} placeholder="Ex.: Clínico + Audiometria" />
@@ -234,7 +233,7 @@ export function FiltroGrupoExames({
                             <Badge variant="secondary" className="bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300">{exames.length} selecionado(s)</Badge>
                         </div>
                         <Input value={busca} onChange={event => setBusca(event.target.value)} placeholder="Buscar exame..." />
-                        <div className="max-h-72 space-y-1 overflow-y-auto rounded-xl border bg-slate-50/60 p-2 dark:bg-slate-900/50">
+                        <div className="max-h-[35dvh] space-y-1 overflow-y-auto rounded-xl border bg-slate-50/60 p-2 dark:bg-slate-900/50 sm:max-h-72">
                             {examesFiltrados.map(exame => (
                                 <label key={exame} className={`flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 text-sm transition-all ${exames.includes(exame) ? "border-blue-300 bg-blue-50 dark:border-blue-700 dark:bg-blue-950/30" : "border-transparent bg-white hover:border-slate-200 dark:bg-slate-800"}`}>
                                     <Checkbox
@@ -248,17 +247,17 @@ export function FiltroGrupoExames({
                             ))}
                             {!examesFiltrados.length && <p className="py-8 text-center text-xs text-muted-foreground">Nenhum exame encontrado.</p>}
                         </div>
-                        <div className="flex items-center justify-between gap-2 border-t pt-4">
-                            <div>
+                        <div className="flex flex-col-reverse gap-2 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="w-full sm:w-auto">
                                 {editando && (
-                                    <Button type="button" variant="destructive" onClick={() => { excluir(editando); setDialogOpen(false); }}>
+                                    <Button type="button" variant="destructive" className="w-full sm:w-auto" onClick={() => { excluir(editando); setDialogOpen(false); }}>
                                         <Trash2 className="mr-2 h-4 w-4" /> Excluir
                                     </Button>
                                 )}
                             </div>
-                            <div className="flex gap-2">
-                                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-                                <Button type="button" onClick={salvar}>{editando ? "Salvar alterações" : "Criar grupo"}</Button>
+                            <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
+                                <Button type="button" variant="outline" className="min-w-0" onClick={() => setDialogOpen(false)}>Cancelar</Button>
+                                <Button type="button" className="min-w-0" onClick={salvar}>{editando ? "Salvar alterações" : "Criar grupo"}</Button>
                             </div>
                         </div>
                     </div>

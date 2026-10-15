@@ -17,6 +17,9 @@ import {
 } from "lucide-react";
 
 import { toast } from "sonner";
+import type { UnidadeConfiguracao } from "../types";
+import { formatarCEP, formatarCNPJ, somenteNumeros, validarArquivoLogo } from "./utils";
+import { mensagemErroConfiguracao } from "../utils";
 
 export default function UnidadeConfigPage() {
     const [loading, setLoading] = useState(true);
@@ -25,7 +28,7 @@ export default function UnidadeConfigPage() {
     const [uploadingLogo, setUploadingLogo] = useState(false);
     const [uploadingCompacta, setUploadingCompacta] = useState(false);
 
-    const [unidade, setUnidade] = useState<any>(null);
+    const [unidade, setUnidade] = useState<UnidadeConfiguracao | null>(null);
 
     const [form, setForm] = useState({
         nome: "",
@@ -46,10 +49,6 @@ export default function UnidadeConfigPage() {
     // =========================================
     // CARREGA UNIDADE ATIVA
     // =========================================
-    useEffect(() => {
-        carregarUnidade();
-    }, []);
-
     const carregarUnidade = async () => {
         try {
             setLoading(true);
@@ -95,37 +94,20 @@ export default function UnidadeConfigPage() {
                 logo_url: unidadeData.logo_url || "",
                 logo_icone_url: unidadeData.logo_icone_url || "",
             });
-        } catch (error: any) {
-            toast.error(error.message);
+        } catch (error: unknown) {
+            toast.error(mensagemErroConfiguracao(error));
         } finally {
             setLoading(false);
         }
     };
 
+    useEffect(() => {
+        queueMicrotask(() => void carregarUnidade());
+    }, []);
+
     // =========================================
     // VALIDA ARQUIVO
     // =========================================
-    const validarArquivo = (file: File) => {
-
-        // LIMITE 2MB
-        const limite = 2 * 1024 * 1024;
-
-        if (file.size > limite) {
-            throw new Error("Arquivo muito grande. Máximo permitido: 2MB.");
-        }
-
-        // TIPOS PERMITIDOS
-        const tiposPermitidos = [
-            "image/png",
-            "image/jpeg",
-            "image/svg+xml",
-        ];
-
-        if (!tiposPermitidos.includes(file.type)) {
-            throw new Error("Formato inválido. Utilize PNG, JPG ou SVG.");
-        }
-    };
-
     // =========================================
     // FUNÇÃO GENÉRICA DE UPLOAD
     // =========================================
@@ -133,6 +115,7 @@ export default function UnidadeConfigPage() {
         file: File,
         tipo: "logo-expandida" | "logo-compacta"
     ) => {
+        if (!unidade) throw new Error("Unidade não carregada.");
         const extensao = file.name.split(".").pop();
 
         const caminho = `${unidade.id}/${tipo}.${extensao}`;
@@ -165,7 +148,7 @@ export default function UnidadeConfigPage() {
 
             if (!file) return;
 
-            validarArquivo(file);
+            validarArquivoLogo(file);
 
             setUploadingLogo(true);
 
@@ -180,8 +163,8 @@ export default function UnidadeConfigPage() {
             }));
 
             toast.success("Logo expandida enviada!");
-        } catch (error: any) {
-            toast.error(error.message);
+        } catch (error: unknown) {
+            toast.error(mensagemErroConfiguracao(error));
         } finally {
             setUploadingLogo(false);
         }
@@ -198,7 +181,7 @@ export default function UnidadeConfigPage() {
 
             if (!file) return;
 
-            validarArquivo(file);
+            validarArquivoLogo(file);
 
             setUploadingCompacta(true);
 
@@ -213,8 +196,8 @@ export default function UnidadeConfigPage() {
             }));
 
             toast.success("Logo compacta enviada!");
-        } catch (error: any) {
-            toast.error(error.message);
+        } catch (error: unknown) {
+            toast.error(mensagemErroConfiguracao(error));
         } finally {
             setUploadingCompacta(false);
         }
@@ -225,10 +208,8 @@ export default function UnidadeConfigPage() {
     // =========================================
     const handleSalvar = async () => {
         try {
+            if (!unidade) throw new Error("Unidade não carregada.");
             setSaving(true);
-
-            const somenteNumeros = (valor: string) =>
-                valor.replace(/\D/g, "");
 
             const { error } = await supabase
                 .from("unidades")
@@ -255,28 +236,11 @@ export default function UnidadeConfigPage() {
 
             toast.success("Configurações salvas!");
             location.reload()
-        } catch (error: any) {
-            toast.error(error.message);
+        } catch (error: unknown) {
+            toast.error(mensagemErroConfiguracao(error));
         } finally {
             setSaving(false);
         }
-    };
-
-    const formatarCNPJ = (value: string) => {
-        return value
-            .replace(/\D/g, "")
-            .replace(/^(\d{2})(\d)/, "$1.$2")
-            .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
-            .replace(/\.(\d{3})(\d)/, ".$1/$2")
-            .replace(/(\d{4})(\d)/, "$1-$2")
-            .slice(0, 18);
-    };
-
-    const formatarCEP = (value: string) => {
-        return value
-            .replace(/\D/g, "")
-            .replace(/^(\d{5})(\d)/, "$1-$2")
-            .slice(0, 9);
     };
 
     const buscarCep = async (cep: string) => {

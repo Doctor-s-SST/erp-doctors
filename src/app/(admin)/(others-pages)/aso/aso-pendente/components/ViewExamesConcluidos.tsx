@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
     Table,
@@ -24,10 +23,8 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import {
-    AlertCircle,
     CheckCircle2,
     Clock3,
-    Search,
     Save,
     Send,
     ArrowUp,
@@ -35,14 +32,13 @@ import {
     ArrowUpDown,
     ChevronLeft,
     ChevronRight,
-    SlidersHorizontal,
-    X,
 } from "lucide-react";
 import { FuncionarioModal } from "./FuncionarioModal";
 import { ConfirmarAcaoDialog } from "./ConfirmarAcaoDialog";
-import { StatusAtendimentoBadge } from "./StatusAtendimentoBadge";
-import { correspondeAoGrupoExames, FiltroGrupoExames, GrupoFiltroExames } from "./FiltroGrupoExames";
-import { useStatusAtendimentos } from "../hooks/useStatusAtendimentos";
+import { correspondeAoGrupoExames, FiltroGrupoExames } from "./FiltroGrupoExames";
+import { FiltroPrazoAso, FiltroPrazoCards } from "./FiltroPrazoCards";
+import { PainelFiltrosExames } from "./PainelFiltrosExames";
+import { useFiltrosTabelaExames } from "../hooks/useFiltrosTabelaExames";
 import { ViewExamesConcluidosProps, FuncionarioItem, StatusVencimentoVisual } from "../types";
 import {
     classificarTipoExame,
@@ -80,17 +76,6 @@ export function ViewExamesConcluidos({
 }: ViewExamesConcluidosProps) {
     const [selectedFuncionario, setSelectedFuncionario] = useState<any | null>(null);
 
-    const itensConcluidosStatus = useMemo(() => {
-        return todosFuncionarios.map((item: any) => ({
-            sequencialFicha: item.sequencialFicha || item.sequencial_ficha || item.aso?.sequencialFicha,
-            cpf: item.cpf || item.cpfFuncionario || item.aso?.cpfFuncionario || item.aso?.cpf,
-            nome: item.nome || item.nomeFuncionario || item.aso?.nomeFuncionario,
-            // dataFicha pode estar no item raiz ou aninhado dentro de aso
-            dataFicha: item.dataFicha || item.aso?.dataFicha || null,
-        }));
-    }, [todosFuncionarios]);
-
-    const { statusMap: statusAtendimentosMap } = useStatusAtendimentos(unidadeId, itensConcluidosStatus);
     const [modalOpen, setModalOpen] = useState(false);
     const [selectedCpfs, setSelectedCpfs] = useState<Set<string>>(new Set());
     const [saving, setSaving] = useState(false);
@@ -98,7 +83,17 @@ export function ViewExamesConcluidos({
     // Aba Ativa: "pendentes" (disponíveis para montagem) ou "salvos" (montados/salvos)
     const [abaAtiva, setAbaAtiva] = useState<"pendentes" | "salvos">("pendentes");
 
-    const [busca, setBusca] = useState("");
+    const {
+        busca, setBusca,
+        filtroMedico, setFiltroMedico,
+        filtroExameEspecifico, setFiltroExameEspecifico,
+        filtroPrestador, setFiltroPrestador,
+        dataInicio, setDataInicio,
+        dataFim, setDataFim,
+        grupoExames, setGrupoExames,
+        filtroPrazoAso, setFiltroPrazoAso,
+        limparFiltros,
+    } = useFiltrosTabelaExames();
     const [sortKey, setSortKey] = useState<string>("nome");
     const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
 
@@ -108,15 +103,9 @@ export function ViewExamesConcluidos({
     const [paginaAtual, setPaginaAtual] = useState(1);
     const [itensPorPagina, setItensPorPagina] = useState(15);
 
-    const [filtroMedico, setFiltroMedico] = useState("todos");
-    const [filtroExameEspecifico, setFiltroExameEspecifico] = useState("todos");
-    const [filtroPrestador, setFiltroPrestador] = useState("todos");
-    const [dataInicio, setDataInicio] = useState("");
-    const [dataFim, setDataFim] = useState("");
     const [sendingAso, setSendingAso] = useState(false);
     const [concluindoAtendimento, setConcluindoAtendimento] = useState(false);
     const [acaoParaConfirmar, setAcaoParaConfirmar] = useState<"salvar" | "enviar" | "concluido" | null>(null);
-    const [grupoExames, setGrupoExames] = useState<GrupoFiltroExames | null>(null);
     const operacaoEmAndamento = useRef(false);
     const processandoAcao = saving || sendingAso || concluindoAtendimento;
 
@@ -402,9 +391,13 @@ export function ViewExamesConcluidos({
     const indicadoresVencimento = useMemo(() => {
         let vencidos = 0;
         let noPrazo = 0;
+        let suspensos = 0;
 
         funcionariosComPrazo.forEach((item: any) => {
-            if (!item.prazoAso) return;
+            if (!item.prazoAso) {
+                suspensos++;
+                return;
+            }
 
             if (item.statusPrazo?.estaVencido) {
                 vencidos++;
@@ -416,6 +409,7 @@ export function ViewExamesConcluidos({
         return {
             vencidos,
             noPrazo,
+            suspensos,
         };
     }, [funcionariosComPrazo]);
 
@@ -435,6 +429,11 @@ export function ViewExamesConcluidos({
 
         const lista = funcionariosComPrazo.filter((f) => {
             const jaMontado = isFuncionarioMontado(f);
+
+            const categoriaPrazo: Exclude<FiltroPrazoAso, "todos"> = !f.prazoAso
+                ? "suspenso"
+                : f.statusPrazo.estaVencido ? "vencido" : "no-prazo";
+            if (filtroPrazoAso !== "todos" && categoriaPrazo !== filtroPrazoAso) return false;
 
             // Aba pendentes = somente quem ainda não foi montado
             if (abaAtiva === "pendentes" && jaMontado) {
@@ -478,24 +477,6 @@ export function ViewExamesConcluidos({
                     resultado = (a.prazoAso?.dataLimite.getTime() ?? Number.POSITIVE_INFINITY) -
                         (b.prazoAso?.dataLimite.getTime() ?? Number.POSITIVE_INFINITY);
                 }
-            } else if (sortKey === "statusAtendimento") {
-                const fichaA = a.sequencialFicha || a.sequencial_ficha || a.aso?.sequencialFicha || "";
-                const fichaB = b.sequencialFicha || b.sequencial_ficha || b.aso?.sequencialFicha || "";
-                const cpfA = a.cpf || a.cpfFuncionario || a.aso?.cpfFuncionario || "";
-                const cpfB = b.cpf || b.cpfFuncionario || b.aso?.cpfFuncionario || "";
-                const nomeA = a.nome || a.nomeFuncionario || a.aso?.nomeFuncionario || "";
-                const nomeB = b.nome || b.nomeFuncionario || b.aso?.nomeFuncionario || "";
-
-                const infoA = statusAtendimentosMap[fichaA] || statusAtendimentosMap[cpfA] || statusAtendimentosMap[nomeA];
-                const infoB = statusAtendimentosMap[fichaB] || statusAtendimentosMap[cpfB] || statusAtendimentosMap[nomeB];
-                const rank = (info?: any) => {
-                    if (!info || info.statusGeral === "SEM_ATENDIMENTO") return 0;
-                    if (info.statusGeral === "AGUARDANDO") return 1;
-                    if (info.statusGeral === "EM_ATENDIMENTO") return 2;
-                    if (info.todosFinalizados) return 3;
-                    return 1;
-                };
-                resultado = rank(infoA) - rank(infoB);
             } else {
                 const av = a[sortKey] ?? "";
                 const bv = b[sortKey] ?? "";
@@ -518,7 +499,7 @@ export function ViewExamesConcluidos({
         sortDirection,
         funcionariosSalvos,
         abaAtiva,
-        statusAtendimentosMap,
+        filtroPrazoAso,
     ]);
 
     /* ============================================================
@@ -540,7 +521,7 @@ export function ViewExamesConcluidos({
     ============================================================ */
     useEffect(() => {
         setPaginaAtual(1);
-    }, [busca, filtroTipoExame, filtroMedico, filtroExameEspecifico, filtroPrestador, dataInicio, dataFim, sortKey, sortDirection, abaAtiva, prazosMap]);
+    }, [busca, filtroTipoExame, filtroMedico, filtroExameEspecifico, filtroPrestador, filtroPrazoAso, dataInicio, dataFim, sortKey, sortDirection, abaAtiva, prazosMap]);
 
     useEffect(() => {
         const ultimaPaginaValida = Math.max(1, totalPaginas);
@@ -836,7 +817,7 @@ export function ViewExamesConcluidos({
                 <div className="flex flex-col gap-2">
 
                     {/* FAIXA 1 — TÍTULO + ABAS */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex flex-col justify-between gap-3 xl:flex-row xl:items-center">
                         <div className="flex items-center gap-3">
                             <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-emerald-500/10 shrink-0">
                                 <CheckCircle2 className="w-4.5 h-4.5 text-emerald-500" />
@@ -846,37 +827,19 @@ export function ViewExamesConcluidos({
                             </CardTitle>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-2 mx-auto">
-                            <div className="flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-1.5">
-                                <div className="flex items-center justify-center w-7 h-7 rounded-md bg-red-500/10 shrink-0">
-                                    <AlertCircle className="w-4 h-4 text-red-500" />
-                                </div>
-                                <div className="min-w-0">
-                                    <div className="text-[9px] uppercase font-bold tracking-wide text-slate-400">
-                                        ASOs Vencidos
-                                    </div>
-                                </div>
-                                <span className="ml-auto text-lg font-black text-red-500">
-                                    {indicadoresVencimento.vencidos}
-                                </span>
-                            </div>
+                        <FiltroPrazoCards
+                            filtro={filtroPrazoAso}
+                            vencidos={indicadoresVencimento.vencidos}
+                            noPrazo={indicadoresVencimento.noPrazo}
+                            suspensos={indicadoresVencimento.suspensos}
+                            onChange={(filtro) => {
+                                setFiltroPrazoAso(filtro);
+                                setSelectedCpfs(new Set());
+                                setPaginaAtual(1);
+                            }}
+                        />
 
-                            <div className="flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-1.5">
-                                <div className="flex items-center justify-center w-7 h-7 rounded-md bg-emerald-500/10 shrink-0">
-                                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                                </div>
-                                <div className="min-w-0">
-                                    <div className="text-[9px] uppercase font-bold tracking-wide text-slate-400">
-                                        ASOs no Prazo
-                                    </div>
-                                </div>
-                                <span className="ml-auto text-lg font-black text-emerald-500">
-                                    {indicadoresVencimento.noPrazo}
-                                </span>
-                            </div>
-                        </div>
-
-                        <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 self-start sm:self-auto">
+                        <div className="flex items-center self-start rounded-xl border border-slate-200 bg-slate-100 p-1 dark:border-slate-700 dark:bg-slate-800 xl:self-auto">
                             <button
                                 type="button"
                                 onClick={() => {
@@ -919,92 +882,27 @@ export function ViewExamesConcluidos({
 
                     {/* FAIXA 3 — BUSCA + FILTROS + AÇÕES */}
                     <div className="flex flex-col gap-2 border-t border-slate-100 pt-2 dark:border-slate-800">
-                        <div className="w-full rounded-xl border border-slate-200 bg-slate-50/70 p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800/40">
-                            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                                <div className="flex min-w-0 items-center gap-2">
-                                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400"><SlidersHorizontal className="h-4 w-4" /></span>
-                                    <div className="min-w-0"><p className="text-xs font-bold text-slate-700 dark:text-slate-200">Filtros</p>
-                                        <p className="truncate text-[10px] text-slate-400">Refine os ASOs exibidos na lista</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    {busca && <span className="text-[10px] text-slate-400">{funcionariosFiltrados.length} resultado(s)</span>}
-                                    {(busca || filtroMedico !== "todos" || filtroExameEspecifico !== "todos" || filtroPrestador !== "todos" || grupoExames || dataInicio || dataFim) && (
-                                        <Button type="button" variant="ghost" onClick={() => { setBusca(""); setFiltroMedico("todos"); setFiltroExameEspecifico("todos"); setFiltroPrestador("todos"); setGrupoExames(null); setDataInicio(""); setDataFim(""); }} className="h-8 gap-1.5 px-2 text-[10px] font-bold uppercase text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"><X className="h-3.5 w-3.5" /> Limpar</Button>
-                                    )}
-                                </div>
-                            </div>
-                            <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
-                                <div className="relative min-w-0 sm:col-span-2 lg:col-span-1 2xl:col-span-2">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                    <Input
-                                        value={busca}
-                                        onChange={(e) => setBusca(e.target.value)}
-                                        placeholder="Buscar por nome, empresa..."
-                                        className="h-10 bg-white pl-9 pr-9 text-xs dark:bg-slate-900"
-                                    />
-                                    {busca && (
-                                        <button
-                                            type="button"
-                                            onClick={() => setBusca("")}
-                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                                        >
-                                            ×
-                                        </button>
-                                    )}
-                                </div>
-
-                                <Select value={filtroMedico} onValueChange={setFiltroMedico}>
-                                    <SelectTrigger className="h-10 w-full min-w-0 bg-white text-xs dark:bg-slate-900">
-                                        <SelectValue placeholder="Médico Examinador" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="todos">Todos os médicos</SelectItem>
-                                        {listaMedicosConcluidos.map((med) => (
-                                            <SelectItem key={med} value={med}>{med}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-
-                                <Select value={filtroExameEspecifico} onValueChange={setFiltroExameEspecifico}>
-                                    <SelectTrigger className="h-10 w-full min-w-0 bg-white text-xs dark:bg-slate-900">
-                                        <SelectValue placeholder="Filtrar por Exame" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="todos">Todos os exames</SelectItem>
-                                        {listaExamesConcluidos.map((ex) => (
-                                            <SelectItem key={ex} value={ex}>{ex}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-
-                                <div className="min-w-0 sm:col-span-2 lg:col-span-1 2xl:col-span-2">
-                                    <FiltroGrupoExames unidadeId={unidadeId} examesDisponiveis={listaExamesConcluidos} grupoSelecionado={grupoExames} onGrupoSelecionadoChange={setGrupoExames} />
-                                </div>
-
-                                <Select value={filtroPrestador} onValueChange={setFiltroPrestador}>
-                                    <SelectTrigger className="h-10 w-full min-w-0 bg-white text-xs dark:bg-slate-900">
-                                        <SelectValue placeholder="Credenciada" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="todos">Todas as credenciadas</SelectItem>
-                                        {listaPrestadoresConcluidos.map((prestador) => (
-                                            <SelectItem key={prestador} value={prestador}>{prestador}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-
-                                <label className="flex h-10 min-w-0 items-center gap-2 rounded-md border border-input bg-white px-3 text-[9px] font-bold uppercase text-slate-500 dark:bg-slate-900">
-                                    <span className="whitespace-nowrap">De</span>
-                                    <Input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} className="h-7 border-0 bg-transparent p-0 text-xs font-normal normal-case shadow-none focus-visible:ring-0" />
-                                </label>
-                                <label className="flex h-10 min-w-0 items-center gap-2 rounded-md border border-input bg-white px-3 text-[9px] font-bold uppercase text-slate-500 dark:bg-slate-900">
-                                    <span className="whitespace-nowrap">Até</span>
-                                    <Input type="date" value={dataFim} min={dataInicio || undefined} onChange={(e) => setDataFim(e.target.value)} className="h-7 border-0 bg-transparent p-0 text-xs font-normal normal-case shadow-none focus-visible:ring-0" />
-                                </label>
-
-                            </div>
-                        </div>
+                        <PainelFiltrosExames
+                            busca={busca}
+                            onBuscaChange={setBusca}
+                            quantidadeResultados={funcionariosFiltrados.length}
+                            medico={filtroMedico}
+                            onMedicoChange={setFiltroMedico}
+                            medicos={listaMedicosConcluidos}
+                            exame={filtroExameEspecifico}
+                            onExameChange={setFiltroExameEspecifico}
+                            exames={listaExamesConcluidos}
+                            prestador={filtroPrestador}
+                            onPrestadorChange={setFiltroPrestador}
+                            prestadores={listaPrestadoresConcluidos}
+                            dataInicio={dataInicio}
+                            onDataInicioChange={setDataInicio}
+                            dataFim={dataFim}
+                            onDataFimChange={setDataFim}
+                            possuiFiltroExtra={filtroPrazoAso !== "todos" || Boolean(grupoExames)}
+                            onLimpar={limparFiltros}
+                            filtroGrupo={<FiltroGrupoExames unidadeId={unidadeId} examesDisponiveis={listaExamesConcluidos} grupoSelecionado={grupoExames} onGrupoSelecionadoChange={setGrupoExames} />}
+                        />
 
                         {abaAtiva === "pendentes" && (
                             <div className="order-first flex w-full flex-wrap justify-center gap-2">
@@ -1095,7 +993,6 @@ export function ViewExamesConcluidos({
                             {renderSortHeader({ label: "Data Ficha", sortKeyValue: "dataFicha" })}
                             {renderSortHeader({ label: "Prazo ASO", sortKeyValue: "prazoAso" })}
                             {renderSortHeader({ label: "Vencimento", sortKeyValue: "statusPrazo" })}
-                            {renderSortHeader({ label: "Status Atendimento", sortKeyValue: "statusAtendimento" })}
                             {renderSortHeader({ label: "Observação", sortKeyValue: "observacao" })}
                         </TableRow>
                     </TableHeader>
@@ -1104,10 +1001,10 @@ export function ViewExamesConcluidos({
                         {funcionariosPaginados.length === 0 ? (
                             <TableRow>
                                 <TableCell
-                                    colSpan={10}
+                                    colSpan={9}
                                     className="text-center py-8 text-xs text-slate-400"
                                 >
-                                    {dataInicio || dataFim || filtroMedico !== "todos" || filtroExameEspecifico !== "todos" || filtroPrestador !== "todos" || busca
+                                    {dataInicio || dataFim || filtroMedico !== "todos" || filtroExameEspecifico !== "todos" || filtroPrestador !== "todos" || filtroPrazoAso !== "todos" || grupoExames || busca
                                         ? "Nenhum funcionário encontrado para os filtros informados."
                                         : abaAtiva === "pendentes"
                                             ? "Nenhum funcionário pendente para montagem."
@@ -1279,17 +1176,6 @@ export function ViewExamesConcluidos({
                                                     </span>
                                                 )}
                                             </div>
-                                        </TableCell>
-
-                                        {/* STATUS ATENDIMENTO */}
-                                        <TableCell>
-                                            <StatusAtendimentoBadge
-                                                info={
-                                                    statusAtendimentosMap[item.sequencialFicha || item.sequencial_ficha || item.aso?.sequencialFicha || ""] ||
-                                                    statusAtendimentosMap[item.cpf || item.cpfFuncionario || item.aso?.cpfFuncionario || ""] ||
-                                                    statusAtendimentosMap[item.nome || item.nomeFuncionario || item.aso?.nomeFuncionario || ""]
-                                                }
-                                            />
                                         </TableCell>
 
                                         {/* OBSERVAÇÃO */}

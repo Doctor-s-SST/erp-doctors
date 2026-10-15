@@ -27,11 +27,17 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import { Label } from "@/components/ui/label";
+import type {
+  EspecialidadeConfiguracao,
+  ProfissionalConfiguracao,
+  SalaConfiguracao,
+} from "../types";
+import { filtrarProfissionais, mensagemErroConfiguracao } from "../utils";
 
 export default function ConfiguracoesPage() {
-  const [salas, setSalas] = useState<any[]>([]);
-  const [profissionais, setProfissionais] = useState<any[]>([]);
-  const [especialidades, setEspecialidades] = useState<any[]>([]);
+  const [salas, setSalas] = useState<SalaConfiguracao[]>([]);
+  const [profissionais, setProfissionais] = useState<ProfissionalConfiguracao[]>([]);
+  const [especialidades, setEspecialidades] = useState<EspecialidadeConfiguracao[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [novaSala, setNovaSala] = useState({
@@ -41,8 +47,8 @@ export default function ConfiguracoesPage() {
   });
   const [novoProfissional, setNovoProfissional] = useState({ nome: "", especialidade_id: "" });
 
-  const [editandoSala, setEditandoSala] = useState<any | null>(null);
-  const [editandoProfissional, setEditandoProfissional] = useState<any | null>(null);
+  const [editandoSala, setEditandoSala] = useState<SalaConfiguracao | null>(null);
+  const [editandoProfissional, setEditandoProfissional] = useState<ProfissionalConfiguracao | null>(null);
 
   const [unidadeId, setUnidadeId] = useState<string | null>(null);
 
@@ -188,6 +194,7 @@ export default function ConfiguracoesPage() {
   }
 
   async function salvarEdicaoSala() {
+    if (!editandoSala) return;
     const { error } = await supabase
       .from("salas")
       .update({
@@ -296,6 +303,7 @@ export default function ConfiguracoesPage() {
   }
 
   async function salvarEdicaoNomeProfissional() {
+    if (!editandoProfissional) return;
     const { error } = await supabase
       .from("profissionais")
       .update({
@@ -312,7 +320,7 @@ export default function ConfiguracoesPage() {
     }
   }
 
-  async function alterarStatusProfissional(profissional: any) {
+  async function alterarStatusProfissional(profissional: ProfissionalConfiguracao) {
     try {
 
       if (
@@ -340,52 +348,16 @@ export default function ConfiguracoesPage() {
 
       fetchAll();
 
-    } catch (error: any) {
-      toast.error(error.message);
+    } catch (error: unknown) {
+      toast.error(mensagemErroConfiguracao(error));
     }
   }
 
-  const profissionaisFiltrados = profissionais.filter((p) => {
-    // Status
-    if (filtroStatus === "ativos" && !p.ativo) {
-      return false;
-    }
-
-    // Busca por nome
-    if (
-      busca &&
-      !p.nome.toLowerCase().includes(busca.toLowerCase())
-    ) {
-      return false;
-    }
-
-    // Especialidade
-    if (filtroEspecialidade !== "todas") {
-      const possuiEspecialidade =
-        p.profissional_especialidades?.some(
-          (e: any) =>
-            e.especialidade_id === filtroEspecialidade
-        );
-
-      if (!possuiEspecialidade) {
-        return false;
-      }
-    }
-
-    // Jornada
-    if (filtroJornada === "sem-jornada") {
-      if (p.hora_inicio && p.hora_fim) {
-        return false;
-      }
-    }
-
-    if (filtroJornada === "com-jornada") {
-      if (!p.hora_inicio || !p.hora_fim) {
-        return false;
-      }
-    }
-
-    return true;
+  const profissionaisFiltrados = filtrarProfissionais(profissionais, {
+    status: filtroStatus,
+    busca,
+    especialidade: filtroEspecialidade,
+    jornada: filtroJornada,
   });
 
   const getEspecialidadeNome = (id: string | null) => {
@@ -696,7 +668,7 @@ export default function ConfiguracoesPage() {
                               </Badge>
                             ) : null}
 
-                            {p.profissional_especialidades?.map((v: any) => (
+                            {p.profissional_especialidades?.map((v) => (
                               <Badge key={v.id} className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[9px] font-black uppercase border-none py-1 group/badge flex items-center gap-1">
                                 {getEspecialidadeNome(v.especialidade_id)}
                                 <button
@@ -943,7 +915,7 @@ export default function ConfiguracoesPage() {
                                   andar: s.andar ?? 0,
                                   especialidades:
                                     s.sala_especialidades?.map(
-                                      (v: any) => v.especialidade_id
+                                      (v) => v.especialidade_id
                                     ) || []
                                 })
                               } className="h-7 w-7"><Pencil className="h-3 w-3 text-slate-400" /></Button>
@@ -958,7 +930,7 @@ export default function ConfiguracoesPage() {
                               </p>
                             )}
                             <div className="flex flex-wrap gap-1 mt-2">
-                              {s.sala_especialidades?.map((v: any) => (
+                              {s.sala_especialidades?.map((v) => (
                                 <Badge
                                   key={v.id}
                                   variant="outline"

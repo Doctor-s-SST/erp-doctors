@@ -66,6 +66,22 @@ export function ViewDashboard({
         });
     }, [todosFuncionarios, filtroTipoExame, prazosMap]);
 
+    const pendenciasMap = useMemo(() => {
+        const map = new Map<string, string[]>();
+        const lista = analytics?.funcionariosComExamesPendentes || [];
+
+        lista.forEach((item: any) => {
+            const cpf = String(item.cpfFuncionario || item.cpf || "").trim();
+            if (!cpf) return;
+            const examesPendentes: string[] = Array.isArray(item.examesPendentes)
+                ? item.examesPendentes
+                : [item.examesPendentes || ""].filter(Boolean);
+            if (examesPendentes.length) map.set(cpf, examesPendentes);
+        });
+
+        return map;
+    }, [analytics?.funcionariosComExamesPendentes]);
+
     if (!analytics) {
         return (
             <div className="flex min-h-[300px] items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white text-xs font-mono uppercase text-slate-400 dark:border-gray-700 dark:bg-gray-900">
@@ -211,28 +227,6 @@ export function ViewDashboard({
        para que o dashboard avalie prazo somente sobre exames
        realmente pendentes — consistente com ViewExamesPendentes.
     ============================================================ */
-    const pendenciasMap = useMemo(() => {
-        const map = new Map<string, string[]>();
-        const lista = analytics?.funcionariosComExamesPendentes || [];
-
-        lista.forEach((item: any) => {
-            const cpf = String(
-                item.cpfFuncionario || item.cpf || ""
-            ).trim();
-            if (!cpf) return;
-
-            const examesPendentes: string[] = Array.isArray(item.examesPendentes)
-                ? item.examesPendentes
-                : [item.examesPendentes || ""].filter(Boolean);
-
-            if (examesPendentes.length > 0) {
-                map.set(cpf, examesPendentes);
-            }
-        });
-
-        return map;
-    }, [analytics?.funcionariosComExamesPendentes]);
-
     /* ============================================================
        VENCIMENTO DOS ASOS
        Considera TODOS os funcionários (concluídos e pendentes),

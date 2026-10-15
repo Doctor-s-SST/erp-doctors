@@ -4,19 +4,14 @@ import { useEffect, useRef, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/lib/supabase"
 import { format, startOfMonth, endOfMonth } from "date-fns"
-import { ptBR } from "date-fns/locale"
 
 // UI Components
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Calendar } from "@/components/ui/calendar"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
 
 // Icons
 import {
-    Calendar as CalendarIcon,
     Activity,
     RefreshCcw,
 } from "lucide-react"
@@ -24,11 +19,13 @@ import {
 // Importe seus gráficos aqui (assumindo que foram criados anteriormente)
 import { GraficoPizza } from "@/components/atendimento/dashboards/diario/GraficoPizza"
 import { resolveDashboardAnalytics } from "@/lib/dashboard-analytics"
-
-type ViewType = "geral" | "diario" | "mensal"
+import { FiltroPeriodoDashboard } from "./components/FiltroPeriodoDashboard"
+import { CardIndicadorDashboard } from "./components/CardIndicadorDashboard"
+import type { DashboardView } from "./types"
+import type { DashboardPayload, RecepcaoItem, SalaEspecialidadeItem } from "@/lib/dashboard-analytics"
 
 export default function DashboardPage() {
-    const [view, setView] = useState<ViewType>("diario")
+    const [view, setView] = useState<DashboardView>("diario")
     const [unidadeId, setUnidadeId] = useState("")
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -62,11 +59,6 @@ export default function DashboardPage() {
     const isHoje = format(dataInicio, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd')
     const pollingActive = isHoje && view !== "mensal"
 
-    const meses = [
-        "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-        "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
-    ]
-
     const { data, isFetching } = useQuery({
         queryKey: [
             'dashboard',
@@ -99,7 +91,7 @@ export default function DashboardPage() {
     })
 
     // Handler para troca de visão (ajusta as datas automaticamente)
-    const handleViewChange = (newView: ViewType) => {
+    const handleViewChange = (newView: DashboardView) => {
         setView(newView)
 
         const hoje = new Date()
@@ -177,127 +169,46 @@ export default function DashboardPage() {
                         <Activity className={cn("w-5 h-5", pollingActive && "animate-pulse")} />
                     </div>
                     <div>
-                        <h1 className="text-lg font-black text-white uppercase tracking-tight">Dashboard diário</h1>
+                        <h1 className="text-lg font-black text-white uppercase tracking-tight">
+                            Dashboard {view === "diario" ? "diário" : view === "mensal" ? "mensal" : "por período"}
+                        </h1>
                         <div className="flex items-center gap-2">
-                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Atualizado em tempo real</p>
+                            <span className={cn("h-1.5 w-1.5 rounded-full", pollingActive ? "animate-pulse bg-emerald-500" : "bg-gray-500")} />
+                            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                                {pollingActive ? "Atualizado em tempo real" : "Período histórico"}
+                            </p>
                         </div>
                     </div>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3">
                     {/* TABS DE VISUALIZAÇÃO */}
-                    <Tabs value={view} onValueChange={(v) => handleViewChange(v as ViewType)} className="bg-gray-800 p-1 rounded-lg border border-gray-700">
+                    <Tabs value={view} onValueChange={(v) => handleViewChange(v as DashboardView)} className="bg-gray-800 p-1 rounded-lg border border-gray-700">
                         <TabsList className="bg-transparent h-8 gap-1">
-                            {/* <TabsTrigger value="geral" className="data-[state=active]:bg-emerald-600 text-[10px] uppercase text-white font-bold">Geral</TabsTrigger> */}
+                            <TabsTrigger value="geral" className="data-[state=active]:bg-emerald-600 text-[10px] uppercase text-white font-bold">Período</TabsTrigger>
                             <TabsTrigger value="diario" className="data-[state=active]:bg-blue-600 text-[10px] uppercase text-white font-bold">Diário</TabsTrigger>
-                            {/* <TabsTrigger value="mensal" className="data-[state=active]:bg-purple-600 text-[10px] uppercase text-white font-bold">Mensal</TabsTrigger> */}
+                            <TabsTrigger value="mensal" className="data-[state=active]:bg-purple-600 text-[10px] uppercase text-white font-bold">Mensal</TabsTrigger>
                         </TabsList>
                     </Tabs>
 
                     {/* SELETOR DE DATA ADAPTATIVO */}
                     <div className="flex items-center gap-2 bg-black/40 p-1.5 rounded-lg border border-gray-700">
-                        <Popover>
-                            <PopoverTrigger asChild>
-                                <Button variant="ghost" className="h-7 text-[10px] font-black text-white uppercase hover:bg-gray-800">
-                                    <CalendarIcon className="mr-2 h-3.5 w-3.5 text-emerald-500" />
-                                    {view === 'geral' ? `${format(dataInicio, 'dd/MM')} - ${format(dataFim, 'dd/MM')}` : format(dataInicio, 'MMMM yyyy')}
-                                </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0 bg-gray-900 border-gray-700" align="end">
-                                {view === "mensal" && (
-                                    <div className="flex items-center gap-2">
-                                        <select
-                                            value={dataInicio.getMonth()}
-                                            onChange={(e) => {
-                                                const newDate = new Date(dataInicio)
-                                                newDate.setMonth(Number(e.target.value))
-                                                setDataInicio(startOfMonth(newDate))
-                                                setDataFim(endOfMonth(newDate))
-                                            }}
-                                            className="bg-gray-800 text-white text-xs px-2 py-1 rounded-md border border-gray-700"
-                                        >
-                                            {meses.map((m, i) => (
-                                                <option key={i} value={i}>{m}</option>
-                                            ))}
-                                        </select>
-
-                                        <select
-                                            value={dataInicio.getFullYear()}
-                                            onChange={(e) => {
-                                                const newDate = new Date(dataInicio)
-                                                newDate.setFullYear(Number(e.target.value))
-                                                setDataInicio(startOfMonth(newDate))
-                                                setDataFim(endOfMonth(newDate))
-                                            }}
-                                            className="bg-gray-800 text-white text-xs px-2 py-1 rounded-md border border-gray-700"
-                                        >
-                                            {[2024, 2025, 2026, 2027].map(y => (
-                                                <option key={y} value={y}>{y}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                )}
-
-                                {view == "geral" && (
-                                    <Calendar
-                                        mode="range"
-                                        selected={{
-                                            from: dataInicio,
-                                            to: dataFim
-                                        }}
-                                        onSelect={(value: any) => {
-                                            if (value?.from) setDataInicio(value.from)
-                                            if (value?.to) setDataFim(value.to)
-                                        }}
-                                        locale={ptBR}
-                                        numberOfMonths={2}
-                                        className={cn(
-                                            "p-3 bg-gray-950 text-white rounded-xl border border-gray-800",
-                                            "[&_.rdp-day]:font-semi-bold",
-                                            "[&_.rdp-day_selected]:bg-emerald-600",
-                                            "[&_.rdp-day:hover]:bg-gray-800",
-                                            "[&_.rdp-caption]:text-white",
-                                            "[&_.rdp-head_cell]:text-gray-400"
-                                        )}
-                                    />
-                                )}
-
-                                {view === "diario" && (
-                                    <Calendar
-                                        mode="single"
-                                        selected={dataInicio}
-                                        onSelect={(value: any) => {
-                                            if (value) {
-                                                setDataInicio(value)
-                                                setDataFim(value)
-                                            }
-                                        }}
-                                        locale={ptBR}
-                                        numberOfMonths={1}
-
-                                        className={cn(
-                                            "p-3 bg-gray-950 text-white rounded-xl border border-gray-800",
-                                            "[&_.rdp-day]:font-semi-bold",
-                                            "[&_.rdp-day_selected]:bg-emerald-600",
-                                            "[&_.rdp-day:hover]:bg-gray-800",
-                                            "[&_.rdp-caption]:text-white",
-                                            "[&_.rdp-head_cell]:text-gray-400"
-                                        )}
-                                    />
-                                )}
-
-                            </PopoverContent>
-                        </Popover>
+                        <FiltroPeriodoDashboard
+                            view={view}
+                            dataInicio={dataInicio}
+                            dataFim={dataFim}
+                            onChange={(inicio, fim) => {
+                                setDataInicio(inicio)
+                                setDataFim(fim)
+                            }}
+                        />
                         {isFetching && <RefreshCcw className="w-3.5 h-3.5 text-emerald-500 animate-spin" />}
                     </div>
                 </div>
             </header>
 
             {/* CONTEÚDO DINÂMICO BASEADO NA VIEW */}
-            {/* {view === "geral" && <ViewGeral data={data} />} */}
-            {view === "diario" && <ViewDiaria data={data} />}
-            {/* {view === "mensal" && <ViewMensal data={data} />} */}
+            <ViewDiaria data={data} />
         </div>
     )
 }
@@ -308,80 +219,26 @@ export default function DashboardPage() {
 /* ==========================================================================
    VIEW DIÁRIA (Foco em Pizza e Senhas)
    ========================================================================== */
-function ViewDiaria({ data }: any) {
+function ViewDiaria({ data }: { data: DashboardPayload | null | undefined }) {
     const analytics = resolveDashboardAnalytics(data)
     const cards = analytics.cards
     const especialidadesOrdenadas = [
         ...(analytics.distribuicoes.especialidades || [])
-    ].sort((a: any, b: any) => (b.total || 0) - (a.total || 0))
+    ].sort((a, b) => (b.total || 0) - (a.total || 0))
+    const indicadores = [
+        { titulo: "Senhas Geradas", valor: cards.geradas ?? 0 },
+        { titulo: "Em Atendimento", valor: cards.em_atendimento ?? 0 },
+        { titulo: "Aguardando", valor: cards.aguardando ?? 0 },
+        { titulo: "Finalizadas", valor: cards.finalizadas ?? 0 },
+        { titulo: "Canceladas", valor: cards.cancelados ?? 0 },
+    ]
 
     return (
         <div className="space-y-6">
             <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-                <Card className="dark:bg-gray-900 border-gray-200 dark:border-gray-800">
-                    <CardContent className="p-4">
-                        <div className="w-full flex flex-col items-center gap-1">
-                            <p className="text-1xl font-black text-gray-700 dark:text-gray-400 uppercase tracking-widest mb-1">
-                                Senhas Geradas
-                            </p>
-                            <p className="text-4xl font-black text-gray-900 dark:text-white italic tracking-tight leading-none">
-                                {cards.geradas ?? 0}
-                            </p>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card className="dark:bg-gray-900 border-gray-200 dark:border-gray-800">
-                    <CardContent className="p-4">
-                        <div className="w-full flex flex-col items-center gap-1">
-                            <p className="text-1xl font-black text-gray-700 dark:text-gray-400 uppercase tracking-widest mb-1">
-                                Em Atendimento
-                            </p>
-                            <p className="text-4xl font-black text-gray-900 dark:text-white italic tracking-tight leading-none">
-                                {cards.em_atendimento ?? 0}
-                            </p>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card className="dark:bg-gray-900 border-gray-200 dark:border-gray-800">
-                    <CardContent className="p-4">
-                        <div className="w-full flex flex-col items-center gap-1">
-                            <p className="text-1xl font-black text-gray-700 dark:text-gray-400 uppercase tracking-widest mb-1">
-                                Aguardando
-                            </p>
-                            <p className="text-4xl font-black text-gray-900 dark:text-white italic tracking-tight leading-none">
-                                {cards.aguardando ?? 0}
-                            </p>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card className="dark:bg-gray-900 border-gray-200 dark:border-gray-800">
-                    <CardContent className="p-4">
-                        <div className="w-full flex flex-col items-center gap-1">
-                            <p className="text-1xl font-black text-gray-700 dark:text-gray-400 uppercase tracking-widest mb-1">
-                                Finalizadas
-                            </p>
-                            <p className="text-4xl font-black text-gray-900 dark:text-white italic tracking-tight leading-none">
-                                {cards.finalizadas ?? 0}
-                            </p>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card className="dark:bg-gray-900 border-gray-200 dark:border-gray-800">
-                    <CardContent className="p-4">
-                        <div className="w-full flex flex-col items-center gap-1">
-                            <p className="text-1xl font-black text-gray-700 dark:text-gray-400 uppercase tracking-widest mb-1">
-                                Canceladas
-                            </p>
-                            <p className="text-4xl font-black text-gray-900 dark:text-white italic tracking-tight leading-none">
-                                {cards.cancelados ?? 0}
-                            </p>
-                        </div>
-                    </CardContent>
-                </Card>
+                {indicadores.map(indicador => (
+                    <CardIndicadorDashboard key={indicador.titulo} {...indicador} />
+                ))}
             </div>
 
             <div className="w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -395,7 +252,7 @@ function ViewDiaria({ data }: any) {
                 </div>
 
                 {/* ESPECIALIDADES */}
-                {especialidadesOrdenadas.map((esp: any) => (
+                {especialidadesOrdenadas.map(esp => (
                     <div
                         key={esp.especialidade}
 
@@ -416,7 +273,15 @@ function ViewDiaria({ data }: any) {
    HELPERS / SUBCOMPONENTS
    ========================================================================== */
 
-function CardPizzaSmall({ title, data, aguardando = 0 }: any) {
+function CardPizzaSmall({
+    title,
+    data,
+    aguardando = 0,
+}: {
+    title: string;
+    data: Array<RecepcaoItem | SalaEspecialidadeItem>;
+    aguardando?: number;
+}) {
     return (
         <Card className={`w-full dark:bg-gray-900 border-gray-800`}>
             <CardHeader className="p-1 border-b dark:border-gray-800">

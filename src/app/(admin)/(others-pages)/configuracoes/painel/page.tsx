@@ -67,7 +67,7 @@ export default function UnidadeConfigPage() {
     }
 
     useEffect(() => {
-        void carregarConfiguracoes();
+        queueMicrotask(() => void carregarConfiguracoes());
     }, []);
 
     async function handleSalvar() {

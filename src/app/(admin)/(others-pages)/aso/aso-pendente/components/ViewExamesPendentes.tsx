@@ -5,7 +5,6 @@ import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
     Table,
@@ -24,7 +23,6 @@ import {
 } from "@/components/ui/select";
 import {
     AlertCircle,
-    Search,
     Clock3,
     CheckCircle2,
     ChevronLeft,
@@ -34,12 +32,13 @@ import {
     ArrowUpDown,
     Save,
     Send,
-    SlidersHorizontal,
-    X,
 } from "lucide-react";
 import { FuncionarioModal } from "./FuncionarioModal";
 import { ConfirmarAcaoDialog } from "./ConfirmarAcaoDialog";
-import { correspondeAoGrupoExames, FiltroGrupoExames, GrupoFiltroExames } from "./FiltroGrupoExames";
+import { correspondeAoGrupoExames, FiltroGrupoExames } from "./FiltroGrupoExames";
+import { FiltroPrazoAso, FiltroPrazoCards } from "./FiltroPrazoCards";
+import { PainelFiltrosExames } from "./PainelFiltrosExames";
+import { useFiltrosTabelaExames } from "../hooks/useFiltrosTabelaExames";
 import { ViewExamesPendentesProps } from "../types";
 import {
     classificarTipoExame,
@@ -60,6 +59,16 @@ import {
     solicitarResultadoAcaoAso,
 } from "@/lib/resultado-acao-aso";
 
+const classificarPrazoPendencia = (item: any): Exclude<FiltroPrazoAso, "todos"> => {
+    const examesComStatus = (item.examesDetalhados || []).filter(
+        (exame: any) => exame.statusPrazoExame
+    );
+    if (!examesComStatus.length) return "suspenso";
+    return examesComStatus.some((exame: any) => exame.statusPrazoExame.estaVencido)
+        ? "vencido"
+        : "no-prazo";
+};
+
 export function ViewExamesPendentes({
     analytics,
     todosFuncionarios,
@@ -77,7 +86,17 @@ export function ViewExamesPendentes({
 
     const [selectedFuncionario, setSelectedFuncionario] = useState<any | null>(null);
     const [modalOpen, setModalOpen] = useState(false);
-    const [busca, setBusca] = useState("");
+    const {
+        busca, setBusca,
+        filtroMedico, setFiltroMedico,
+        filtroExameEspecifico, setFiltroExameEspecifico,
+        filtroPrestador, setFiltroPrestador,
+        dataInicio, setDataInicio,
+        dataFim, setDataFim,
+        grupoExames, setGrupoExames,
+        filtroPrazoAso, setFiltroPrazoAso,
+        limparFiltros,
+    } = useFiltrosTabelaExames();
     const [sortKey, setSortKey] = useState<string>("nome");
     const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
     const [selectedCpfs, setSelectedCpfs] = useState<Set<string>>(new Set());
@@ -85,16 +104,10 @@ export function ViewExamesPendentes({
     // Aba ativa: "pendentes" (ainda não montados) ou "montados" (já salvos/montados)
     const [abaAtiva, setAbaAtiva] = useState<"pendentes" | "montados">("pendentes");
 
-    const [filtroMedico, setFiltroMedico] = useState("todos");
-    const [filtroExameEspecifico, setFiltroExameEspecifico] = useState("todos");
-    const [filtroPrestador, setFiltroPrestador] = useState("todos");
-    const [dataInicio, setDataInicio] = useState("");
-    const [dataFim, setDataFim] = useState("");
     const [saving, setSaving] = useState(false);
     const [sendingAso, setSendingAso] = useState(false);
     const [concluindoAtendimento, setConcluindoAtendimento] = useState(false);
     const [acaoParaConfirmar, setAcaoParaConfirmar] = useState<"salvar" | "enviar" | "concluido" | null>(null);
-    const [grupoExames, setGrupoExames] = useState<GrupoFiltroExames | null>(null);
     const operacaoEmAndamento = useRef(false);
     const processandoAcao = saving || sendingAso || concluindoAtendimento;
 
@@ -352,6 +365,7 @@ export function ViewExamesPendentes({
                 if (!possuiExame) return false;
             }
             if (!correspondeAoGrupoExames(item.todosExames || [], grupoExames)) return false;
+            if (filtroPrazoAso !== "todos" && classificarPrazoPendencia(item) !== filtroPrazoAso) return false;
 
             return true;
         });
@@ -364,6 +378,7 @@ export function ViewExamesPendentes({
         dataFim,
         cpfsAtendimentosConcluidos,
         grupoExames,
+        filtroPrazoAso,
     ]);
 
     /* ============================================================
@@ -408,26 +423,16 @@ export function ViewExamesPendentes({
     const indicadoresExamesPendentes = useMemo(() => {
         let vencidos = 0;
         let noPrazo = 0;
+        let suspensos = 0;
 
         pendenciasVisiveis.forEach((item: any) => {
-            const examesComStatus = (item.examesDetalhados || []).filter(
-                (exame: any) => exame.statusPrazoExame
-            );
-
-            if (examesComStatus.length === 0) return;
-
-            const algumVencido = examesComStatus.some(
-                (exame: any) => exame.statusPrazoExame.estaVencido
-            );
-
-            if (algumVencido) {
-                vencidos++;
-            } else {
-                noPrazo++;
-            }
+            const categoria = classificarPrazoPendencia(item);
+            if (categoria === "vencido") vencidos++;
+            else if (categoria === "no-prazo") noPrazo++;
+            else suspensos++;
         });
 
-        return { vencidos, noPrazo };
+        return { vencidos, noPrazo, suspensos };
     }, [pendenciasVisiveis]);
 
     /* ============================================================
@@ -444,7 +449,7 @@ export function ViewExamesPendentes({
     ============================================================ */
     useEffect(() => {
         setPaginaAtual(1);
-    }, [busca, filtroTipoExame, filtroMedico, filtroExameEspecifico, filtroPrestador, dataInicio, dataFim, abaAtiva, sortKey, sortDirection, prazosMap]);
+    }, [busca, filtroTipoExame, filtroMedico, filtroExameEspecifico, filtroPrestador, filtroPrazoAso, dataInicio, dataFim, abaAtiva, sortKey, sortDirection, prazosMap]);
 
     /* ============================================================
        GARANTE QUE A PÁGINA NÃO FIQUE INVÁLIDA
@@ -763,7 +768,7 @@ export function ViewExamesPendentes({
                 <div className="flex flex-col gap-2">
 
                     {/* FAIXA 1 — TÍTULO + ABAS */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex flex-col justify-between gap-3 xl:flex-row xl:items-center">
                         <div className="flex items-center gap-3">
                             <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-red-500/10 shrink-0">
                                 <AlertCircle className="w-4.5 h-4.5 text-red-500" />
@@ -774,41 +779,19 @@ export function ViewExamesPendentes({
                             </CardTitle>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-2">
-                            <div className="flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-1.5">
-                                <div className="flex items-center justify-center w-7 h-7 rounded-md bg-red-500/10 shrink-0">
-                                    <AlertCircle className="w-4 h-4 text-red-500" />
-                                </div>
+                        <FiltroPrazoCards
+                            filtro={filtroPrazoAso}
+                            vencidos={indicadoresExamesPendentes.vencidos}
+                            noPrazo={indicadoresExamesPendentes.noPrazo}
+                            suspensos={indicadoresExamesPendentes.suspensos}
+                            onChange={(filtro) => {
+                                setFiltroPrazoAso(filtro);
+                                setSelectedCpfs(new Set());
+                                setPaginaAtual(1);
+                            }}
+                        />
 
-                                <div className="min-w-0">
-                                    <div className="text-[9px] uppercase font-bold tracking-wide text-slate-400">
-                                        ASOs Vencidos
-                                    </div>
-                                </div>
-
-                                <span className="ml-auto text-lg font-black text-red-500">
-                                    {indicadoresExamesPendentes.vencidos}
-                                </span>
-                            </div>
-
-                            <div className="flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-1.5">
-                                <div className="flex items-center justify-center w-7 h-7 rounded-md bg-emerald-500/10 shrink-0">
-                                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                                </div>
-
-                                <div className="min-w-0">
-                                    <div className="text-[9px] uppercase font-bold tracking-wide text-slate-400">
-                                        ASOs no Prazo
-                                    </div>
-                                </div>
-
-                                <span className="ml-auto text-lg font-black text-emerald-500">
-                                    {indicadoresExamesPendentes.noPrazo}
-                                </span>
-                            </div>
-                        </div>
-
-                        <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 self-start sm:self-auto">
+                        <div className="flex items-center self-start rounded-xl border border-slate-200 bg-slate-100 p-1 dark:border-slate-700 dark:bg-slate-800 xl:self-auto">
                             <button
                                 type="button"
                                 onClick={() => {
@@ -852,107 +835,27 @@ export function ViewExamesPendentes({
 
                     {/* FAIXA 3 — BUSCA + FILTROS + AÇÕES */}
                     <div className="flex flex-col gap-2 border-t border-slate-100 pt-2 dark:border-slate-800">
-                        <div className="w-full rounded-xl border border-slate-200 bg-slate-50/70 p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800/40">
-                            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                                <div className="flex min-w-0 items-center gap-2">
-                                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400">
-                                        <SlidersHorizontal className="h-4 w-4" />
-                                    </span>
-                                    <div className="min-w-0">
-                                        <p className="text-xs font-bold text-slate-700 dark:text-slate-200">Filtros</p>
-                                        <p className="truncate text-[10px] text-slate-400">Refine os ASOs exibidos na lista</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    {busca && <span className="text-[10px] text-slate-400">{pendenciasProcessadas.length} resultado(s)</span>}
-                                    {(busca || filtroMedico !== "todos" || filtroExameEspecifico !== "todos" || filtroPrestador !== "todos" || grupoExames || dataInicio || dataFim) && (
-                                        <Button type="button" variant="ghost" onClick={() => { setBusca(""); setFiltroMedico("todos"); setFiltroExameEspecifico("todos"); setFiltroPrestador("todos"); setGrupoExames(null); setDataInicio(""); setDataFim(""); }} className="h-8 gap-1.5 px-2 text-[10px] font-bold uppercase text-slate-500 hover:text-slate-800 dark:hover:text-slate-200">
-                                            <X className="h-3.5 w-3.5" /> Limpar
-                                        </Button>
-                                    )}
-                                </div>
-                            </div>
-                            <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
-                            {/* BUSCA */}
-                            <div className="relative min-w-0 sm:col-span-2 lg:col-span-1 2xl:col-span-2">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                <Input
-                                    value={busca}
-                                    onChange={(e) => setBusca(e.target.value)}
-                                    placeholder="Buscar por nome, empresa..."
-                                    className="h-10 bg-white pl-9 pr-9 text-xs dark:bg-slate-900"
-                                />
-
-                                {busca && (
-                                    <button
-                                        type="button"
-                                        onClick={() => setBusca("")}
-                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                                    >
-                                        ×
-                                    </button>
-                                )}
-                            </div>
-
-                            {/* MÉDICO */}
-                            <Select value={filtroMedico} onValueChange={setFiltroMedico}>
-                                <SelectTrigger className="h-10 w-full min-w-0 bg-white text-xs dark:bg-slate-900">
-                                    <SelectValue placeholder="Médico Examinador" />
-                                </SelectTrigger>
-
-                                <SelectContent>
-                                    <SelectItem value="todos">Todos os médicos</SelectItem>
-                                    {listaMedicosPendentes.map((med) => (
-                                        <SelectItem key={med} value={med}>
-                                            {med}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-
-                            {/* EXAME */}
-                            <Select value={filtroExameEspecifico} onValueChange={setFiltroExameEspecifico}>
-                                <SelectTrigger className="h-10 w-full min-w-0 bg-white text-xs dark:bg-slate-900">
-                                    <SelectValue placeholder="Filtrar por Exame" />
-                                </SelectTrigger>
-
-                                <SelectContent>
-                                    <SelectItem value="todos">Todos os exames</SelectItem>
-                                    {listaExamesPendentes.map((exame) => (
-                                        <SelectItem key={exame} value={exame}>
-                                            {exame}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-
-                            <div className="min-w-0 sm:col-span-2 lg:col-span-1 2xl:col-span-2">
-                                <FiltroGrupoExames unidadeId={unidadeId} examesDisponiveis={listaExamesPendentes} grupoSelecionado={grupoExames} onGrupoSelecionadoChange={setGrupoExames} />
-                            </div>
-
-                            <Select value={filtroPrestador} onValueChange={setFiltroPrestador}>
-                                <SelectTrigger className="h-10 w-full min-w-0 bg-white text-xs dark:bg-slate-900">
-                                    <SelectValue placeholder="Credenciada" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="todos">Todas as credenciadas</SelectItem>
-                                    {listaPrestadoresPendentes.map((prestador) => (
-                                        <SelectItem key={prestador} value={prestador}>{prestador}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-
-                            <label className="flex h-10 min-w-0 items-center gap-2 rounded-md border border-input bg-white px-3 text-[9px] font-bold uppercase text-slate-500 dark:bg-slate-900">
-                                <span className="whitespace-nowrap">De</span>
-                                <Input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} className="h-7 border-0 bg-transparent p-0 text-xs font-normal normal-case shadow-none focus-visible:ring-0" />
-                            </label>
-                            <label className="flex h-10 min-w-0 items-center gap-2 rounded-md border border-input bg-white px-3 text-[9px] font-bold uppercase text-slate-500 dark:bg-slate-900">
-                                <span className="whitespace-nowrap">Até</span>
-                                <Input type="date" value={dataFim} min={dataInicio || undefined} onChange={(e) => setDataFim(e.target.value)} className="h-7 border-0 bg-transparent p-0 text-xs font-normal normal-case shadow-none focus-visible:ring-0" />
-                            </label>
-
-                            </div>
-                        </div>
+                        <PainelFiltrosExames
+                            busca={busca}
+                            onBuscaChange={setBusca}
+                            quantidadeResultados={pendenciasProcessadas.length}
+                            medico={filtroMedico}
+                            onMedicoChange={setFiltroMedico}
+                            medicos={listaMedicosPendentes}
+                            exame={filtroExameEspecifico}
+                            onExameChange={setFiltroExameEspecifico}
+                            exames={listaExamesPendentes}
+                            prestador={filtroPrestador}
+                            onPrestadorChange={setFiltroPrestador}
+                            prestadores={listaPrestadoresPendentes}
+                            dataInicio={dataInicio}
+                            onDataInicioChange={setDataInicio}
+                            dataFim={dataFim}
+                            onDataFimChange={setDataFim}
+                            possuiFiltroExtra={filtroPrazoAso !== "todos" || Boolean(grupoExames)}
+                            onLimpar={limparFiltros}
+                            filtroGrupo={<FiltroGrupoExames unidadeId={unidadeId} examesDisponiveis={listaExamesPendentes} grupoSelecionado={grupoExames} onGrupoSelecionadoChange={setGrupoExames} />}
+                        />
 
                         {/* AÇÕES (apenas na aba Pendentes) */}
                         {abaAtiva === "pendentes" && (
@@ -1048,7 +951,7 @@ export function ViewExamesPendentes({
                         {pendenciasPaginadas.length === 0 ? (
                             <TableRow>
                                 <TableCell colSpan={7} className="text-center py-8 text-xs text-slate-400">
-                                    {dataInicio || dataFim || filtroMedico !== "todos" || filtroExameEspecifico !== "todos" || filtroPrestador !== "todos" || busca
+                                    {dataInicio || dataFim || filtroMedico !== "todos" || filtroExameEspecifico !== "todos" || filtroPrestador !== "todos" || filtroPrazoAso !== "todos" || grupoExames || busca
                                         ? "Nenhum funcionário encontrado para os filtros informados."
                                         : abaAtiva === "pendentes"
                                             ? "Nenhum funcionário pendente para montagem."
@@ -1156,17 +1059,11 @@ export function ViewExamesPendentes({
                                         <TableCell className="max-w-[280px]">
                                             <div className="flex flex-wrap gap-1.5">
                                                 {item.examesDetalhados.map((exame: any, eIdx: number) => {
-                                                    const corBadge = !exame.dataExame
-                                                        ? "bg-slate-500/10 text-slate-500 border-slate-500/20"
-                                                        : exame.statusPrazoExame?.estaVencido
-                                                            ? "bg-red-500/10 text-red-500 border-red-500/20"
-                                                            : "bg-amber-500/10 text-amber-600 border-amber-500/20";
-
                                                     return (
                                                         <Badge
                                                             key={eIdx}
                                                             variant="outline"
-                                                            className={`flex flex-col items-start gap-0 leading-tight py-1 px-2.5 text-[10px] font-semibold rounded-full ${corBadge}`}
+                                                            className="flex flex-col items-start gap-0 rounded-full border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-semibold leading-tight text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
                                                             title={
                                                                 exame.ignorado
                                                                     ? "Documento GED dispensado; a data do exame define a conclusão"

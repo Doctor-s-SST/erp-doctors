@@ -27,6 +27,7 @@ import { classificarTipoExame, asoEstaConcluido, asoEstaPendente, possuiAso, nor
 import { ViewDashboard } from "./components/ViewDashboard";
 import { ViewExamesPendentes } from "./components/ViewExamesPendentes";
 import { ViewExamesConcluidos } from "./components/ViewExamesConcluidos";
+import { useConjuntoPersistido } from "./hooks/useConjuntoPersistido";
 
 function obterCpfFuncionario(item: any): string {
     return String(
@@ -48,8 +49,6 @@ export default function IndicadoresSocged() {
     const [dadosGraficos, setDadosGraficos] = useState<any>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [atualizadoEm, setAtualizadoEm] = useState<string | null>(null);
-    const [cpfsAtendimentosConcluidos, setCpfsAtendimentosConcluidos] = useState<Set<string>>(new Set());
-    const [cpfsEnviadosDireto, setCpfsEnviadosDireto] = useState<Set<string>>(new Set());
 
     const [prazosMap, setPrazosMap] = useState<PrazosMap>({});
 
@@ -77,63 +76,14 @@ export default function IndicadoresSocged() {
         return `aso_enviados_direto:${unidadeId}:${atualizadoEm}`;
     }, [unidadeId, atualizadoEm]);
 
-    useEffect(() => {
-        if (!chaveAtendimentosConcluidos) {
-            setCpfsAtendimentosConcluidos(new Set());
-            return;
-        }
-
-        try {
-            const armazenados = JSON.parse(localStorage.getItem(chaveAtendimentosConcluidos) || "[]");
-            setCpfsAtendimentosConcluidos(new Set(Array.isArray(armazenados) ? armazenados : []));
-        } catch {
-            setCpfsAtendimentosConcluidos(new Set());
-        }
-    }, [chaveAtendimentosConcluidos]);
-
-    useEffect(() => {
-        if (!chaveAsosEnviadosDireto) {
-            setCpfsEnviadosDireto(new Set());
-            return;
-        }
-
-        try {
-            const armazenados = JSON.parse(localStorage.getItem(chaveAsosEnviadosDireto) || "[]");
-            setCpfsEnviadosDireto(new Set(Array.isArray(armazenados) ? armazenados : []));
-        } catch {
-            setCpfsEnviadosDireto(new Set());
-        }
-    }, [chaveAsosEnviadosDireto]);
-
-    const registrarAtendimentosConcluidos = useCallback((cpfs: string[]) => {
-        if (!chaveAtendimentosConcluidos) return;
-
-        setCpfsAtendimentosConcluidos((anteriores) => {
-            const atualizados = new Set(anteriores);
-            cpfs.forEach((cpf) => atualizados.add(cpf));
-            try {
-                localStorage.setItem(chaveAtendimentosConcluidos, JSON.stringify(Array.from(atualizados)));
-            } catch (error) {
-                console.warn("Não foi possível persistir os atendimentos concluídos:", error);
-            }
-            return atualizados;
-        });
-    }, [chaveAtendimentosConcluidos]);
-
-    const registrarAsosEnviadosDireto = useCallback((cpfs: string[]) => {
-        if (!chaveAsosEnviadosDireto) return;
-
-        setCpfsEnviadosDireto((anteriores) => {
-            const atualizados = new Set(anteriores);
-            cpfs.forEach((cpf) => atualizados.add(cpf));
-            try {
-                localStorage.setItem(chaveAsosEnviadosDireto, JSON.stringify(Array.from(atualizados)));
-            } catch (error) {
-                console.warn("Não foi possível persistir os ASOs enviados direto:", error);
-            }
-            return atualizados;
-        });
-    }, [chaveAsosEnviadosDireto]);
+    const {
+        itens: cpfsAtendimentosConcluidos,
+        adicionar: registrarAtendimentosConcluidos,
+    } = useConjuntoPersistido(chaveAtendimentosConcluidos, "os atendimentos concluídos");
+    const {
+        itens: cpfsEnviadosDireto,
+        adicionar: registrarAsosEnviadosDireto,
+    } = useConjuntoPersistido(chaveAsosEnviadosDireto, "os ASOs enviados direto");
 
     /* ============================================================
        CONSULTA DA ÚLTIMA SINCRONIZAÇÃO

@@ -1719,7 +1719,10 @@ export default function FilaPage() {
             {/* MODAL CONFIGURAÇÃO */}
             < Dialog open={openModal} onOpenChange={(open) => !loading && (open || session) && setOpenModal(open)
             }>
-                <DialogContent className="sm:max-w-[450px] bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 p-0 overflow-hidden shadow-2xl">
+                <DialogContent
+                    translate="no"
+                    className="notranslate sm:max-w-[450px] bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 p-0 overflow-hidden shadow-2xl"
+                >
 
                     <DialogHeader className="p-6 bg-slate-50 dark:bg-gray-900 border-b border-slate-200 dark:border-slate-800">
                         <div className="flex items-center gap-4">

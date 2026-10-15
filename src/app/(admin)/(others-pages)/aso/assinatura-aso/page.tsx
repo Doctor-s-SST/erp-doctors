@@ -38,130 +38,18 @@ import {
     ConfigOrdenacao,
     TipoConfirmacao,
     TipoFiltroStatus,
+    TipoFiltroEnvio,
+    TipoFiltroParaEnviar,
     ContadoresStatus,
 } from "./types";
 import { ConfirmarAcaoModal } from "./components/ConfirmarAcaoModal";
 import { RegistrarPendenciaModal } from "./components/RegistrarPendenciaModal";
 import { EnviarPendenciasModal } from "./components/EnviarPendenciasModal";
 import { criarPayloadAcaoAso, criarPayloadAcoesAso, AcaoAso } from "@/lib/aso-assinatura";
-import { mensagemErrosFuncionarios, solicitarResultadoAcaoAso } from "@/lib/resultado-acao-aso";
+import { mensagemErrosFuncionarios } from "@/lib/resultado-acao-aso";
+import { ProblemaAcao, problemaDoPaciente, solicitarAcaoN8n } from "./resultado-acao";
 
-
-type ObjetoJson = Record<string, unknown>;
-type ProblemaAcao = {
-    id: string;
-    nome: string;
-    ficha: string;
-    acao: string;
-    etapa: string;
-    mensagem: string;
-    execucao?: string;
-    origem: "n8n" | "resposta" | "banco";
-};
-type ResultadoAcao = {
-    confirmados: Pacientes[];
-    problemas: ProblemaAcao[];
-};
 type StatusLocal = "ASSINADO" | "PENDENCIA" | "ENVIADO" | "PENDENCIA_ENVIADA";
-
-const objetoJson = (v: unknown): v is ObjetoJson =>
-    typeof v === "object" && v !== null && !Array.isArray(v);
-const textoSeguro = (v: unknown): string =>
-    typeof v === "string" || typeof v === "number" ? String(v).trim() : "";
-
-function problemaDoPaciente(
-    paciente: Pacientes,
-    acao: string,
-    mensagem: string,
-    origem: ProblemaAcao["origem"],
-    etapa: string,
-    execucao?: string
-): ProblemaAcao {
-    return {
-        id: paciente.id ?? "",
-        nome: paciente.nome_paciente || "Paciente sem nome",
-        ficha: textoSeguro(paciente.sequencial_ficha),
-        acao, mensagem, origem, etapa, execucao,
-    };
-}
-
-// Contrato final do webhook: [] ou [{ paciente, acao, etapa, mensagem }].
-// Também aceita { problematicos: [...] }, se a rota mantiver esse envelope.
-function interpretarRetornoN8n(
-    retorno: unknown,
-    enviados: Pacientes[],
-    acao: AcaoAso
-): ResultadoAcao {
-    const invalido = () => new Error(
-        "A resposta recebida não permite confirmar o resultado. Confira a execução antes de repetir a ação."
-    );
-    if (objetoJson(retorno) && (
-        retorno.success === false || retorno.sucesso === false ||
-        (retorno.error !== undefined && retorno.error !== false && retorno.error !== null) ||
-        (retorno.erro !== undefined && retorno.erro !== false && retorno.erro !== null)
-    )) throw invalido();
-    const lista = Array.isArray(retorno)
-        ? retorno
-        : objetoJson(retorno) && Array.isArray(retorno.problematicos)
-            ? retorno.problematicos : null;
-    if (!lista) throw invalido();
-
-    const falhas = new Map<number, ProblemaAcao>();
-    for (const valor of lista) {
-        if (!objetoJson(valor)) throw invalido();
-        // Uma lista de sucessos/itens genéricos não é uma lista de problemas.
-        if (valor.erro === false || valor.problema === false || valor.success === true) throw invalido();
-        if (textoSeguro(valor.acao) && textoSeguro(valor.acao) !== acao) throw invalido();
-        const p = objetoJson(valor.paciente) ? valor.paciente : {};
-        const campos = ["id", "codigo_empresa_soc", "codigo_ged_soc", "sequencial_ficha", "unidade_id"]
-            .filter(campo => textoSeguro(p[campo]));
-        const temIdentidade = campos.includes("id") || (
-            campos.includes("codigo_empresa_soc") &&
-            (campos.includes("codigo_ged_soc") || campos.includes("sequencial_ficha"))
-        );
-        const temIndice = Object.prototype.hasOwnProperty.call(valor, "indice");
-        if (temIndice && (
-            typeof valor.indice !== "number" || !Number.isInteger(valor.indice) ||
-            valor.indice < 0 || valor.indice >= enviados.length
-        )) throw invalido();
-        if (!temIdentidade && !temIndice) throw invalido();
-
-        const candidatos = enviados.map((paciente, indice) => ({ paciente, indice }))
-            .filter(({ paciente, indice }) => {
-                if (temIndice && indice !== valor.indice) return false;
-                const local = paciente as unknown as ObjetoJson;
-                return campos.every(campo => textoSeguro(local[campo]) === textoSeguro(p[campo]));
-            });
-        // Falha não identificada/ambígua bloqueia a inferência de sucesso do lote inteiro.
-        if (candidatos.length !== 1) throw invalido();
-        const { paciente, indice } = candidatos[0];
-        const mensagem = textoSeguro(valor.mensagem) || "O processamento deste paciente não foi concluído.";
-        const problema = problemaDoPaciente(
-            paciente, acao, mensagem, "n8n",
-            textoSeguro(valor.etapa) || "processamento",
-            textoSeguro(valor.execucao) || undefined
-        );
-        const anterior = falhas.get(indice);
-        if (anterior) {
-            problema.mensagem = [...new Set([anterior.mensagem, mensagem])].join(" | ");
-            problema.etapa = [...new Set([anterior.etapa, problema.etapa])].join(" / ");
-        }
-        falhas.set(indice, problema);
-    }
-    return {
-        confirmados: enviados.filter((_, indice) => !falhas.has(indice)),
-        problemas: [...falhas.values()],
-    };
-}
-
-async function solicitarAcaoN8n(
-    payload: unknown,
-    enviados: Pacientes[],
-    acao: AcaoAso
-): Promise<ResultadoAcao> {
-    const retorno = await solicitarResultadoAcaoAso(payload);
-    return interpretarRetornoN8n(retorno, enviados, acao);
-}
 
 const BADGE_CONFIG: Record<string, { label: string; className: string }> = {
     ASSINADO: { label: "Assinado", className: "bg-blue-600 text-white" },
@@ -179,6 +67,8 @@ export default function AssinaturaAsoPage() {
 
     const [busca, setBusca] = useState("");
     const [filtroStatus, setFiltroStatus] = useState<TipoFiltroStatus>("TODOS");
+    const [filtroEnvio, setFiltroEnvio] = useState<TipoFiltroEnvio>("TODOS");
+    const [filtroParaEnviar, setFiltroParaEnviar] = useState<TipoFiltroParaEnviar>("TODOS");
     const [ordenacao, setOrdenacao] = useState<ConfigOrdenacao>({
         coluna: "created_at",
         direcao: "desc",
@@ -259,15 +149,41 @@ export default function AssinaturaAsoPage() {
     // Cálculos dos contadores
     const contadores: ContadoresStatus = useMemo(() => {
         const paraAssinar = pacientes.filter((p) => !p.acao).length;
-        const paraEnviar = pacientes.filter((p) => p.acao === "ASSINADO" || p.acao === "PENDENCIA").length;
+        const assinadosParaEnviar = pacientes.filter((p) => p.acao === "ASSINADO").length;
+        const pendenciasParaEnviar = pacientes.filter((p) => p.acao === "PENDENCIA").length;
+        const paraEnviar = assinadosParaEnviar + pendenciasParaEnviar;
         const pendencias = pacientes.filter((p) => p.acao === "PENDENCIA_ENVIADA").length;
-        const enviados = pacientes.filter((p) => p.acao === "ENVIADO" || p.acao === "ENVIADO_DIRETO").length;
+        const enviadosFluxo = pacientes.filter((p) => p.acao === "ENVIADO").length;
+        const enviadosDireto = pacientes.filter((p) => p.acao === "ENVIADO_DIRETO").length;
+        const enviados = enviadosFluxo + enviadosDireto;
 
-        return { paraAssinar, paraEnviar, pendencias, enviados };
+        return {
+            paraAssinar,
+            paraEnviar,
+            assinadosParaEnviar,
+            pendenciasParaEnviar,
+            pendencias,
+            enviados,
+            enviadosFluxo,
+            enviadosDireto,
+        };
     }, [pacientes]);
 
     const toggleFiltro = (novoFiltro: TipoFiltroStatus) => {
+        setFiltroEnvio("TODOS");
+        setFiltroParaEnviar("TODOS");
+        setSelecionadosEmMassa([]);
         setFiltroStatus((prev) => (prev === novoFiltro ? "TODOS" : novoFiltro));
+    };
+
+    const selecionarFiltroEnvio = (novoFiltro: TipoFiltroEnvio) => {
+        setFiltroEnvio(novoFiltro);
+        setSelecionadosEmMassa([]);
+    };
+
+    const selecionarFiltroParaEnviar = (novoFiltro: TipoFiltroParaEnviar) => {
+        setFiltroParaEnviar(novoFiltro);
+        setSelecionadosEmMassa([]);
     };
 
     const abrirConfirmarAssinatura = (item: Pacientes) => {
@@ -321,11 +237,19 @@ export default function AssinaturaAsoPage() {
         if (filtroStatus === "ASSINAR") {
             lista = lista.filter((p) => !p.acao);
         } else if (filtroStatus === "ENVIAR") {
-            lista = lista.filter((p) => p.acao === "ASSINADO" || p.acao === "PENDENCIA");
+            lista = lista.filter((p) => {
+                if (filtroParaEnviar === "ASSINADO") return p.acao === "ASSINADO";
+                if (filtroParaEnviar === "PENDENCIA") return p.acao === "PENDENCIA";
+                return p.acao === "ASSINADO" || p.acao === "PENDENCIA";
+            });
         } else if (filtroStatus === "PENDENCIA") {
             lista = lista.filter((p) => p.acao === "PENDENCIA_ENVIADA");
         } else if (filtroStatus === "ENVIADO") {
-            lista = lista.filter((p) => p.acao === "ENVIADO" || p.acao === "ENVIADO_DIRETO");
+            lista = lista.filter((p) => {
+                if (filtroEnvio === "ENVIADO") return p.acao === "ENVIADO";
+                if (filtroEnvio === "ENVIADO_DIRETO") return p.acao === "ENVIADO_DIRETO";
+                return p.acao === "ENVIADO" || p.acao === "ENVIADO_DIRETO";
+            });
         }
 
         if (busca.trim()) {
@@ -348,7 +272,7 @@ export default function AssinaturaAsoPage() {
             if (valA > valB) return ordenacao.direcao === "asc" ? 1 : -1;
             return 0;
         });
-    }, [pacientes, busca, filtroStatus, ordenacao]);
+    }, [pacientes, busca, filtroStatus, filtroEnvio, filtroParaEnviar, ordenacao]);
 
     // Pacientes elegíveis para envio ou reenvio em massa na lista atual
     const elegiveisParaAcao = useMemo(() => {
@@ -723,7 +647,7 @@ export default function AssinaturaAsoPage() {
 
 
             <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 gap-1">
-                <CardHeader className="flex flex-col md:flex-row items-center gap-4 pb-4 border-b border-gray-100 dark:border-gray-800">
+                <CardHeader className="flex flex-col items-stretch gap-4 border-b border-gray-100 pb-4 dark:border-gray-800">
                     {/* CARDS DE CONTADORES */}
                     <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
                         {/* CARD 1: PARA ASSINAR */}
@@ -812,42 +736,116 @@ export default function AssinaturaAsoPage() {
                     </div>
 
                     {/* BARRA DE PESQUISA E AÇÕES */}
-                    <div className="flex items-center justify-between sm:justify-end gap-2 w-full pt-1">
-                        {filtroStatus !== "TODOS" && (
-                            <Badge
-                                variant="outline"
-                                className="flex items-center gap-1.5 px-3 py-1 text-xs cursor-pointer bg-slate-100 hover:bg-slate-200 dark:bg-gray-800 dark:hover:bg-gray-700 transition-colors"
-                                onClick={() => setFiltroStatus("TODOS")}
+                    <div className="flex w-full flex-col gap-2 pt-1">
+                        {filtroStatus === "ENVIAR" && (
+                            <div
+                                className="grid grid-cols-3 gap-1 rounded-xl border border-slate-200 bg-slate-100 p-1 dark:border-gray-700 dark:bg-gray-800"
+                                aria-label="Separar ASOs aguardando envio"
                             >
-                                <span>
-                                    Filtrando por: <strong>{filtroStatus}</strong>
-                                </span>
-                                <X className="w-3.5 h-3.5 text-slate-500" />
-                            </Badge>
+                                {([
+                                    { valor: "TODOS", rotulo: "Todos", quantidade: contadores.paraEnviar },
+                                    { valor: "ASSINADO", rotulo: "Assinado", quantidade: contadores.assinadosParaEnviar },
+                                    { valor: "PENDENCIA", rotulo: "Pendência", quantidade: contadores.pendenciasParaEnviar },
+                                ] as const).map((opcao) => (
+                                    <button
+                                        key={opcao.valor}
+                                        type="button"
+                                        aria-pressed={filtroParaEnviar === opcao.valor}
+                                        onClick={() => selecionarFiltroParaEnviar(opcao.valor)}
+                                        className={`flex min-w-0 items-center justify-center gap-1 rounded-lg px-2 py-2 text-[11px] font-bold transition-colors sm:text-xs ${
+                                            filtroParaEnviar === opcao.valor
+                                                ? "bg-white text-slate-900 shadow-sm dark:bg-gray-950 dark:text-white"
+                                                : "text-slate-500 hover:bg-white/70 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-gray-700 dark:hover:text-slate-100"
+                                        }`}
+                                    >
+                                        <span className="truncate">{opcao.rotulo}</span>
+                                        <span className="rounded-md bg-slate-200/80 px-1.5 py-0.5 text-[10px] tabular-nums dark:bg-gray-700">
+                                            {opcao.quantidade}
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
                         )}
 
-                        <div className="flex items-center gap-2">
-                            <div className="flex items-center gap-2 bg-slate-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2.5 h-9 w-full sm:w-72 transition-colors focus-within:border-blue-500">
-                                <Search className="w-4 h-4 text-gray-400 shrink-0" />
-                                <Input
-                                    placeholder="Buscar por nome ou sequencial..."
-                                    value={busca}
-                                    onChange={(e) => setBusca(e.target.value)}
-                                    className="h-full border-none shadow-none px-0 text-xs focus-visible:ring-0 bg-transparent"
-                                />
-                            </div>
-
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                disabled={enviando || loading}
-                                onClick={() => void fetchPacientes()}
-                                className="h-9 w-9 shrink-0"
+                        {filtroStatus === "ENVIADO" && (
+                            <div
+                                className="grid grid-cols-3 gap-1 rounded-xl border border-slate-200 bg-slate-100 p-1 dark:border-gray-700 dark:bg-gray-800"
+                                aria-label="Separar ASOs enviados"
                             >
-                                <RefreshCw
-                                    className={`w-4 h-4 ${loading ? "animate-spin" : ""}`}
-                                />
-                            </Button>
+                                {([
+                                    { valor: "TODOS", rotulo: "Todos", quantidade: contadores.enviados },
+                                    { valor: "ENVIADO", rotulo: "Enviado", quantidade: contadores.enviadosFluxo },
+                                    { valor: "ENVIADO_DIRETO", rotulo: "Enviado direto", quantidade: contadores.enviadosDireto },
+                                ] as const).map((opcao) => (
+                                    <button
+                                        key={opcao.valor}
+                                        type="button"
+                                        aria-pressed={filtroEnvio === opcao.valor}
+                                        onClick={() => selecionarFiltroEnvio(opcao.valor)}
+                                        className={`flex min-w-0 items-center justify-center gap-1 rounded-lg px-2 py-2 text-[11px] font-bold transition-colors sm:text-xs ${
+                                            filtroEnvio === opcao.valor
+                                                ? "bg-white text-slate-900 shadow-sm dark:bg-gray-950 dark:text-white"
+                                                : "text-slate-500 hover:bg-white/70 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-gray-700 dark:hover:text-slate-100"
+                                        }`}
+                                    >
+                                        <span className="truncate">{opcao.rotulo}</span>
+                                        <span className="rounded-md bg-slate-200/80 px-1.5 py-0.5 text-[10px] tabular-nums dark:bg-gray-700">
+                                            {opcao.quantidade}
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+
+                        <div className="flex w-full flex-col items-stretch justify-between gap-2 sm:flex-row sm:items-center sm:justify-end">
+                            {filtroStatus !== "TODOS" && (
+                                <Badge
+                                    variant="outline"
+                                    className="flex w-fit items-center gap-1.5 px-3 py-1 text-xs cursor-pointer bg-slate-100 hover:bg-slate-200 dark:bg-gray-800 dark:hover:bg-gray-700 transition-colors"
+                                    onClick={() => {
+                                        setFiltroStatus("TODOS");
+                                        setFiltroEnvio("TODOS");
+                                        setFiltroParaEnviar("TODOS");
+                                        setSelecionadosEmMassa([]);
+                                    }}
+                                >
+                                    <span>
+                                        Filtrando por:{" "}
+                                        <strong>
+                                            {filtroStatus === "ENVIADO" && filtroEnvio !== "TODOS"
+                                                ? BADGE_CONFIG[filtroEnvio].label
+                                                : filtroStatus === "ENVIAR" && filtroParaEnviar !== "TODOS"
+                                                    ? BADGE_CONFIG[filtroParaEnviar].label
+                                                    : filtroStatus}
+                                        </strong>
+                                    </span>
+                                    <X className="w-3.5 h-3.5 text-slate-500" />
+                                </Badge>
+                            )}
+
+                            <div className="flex items-center gap-2 sm:ml-auto">
+                                <div className="flex items-center gap-2 bg-slate-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2.5 h-9 w-full sm:w-72 transition-colors focus-within:border-blue-500">
+                                    <Search className="w-4 h-4 text-gray-400 shrink-0" />
+                                    <Input
+                                        placeholder="Buscar por nome ou sequencial..."
+                                        value={busca}
+                                        onChange={(e) => setBusca(e.target.value)}
+                                        className="h-full border-none shadow-none px-0 text-xs focus-visible:ring-0 bg-transparent"
+                                    />
+                                </div>
+
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    disabled={enviando || loading}
+                                    onClick={() => void fetchPacientes()}
+                                    className="h-9 w-9 shrink-0"
+                                >
+                                    <RefreshCw
+                                        className={`w-4 h-4 ${loading ? "animate-spin" : ""}`}
+                                    />
+                                </Button>
+                            </div>
                         </div>
                     </div>
                 </CardHeader>

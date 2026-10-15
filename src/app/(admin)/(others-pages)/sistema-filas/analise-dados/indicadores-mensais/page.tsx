@@ -102,6 +102,7 @@ const CustomTooltipEspecialidades = ({ active, payload, label }: any) => {
 };
 
 import { CardIndicador } from "@/components/atendimento/dashboards/CardIndicator"
+import { aguardarJobRelatorio, iniciarJobRelatorio } from "../../shared/relatorios"
 
 type ViewType = "atendimentos" | "exames"
 
@@ -176,40 +177,19 @@ export default function IndicadoresMensais() {
             formData.append("dataFim", fim);
             formData.append("unidadeId", unidade);
 
-            const start = await fetch("/api/indicadores", {
-                method: "POST",
-                body: formData
-            });
+            const jobId = await iniciarJobRelatorio("/api/indicadores", formData);
+            const resposta = await aguardarJobRelatorio(jobId);
 
-            const { jobId } = await start.json();
-            let terminou = false;
+            if (resposta.status === "empty") {
+                toast.warning(`0 atendimentos encontrados`);
+                setDadosGraficos(null);
+            }
 
-            while (!terminou) {
-                await new Promise(r => setTimeout(r, 3000));
-
-                const status = await fetch(`/api/consulta-relatorios/?id=${jobId}`);
-                const resultado = await status.json();
-
-                const respostaBruta = Array.isArray(resultado) ? resultado[0] : resultado;
-                const resposta = respostaBruta.json ?? respostaBruta;
-
-                if (resposta.status === "processing") {
-                    continue;
-                }
-
-                if (resposta.status === "empty") {
-                    toast.warning(`0 atendimentos encontrados`);
-                    setDadosGraficos(null);
-                    terminou = true;
-                }
-
-                if (resposta.status === "done") {
-                    terminou = true;
-                    setDadosGraficos(resposta.charts || null);
-
-                    const totalProcessados = resposta.charts?.view_atendimento?.total_atendimentos_mes ?? 0;
-                    toast.success(`${totalProcessados} atendimentos processados`);
-                }
+            if (resposta.status === "done") {
+                const charts = resposta.charts || null;
+                setDadosGraficos(charts);
+                const totalProcessados = (charts?.view_atendimento as { total_atendimentos_mes?: number } | undefined)?.total_atendimentos_mes ?? 0;
+                toast.success(`${totalProcessados} atendimentos processados`);
             }
         } catch (error) {
             toast.error("Erro ao carregar dados.");

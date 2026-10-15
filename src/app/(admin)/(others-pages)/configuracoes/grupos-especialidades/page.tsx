@@ -13,18 +13,15 @@ import {
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { DialogGrupoEspecialidade } from "@/components/grupos/DialogGrupoEspecialidade";
+import type { GrupoEspecialidadeConfiguracao } from "../types";
 
 export default function UnidadeConfigPage() {
     const [loading, setLoading] = useState(true);
-    const [grupos, setGrupos] = useState<any[]>([]);
+    const [grupos, setGrupos] = useState<GrupoEspecialidadeConfiguracao[]>([]);
     const [unidadeId, setUnidadeId] = useState("");
     const [openDialog, setOpenDialog] = useState(false);
 
-    const [grupoEditando, setGrupoEditando] = useState<any>(null);
-
-    useEffect(() => {
-        carregarGrupos();
-    }, []);
+    const [grupoEditando, setGrupoEditando] = useState<GrupoEspecialidadeConfiguracao | null>(null);
 
     const excluirGrupo = async (id: string) => {
 
@@ -125,6 +122,10 @@ export default function UnidadeConfigPage() {
         }
     };
 
+    useEffect(() => {
+        void carregarGrupos();
+    }, []);
+
     // =========================================
     // LOADING
     // =========================================
@@ -194,7 +195,7 @@ export default function UnidadeConfigPage() {
                     <div className="grid
                                 grid-cols-2
                                 md:grid-cols-4 gap-4">
-                        {grupos.map((grupo: any) => (
+                        {grupos.map((grupo) => (
                         <Card
                             key={grupo.id}
                             className="
@@ -251,7 +252,7 @@ export default function UnidadeConfigPage() {
                                         mt-4
                                     ">
                                     {grupo.grupo_especialidade_itens.map(
-                                        (item: any) => (
+                                        (item) => (
                                             <Badge
                                                 key={item.id}
                                                 variant="secondary"
