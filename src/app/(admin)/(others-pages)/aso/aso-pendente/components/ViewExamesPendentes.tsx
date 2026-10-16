@@ -1,7 +1,6 @@
 "use client"
 
 import React, { useEffect, useState, useMemo, useRef } from "react";
-import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -60,6 +59,7 @@ import {
     mensagemErrosFuncionarios,
     solicitarResultadoAcaoAso,
 } from "@/lib/resultado-acao-aso";
+import { persistirPacientesAssinatura } from "@/lib/persistencia-pacientes-assinatura";
 
 const classificarPrazoPendencia = (item: any): Exclude<FiltroPrazoAso, "todos"> => {
     const examesComStatus = (item.examesDetalhados || []).filter(
@@ -533,24 +533,26 @@ export function ViewExamesPendentes({
             const resultado = interpretarRespostaAcaoAso(retorno, pacientes, "LIBERAR");
             const confirmados = resultado.confirmados;
 
-            if (confirmados.length) {
-                const saveBd = await supabase.from("pacientes_assinatura").insert(confirmados);
-                if (saveBd.error) {
-                    toast.error("Erro ao salvar funcionários.");
-                    return;
-                }
-            }
-
-            const cpfsSalvos = resultado.indicesConfirmados.map(indice => obterIdentificadorFuncionario(selecionados[indice]));
+            const persistencia = await persistirPacientesAssinatura(confirmados);
+            const cpfsSalvos = persistencia.indicesPersistidos.map(indiceConfirmado => {
+                const indiceOriginal = resultado.indicesConfirmados[indiceConfirmado];
+                return obterIdentificadorFuncionario(selecionados[indiceOriginal]);
+            });
             onFuncionariosSalvos(cpfsSalvos);
 
             setSelectedCpfs((prev) => {
                 const novo = new Set(prev);
-                cpfsSalvos.forEach((cpf: any) => novo.delete(cpf));
+                resultado.indicesConfirmados.forEach(indice => {
+                    novo.delete(obterIdentificadorFuncionario(selecionados[indice]));
+                });
                 return novo;
             });
 
             if (cpfsSalvos.length) toast.success(`${cpfsSalvos.length} funcionário(s) salvo(s) com sucesso!`);
+            if (persistencia.indicesComErro.length) {
+                const nomes = persistencia.indicesComErro.map(indice => confirmados[indice].nome_paciente);
+                toast.error(`A ação foi executada, mas não foi possível salvar no sistema: ${nomes.join(", ")}. Não repita o envio.`);
+            }
             if (resultado.nomesComErro.length) toast.error(mensagemErrosFuncionarios(resultado.nomesComErro));
         } catch (error) {
             toast.error(error instanceof Error
@@ -609,16 +611,18 @@ export function ViewExamesPendentes({
                 observacao: "Enviado direto",
             }));
 
-            if (confirmados.length) {
-                const saveBd = await supabase.from("pacientes_assinatura").insert(confirmados);
-                if (saveBd.error) throw saveBd.error;
-            }
-
-            const cpfsEnviados = resultado.indicesConfirmados
-                .map(indice => obterIdentificadorFuncionario(selecionados[indice])).filter(Boolean);
+            const persistencia = await persistirPacientesAssinatura(confirmados);
+            const cpfsEnviados = persistencia.indicesPersistidos.map(indiceConfirmado => {
+                const indiceOriginal = resultado.indicesConfirmados[indiceConfirmado];
+                return obterIdentificadorFuncionario(selecionados[indiceOriginal]);
+            }).filter(Boolean);
             onAsosEnviadosDireto(cpfsEnviados);
 
             if (cpfsEnviados.length) toast.success(`${cpfsEnviados.length} ASO(s) enviado(s) com sucesso!`);
+            if (persistencia.indicesComErro.length) {
+                const nomes = persistencia.indicesComErro.map(indice => confirmados[indice].nome_paciente);
+                toast.error(`A ação foi executada, mas não foi possível salvar no sistema: ${nomes.join(", ")}. Não repita o envio.`);
+            }
             if (resultado.nomesComErro.length) toast.error(mensagemErrosFuncionarios(resultado.nomesComErro));
             const indicesConfirmados = new Set(resultado.indicesConfirmados);
             setSelectedCpfs(new Set(

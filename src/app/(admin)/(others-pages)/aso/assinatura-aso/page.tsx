@@ -311,13 +311,16 @@ export default function AssinaturaAsoPage() {
 
     // Lógica para Seleção em Massa
     const toggleSelectAll = () => {
-        const idsElegiveis = elegiveisParaAcao.map((p) => p.id);
-        const todosSelecionados = idsElegiveis.every((id: string | undefined) => selecionadosEmMassa.includes(id as string));
+        const idsElegiveis = elegiveisParaAcao
+            .map((p) => p.id)
+            .filter((id): id is string => Boolean(id));
+        const todosSelecionados = idsElegiveis.length > 0 &&
+            idsElegiveis.every((id) => selecionadosEmMassa.includes(id));
 
         if (todosSelecionados) {
-            setSelecionadosEmMassa((prev: string[]) => prev.filter((id: string) => !idsElegiveis.includes(id)));
+            setSelecionadosEmMassa((prev) => prev.filter((id) => !idsElegiveis.includes(id)));
         } else {
-            setSelecionadosEmMassa((prev: any) => Array.from(new Set([...prev, ...idsElegiveis])));
+            setSelecionadosEmMassa((prev) => Array.from(new Set([...prev, ...idsElegiveis])));
         }
     };
 
@@ -347,6 +350,7 @@ export default function AssinaturaAsoPage() {
         setEnviando(true);
         setProblemasAcao([]);
         setResumoAcao(null);
+        let resultadoConfirmado = false;
         try {
             const resultado = await solicitarAcaoN8n(payload, itens, acao);
             const problemas = [...resultado.problemas];
@@ -393,6 +397,7 @@ export default function AssinaturaAsoPage() {
             } else {
                 toast.error(mensagemErrosFuncionarios(problemas.map(problema => problema.nome)));
             }
+            resultadoConfirmado = true;
         } catch (error) {
             const mensagem = error instanceof Error ? error.message : "Não foi possível confirmar o resultado da operação.";
             setProblemasAcao(itens.map(item => problemaDoPaciente(
@@ -404,7 +409,7 @@ export default function AssinaturaAsoPage() {
             requisicaoEmAndamento.current = false;
             setEnviando(false);
         }
-        return true;
+        return resultadoConfirmado;
     };
 
     // Confirmar Ação Individual
