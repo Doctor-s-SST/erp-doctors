@@ -20,6 +20,7 @@ export interface PacienteAssinaturaPayload {
     acao?: "ASSINADO" | "PENDENCIA" | "ENVIADO" | "ENVIADO_DIRETO" | "PENDENCIA_ENVIADA" | null;
     observacao?: string | null;
     created_at?: string;
+    ativo?: boolean;
 }
 
 function comoObjeto(valor: unknown): Record<string, unknown> {
@@ -81,6 +82,7 @@ export function criarPayloadAcaoAso(
             const dadosPaciente = { ...paciente };
             delete dadosPaciente.acao;
             delete dadosPaciente.observacao;
+            delete dadosPaciente.ativo;
 
             return {
                 paciente: dadosPaciente,
@@ -104,6 +106,7 @@ export function criarPayloadAcoesAso(
             const dadosPaciente = { ...paciente };
             delete dadosPaciente.acao;
             delete dadosPaciente.observacao;
+            delete dadosPaciente.ativo;
 
             return {
                 paciente: dadosPaciente,

@@ -127,6 +127,7 @@ export default function AssinaturaAsoPage() {
             .from("pacientes_assinatura")
             .select("*")
             .eq("unidade_id", unidadeId)
+            .eq("ativo", true)
             .order("nome_paciente", {
                 ascending: true,
             });

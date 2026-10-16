@@ -40,6 +40,8 @@ Em `prazos_exames`, o campo legado `ignorar_exame` não remove o exame do fluxo.
 
 `pacientes_assinatura` guarda o estado atual do fluxo. O histórico imutável das operações fica em `pacientes_assinatura_logs`, criado por `docs/sql/pacientes-assinatura-logs.sql`. Cada linha registra a ação enviada, o paciente, a observação, a unidade e o usuário autenticado. As políticas RLS permitem leitura apenas para usuários da mesma unidade e inserção apenas em nome do próprio usuário autenticado.
 
+`pacientes_assinatura.ativo` controla a retenção visual sem excluir dados. O n8n marca como `false` somente registros `ENVIADO` e `ENVIADO_DIRETO` com mais de 30 dias desde `created_at`; `PENDENCIA`, `PENDENCIA_ENVIADA`, `ASSINADO` e `null` permanecem ativos. A tela de assinatura consulta somente registros ativos. Uma nova liberação atualiza o registro existente com `ativo = true` e o estado correspondente, permitindo que ele volte ao fluxo sem duplicação. O histórico em `pacientes_assinatura_logs` permanece intacto.
+
 ## Migrações
 
 Os scripts SQL operacionais mantidos pelo projeto ficam em `docs/sql/`. A coluna `painel_config.fala_terreo` deve ser booleana, `not null` e ter padrão `false`.

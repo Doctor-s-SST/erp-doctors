@@ -4,6 +4,7 @@ export interface Pacientes {
     nome_paciente: string;
     sequencial_ficha: string;
     created_at?: string;
+    ativo?: boolean;
     acao?: "ASSINADO" | "PENDENCIA" | "ENVIADO" | "ENVIADO_DIRETO" | "PENDENCIA_ENVIADA" | null;
     observacao?: string | null;
     codigo_empresa_soc?: string | null;

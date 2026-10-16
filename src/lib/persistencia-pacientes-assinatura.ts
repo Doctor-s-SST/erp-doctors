@@ -31,9 +31,14 @@ async function localizarPacienteExistente(paciente: PacienteAssinaturaPayload) {
 
 async function persistirPaciente(paciente: PacienteAssinaturaPayload) {
     const pacienteExistenteId = await localizarPacienteExistente(paciente);
+    const pacienteAtivo = {
+        ...paciente,
+        ativo: true,
+        created_at: new Date().toISOString(),
+    };
 
     if (pacienteExistenteId) {
-        const dadosAtualizados = { ...paciente };
+        const dadosAtualizados = { ...pacienteAtivo };
         delete dadosAtualizados.id;
 
         const { data, error } = await supabase
@@ -51,7 +56,7 @@ async function persistirPaciente(paciente: PacienteAssinaturaPayload) {
 
     const { data, error } = await supabase
         .from("pacientes_assinatura")
-        .insert(paciente)
+        .insert(pacienteAtivo)
         .select("id")
         .single();
 
