@@ -2,9 +2,10 @@ import type { AcaoAso, PacienteAssinaturaPayload } from "@/lib/aso-assinatura";
 
 type ObjetoJson = Record<string, unknown>;
 
-const INTERVALO_POLLING_MS = 2500;
+const INTERVALO_POLLING_MS = 3000;
 const TIMEOUT_POLLING_MS = 15 * 60 * 1000;
-const MAX_FALHAS_CONSECUTIVAS = 8;
+const MAX_FALHAS_CONSECUTIVAS = 100;
+const STATUS_EM_PROCESSAMENTO = new Set(["processing", "pending", "queued", "running"]);
 
 export type ResultadoAcaoAso = {
     confirmados: PacienteAssinaturaPayload[];
@@ -31,7 +32,10 @@ async function lerJson(response: Response, contexto: string): Promise<unknown> {
 }
 
 function normalizarEnvelopeJob(valor: unknown): ObjetoJson | null {
-    const normalizado = Array.isArray(valor) && valor.length === 1 ? valor[0] : valor;
+    let normalizado = valor;
+    while (Array.isArray(normalizado) && normalizado.length === 1) {
+        normalizado = normalizado[0];
+    }
     return comoObjeto(normalizado);
 }
 
@@ -78,20 +82,24 @@ export async function aguardarJobN8n(jobId: string): Promise<unknown[]> {
                     texto(envelope.mensagem) || "O processamento não foi concluído."
                 );
             }
+            if (STATUS_EM_PROCESSAMENTO.has(status)) {
+                // O status explícito do job é mais confiável que um eventual
+                // 502/504 atribuído por um proxy à requisição de consulta.
+                falhasConsecutivas = 0;
+                continue;
+            }
             if (!response.ok) {
                 throw new Error(`A consulta do processamento retornou HTTP ${response.status}.`);
             }
-            if (status !== "processing") {
-                throw new ErroFinalJobN8n("A consulta retornou um status de processamento inesperado.");
-            }
-
-            falhasConsecutivas = 0;
+            // Respostas vazias, atrasadas ou ainda não registradas pelo workflow
+            // são transitórias. Somente `error` é um encerramento negativo.
+            throw new Error("A consulta ainda não retornou um status reconhecido.");
         } catch (error) {
             if (error instanceof ErroFinalJobN8n) throw error;
             falhasConsecutivas += 1;
             if (falhasConsecutivas >= MAX_FALHAS_CONSECUTIVAS) {
                 throw new Error(
-                    "O processamento pode continuar, mas não foi possível consultar seu resultado. Não repita a operação antes de verificar a execução."
+                    "O processamento pode continuar, mas a consulta falhou repetidamente por aproximadamente 5 minutos. Não repita a operação antes de verificar a execução."
                 );
             }
         }
@@ -131,7 +139,7 @@ export async function solicitarResultadoAcaoAso(payload: unknown): Promise<unkno
     if (status === "error") {
         throw new Error(texto(envelope?.mensagem) || "Erro ao iniciar o processamento.");
     }
-    if (status === "processing" && jobId) return aguardarJobN8n(jobId);
+    if (STATUS_EM_PROCESSAMENTO.has(status) && jobId) return aguardarJobN8n(jobId);
 
     if (!response.ok) {
         throw new Error(`A API não iniciou a operação (HTTP ${response.status}).`);
@@ -143,8 +151,8 @@ export async function solicitarResultadoAcaoAso(payload: unknown): Promise<unkno
     if (envelope && !status && Array.isArray(envelope.problematicos)) return envelope.problematicos;
     if (!envelope) throw new Error("A API não retornou uma confirmação válida de início.");
 
-    if (status !== "processing" || !jobId) {
-        throw new Error("A API não retornou status processing e jobId válidos.");
+    if (!STATUS_EM_PROCESSAMENTO.has(status) || !jobId) {
+        throw new Error("A API não retornou um status de processamento e jobId válidos.");
     }
 
     return aguardarJobN8n(jobId);
