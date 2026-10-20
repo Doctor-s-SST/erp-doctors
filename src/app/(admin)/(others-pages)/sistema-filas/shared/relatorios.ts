@@ -10,6 +10,28 @@ export interface RespostaJobRelatorio {
 }
 
 const INTERVALO_CONSULTA_MS = 3000;
+const TIMEOUT_CONSULTA_MS = 15 * 60 * 1000;
+class ErroFinalRelatorio extends Error { }
+
+function normalizarRespostaJob(valor: unknown): RespostaJobRelatorio | null {
+    let resposta = valor;
+    while (Array.isArray(resposta) && resposta.length === 1) resposta = resposta[0];
+    if (!resposta || typeof resposta !== "object" || Array.isArray(resposta)) return null;
+
+    const objeto = resposta as Record<string, unknown>;
+    const conteudo = objeto.json ?? objeto;
+    return conteudo && typeof conteudo === "object" && !Array.isArray(conteudo)
+        ? conteudo as RespostaJobRelatorio
+        : null;
+}
+
+async function lerRespostaJson(resposta: Response): Promise<unknown> {
+    try {
+        return await resposta.json();
+    } catch {
+        throw new Error("A API de relatórios não retornou um JSON válido.");
+    }
+}
 
 export function normalizarTextoRelatorio(texto: string): string {
     return (texto || "")
@@ -67,17 +89,44 @@ function aguardar(ms: number): Promise<void> {
 
 export async function iniciarJobRelatorio(endpoint: string, formData: FormData): Promise<string> {
     const resposta = await fetch(endpoint, { method: "POST", body: formData });
-    const corpo = await resposta.json() as { jobId: string };
-    return corpo.jobId;
+    const retorno = normalizarRespostaJob(await lerRespostaJson(resposta));
+    if (!resposta.ok) {
+        throw new Error(retorno?.mensagem || "Não foi possível iniciar o relatório.");
+    }
+
+    const jobId = typeof retorno?.jobId === "string" ? retorno.jobId.trim() : "";
+    if (!jobId) throw new Error("A API não retornou o identificador do relatório.");
+    return jobId;
 }
 
 export async function aguardarJobRelatorio(jobId: string): Promise<RespostaJobRelatorio> {
-    while (true) {
+    if (!jobId.trim()) throw new Error("Identificador do relatório inválido.");
+    const inicio = Date.now();
+
+    while (Date.now() - inicio < TIMEOUT_CONSULTA_MS) {
         await aguardar(INTERVALO_CONSULTA_MS);
-        const consulta = await fetch(`/api/consulta-relatorios/?id=${jobId}`);
-        const resultado = await consulta.json();
-        const respostaBruta = Array.isArray(resultado) ? resultado[0] : resultado;
-        const resposta = (respostaBruta?.json ?? respostaBruta) as RespostaJobRelatorio;
-        if (resposta.status === "empty" || resposta.status === "done") return resposta;
+        try {
+            const consulta = await fetch(`/api/consulta-relatorios?id=${encodeURIComponent(jobId)}`, {
+                cache: "no-store",
+            });
+            if (consulta.status === 401 || consulta.status === 403) {
+                throw new ErroFinalRelatorio("Sua sessão não está autorizada a consultar o relatório.");
+            }
+
+            const resposta = normalizarRespostaJob(await lerRespostaJson(consulta));
+            if (!resposta) continue;
+            if (typeof resposta.jobId === "string" && resposta.jobId !== jobId) {
+                throw new ErroFinalRelatorio("A consulta retornou um relatório diferente do solicitado.");
+            }
+            if (resposta.status === "empty" || resposta.status === "done") return resposta;
+            if (resposta.status === "error") {
+                throw new ErroFinalRelatorio(resposta.mensagem || "O processamento do relatório falhou.");
+            }
+            // `processing` e falhas HTTP transitórias continuam em polling.
+        } catch (error) {
+            if (error instanceof ErroFinalRelatorio) throw error;
+        }
     }
+
+    throw new Error("O relatório excedeu o tempo máximo de 15 minutos.");
 }
