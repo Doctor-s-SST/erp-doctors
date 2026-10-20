@@ -4,8 +4,9 @@ type ObjetoJson = Record<string, unknown>;
 
 const INTERVALO_POLLING_MS = 3000;
 const TIMEOUT_POLLING_MS = 15 * 60 * 1000;
-const MAX_FALHAS_CONSECUTIVAS = 100;
 const STATUS_EM_PROCESSAMENTO = new Set(["processing", "pending", "queued", "running"]);
+
+export const LIMITE_PACIENTES_ACAO_ASO = 10;
 
 export type ResultadoAcaoAso = {
     confirmados: PacienteAssinaturaPayload[];
@@ -59,7 +60,6 @@ function extrairResultadoConcluido(valor: unknown, jobId: string): unknown[] | n
 /** Aguarda o resultado final sem reenviar a operação original. */
 export async function aguardarJobN8n(jobId: string): Promise<unknown[]> {
     const inicio = Date.now();
-    let falhasConsecutivas = 0;
 
     while (Date.now() - inicio < TIMEOUT_POLLING_MS) {
         await esperar(INTERVALO_POLLING_MS);
@@ -90,7 +90,6 @@ export async function aguardarJobN8n(jobId: string): Promise<unknown[]> {
             if (STATUS_EM_PROCESSAMENTO.has(status)) {
                 // O status explícito do job é mais confiável que um eventual
                 // 502/504 atribuído por um proxy à requisição de consulta.
-                falhasConsecutivas = 0;
                 continue;
             }
             if (!response.ok) {
@@ -101,12 +100,8 @@ export async function aguardarJobN8n(jobId: string): Promise<unknown[]> {
             throw new Error("A consulta ainda não retornou um status reconhecido.");
         } catch (error) {
             if (error instanceof ErroFinalJobN8n) throw error;
-            falhasConsecutivas += 1;
-            if (falhasConsecutivas >= MAX_FALHAS_CONSECUTIVAS) {
-                throw new Error(
-                    "O processamento pode continuar, mas a consulta falhou repetidamente por aproximadamente 5 minutos. Não repita a operação antes de verificar a execução."
-                );
-            }
+            // A consulta pode falhar temporariamente enquanto o job continua no
+            // n8n. Somente o status `error` ou o limite global encerram a espera.
         }
     }
 

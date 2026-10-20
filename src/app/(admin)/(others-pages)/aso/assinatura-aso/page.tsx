@@ -46,7 +46,7 @@ import { ConfirmarAcaoModal } from "./components/ConfirmarAcaoModal";
 import { RegistrarPendenciaModal } from "./components/RegistrarPendenciaModal";
 import { EnviarPendenciasModal } from "./components/EnviarPendenciasModal";
 import { criarPayloadAcaoAso, criarPayloadAcoesAso, AcaoAso } from "@/lib/aso-assinatura";
-import { mensagemErrosFuncionarios } from "@/lib/resultado-acao-aso";
+import { LIMITE_PACIENTES_ACAO_ASO, mensagemErrosFuncionarios } from "@/lib/resultado-acao-aso";
 import { ProblemaAcao, problemaDoPaciente, solicitarAcaoN8n } from "./resultado-acao";
 
 type StatusLocal = "ASSINADO" | "PENDENCIA" | "ENVIADO" | "PENDENCIA_ENVIADA";
@@ -315,17 +315,25 @@ export default function AssinaturaAsoPage() {
         const idsElegiveis = elegiveisParaAcao
             .map((p) => p.id)
             .filter((id): id is string => Boolean(id));
-        const todosSelecionados = idsElegiveis.length > 0 &&
-            idsElegiveis.every((id) => selecionadosEmMassa.includes(id));
+        const idsSelecionaveis = idsElegiveis.slice(0, LIMITE_PACIENTES_ACAO_ASO);
+        const todosSelecionados = idsSelecionaveis.length > 0 &&
+            idsSelecionaveis.every((id) => selecionadosEmMassa.includes(id));
 
         if (todosSelecionados) {
-            setSelecionadosEmMassa((prev) => prev.filter((id) => !idsElegiveis.includes(id)));
+            setSelecionadosEmMassa((prev) => prev.filter((id) => !idsSelecionaveis.includes(id)));
         } else {
-            setSelecionadosEmMassa((prev) => Array.from(new Set([...prev, ...idsElegiveis])));
+            setSelecionadosEmMassa(idsSelecionaveis);
+            if (idsElegiveis.length > LIMITE_PACIENTES_ACAO_ASO) {
+                toast.info(`Foram selecionados os primeiros ${LIMITE_PACIENTES_ACAO_ASO} funcionários. Esse é o limite por operação.`);
+            }
         }
     };
 
     const toggleSelectItem = (id: string) => {
+        if (!selecionadosEmMassa.includes(id) && selecionadosEmMassa.length >= LIMITE_PACIENTES_ACAO_ASO) {
+            toast.warning(`Selecione no máximo ${LIMITE_PACIENTES_ACAO_ASO} funcionários por operação.`);
+            return;
+        }
         setSelecionadosEmMassa((prev: string[]) =>
             prev.includes(id) ? prev.filter((i: string) => i !== id) : [...prev, id]
         );
@@ -343,6 +351,10 @@ export default function AssinaturaAsoPage() {
         textoSucesso: string;
     }): Promise<boolean> => {
         if (requisicaoEmAndamento.current || !itens.length) return false;
+        if (itens.length > LIMITE_PACIENTES_ACAO_ASO) {
+            toast.warning(`Selecione no máximo ${LIMITE_PACIENTES_ACAO_ASO} funcionários por operação.`);
+            return false;
+        }
         if (itens.some(item => !item.id)) {
             toast.error("Existem pacientes sem identificação. Atualize a página antes de continuar.");
             return false;

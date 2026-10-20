@@ -56,6 +56,7 @@ import { toast } from "sonner";
 import { criarPacienteAssinatura, criarPayloadAcaoAso } from "@/lib/aso-assinatura";
 import {
     interpretarRespostaAcaoAso,
+    LIMITE_PACIENTES_ACAO_ASO,
     mensagemErrosFuncionarios,
     solicitarResultadoAcaoAso,
 } from "@/lib/resultado-acao-aso";
@@ -467,10 +468,11 @@ export function ViewExamesPendentes({
         .filter((f: any) => !isFuncionarioMontado(f) && !cpfsEnviadosDireto.has(obterIdentificadorFuncionario(f)))
         .map(obterIdentificadorFuncionario)
         .filter(Boolean);
+    const cpfsParaSelecionarEmMassa = cpfsSelecionaveis.slice(0, LIMITE_PACIENTES_ACAO_ASO);
 
     const allChecked =
-        cpfsSelecionaveis.length > 0 &&
-        cpfsSelecionaveis.every((cpf: string) => selectedCpfs.has(cpf));
+        cpfsParaSelecionarEmMassa.length > 0 &&
+        cpfsParaSelecionarEmMassa.every((cpf: string) => selectedCpfs.has(cpf));
 
     const disponiveisNaAba = cpfsSelecionaveis.length;
 
@@ -480,13 +482,21 @@ export function ViewExamesPendentes({
             return;
         }
 
-        setSelectedCpfs(new Set(cpfsSelecionaveis));
+        setSelectedCpfs(new Set(cpfsParaSelecionarEmMassa));
+        if (cpfsSelecionaveis.length > LIMITE_PACIENTES_ACAO_ASO) {
+            toast.info(`Foram selecionados os primeiros ${LIMITE_PACIENTES_ACAO_ASO} funcionários. Esse é o limite por operação.`);
+        }
     };
 
     const handleSelectOne = (cpf: string, checked: boolean) => {
         const funcionario = pendenciasVisiveis.find((f: any) => obterIdentificadorFuncionario(f) === cpf);
 
         if (!funcionario || isFuncionarioMontado(funcionario) || cpfsEnviadosDireto.has(cpf)) return;
+
+        if (checked && !selectedCpfs.has(cpf) && selectedCpfs.size >= LIMITE_PACIENTES_ACAO_ASO) {
+            toast.warning(`Selecione no máximo ${LIMITE_PACIENTES_ACAO_ASO} funcionários por operação.`);
+            return;
+        }
 
         setSelectedCpfs((prev) => {
             const novoSet = new Set(prev);
@@ -499,6 +509,12 @@ export function ViewExamesPendentes({
         });
     };
 
+    const selecaoDentroDoLimite = () => {
+        if (selectedCpfs.size <= LIMITE_PACIENTES_ACAO_ASO) return true;
+        toast.warning(`Selecione no máximo ${LIMITE_PACIENTES_ACAO_ASO} funcionários por operação.`);
+        return false;
+    };
+
     /* ============================================================
        SALVAR EM LOTE
     ============================================================ */
@@ -508,6 +524,7 @@ export function ViewExamesPendentes({
             toast.warning("Selecione ao menos um funcionário para salvar.");
             return;
         }
+        if (!selecaoDentroDoLimite()) return;
 
         operacaoEmAndamento.current = true;
         setSaving(true);
@@ -570,6 +587,7 @@ export function ViewExamesPendentes({
             toast.warning("Selecione ao menos um funcionário para enviar o ASO.");
             return;
         }
+        if (!selecaoDentroDoLimite()) return;
 
         operacaoEmAndamento.current = true;
         setSendingAso(true);
@@ -646,6 +664,7 @@ export function ViewExamesPendentes({
             toast.warning("Selecione ao menos um funcionário.");
             return;
         }
+        if (!selecaoDentroDoLimite()) return;
 
         operacaoEmAndamento.current = true;
         setConcluindoAtendimento(true);
