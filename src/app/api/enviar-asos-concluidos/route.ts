@@ -11,6 +11,7 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     const { selecionados } = body;
+    const jobIdSolicitado = typeof body.jobId === "string" ? body.jobId.trim() : "";
 
     if (!selecionados || !Array.isArray(selecionados) || selecionados.length === 0) {
       return NextResponse.json(
@@ -36,7 +37,7 @@ export async function POST(req: NextRequest) {
         "Content-Type": "application/json",
         "x-api-key": process.env.N8N_API_KEY!,
       },
-      body: JSON.stringify({ selecionados }),
+      body: JSON.stringify({ selecionados, jobId: jobIdSolicitado || undefined }),
     });
 
     const respostaTexto = await n8nResponse.text();
@@ -45,6 +46,12 @@ export async function POST(req: NextRequest) {
       data = JSON.parse(respostaTexto);
     } catch {
       console.error("Resposta não JSON do n8n ao iniciar ação de ASO:", respostaTexto);
+      if (jobIdSolicitado && [408, 502, 503, 504].includes(n8nResponse.status)) {
+        return NextResponse.json(
+          { status: "processing", jobId: jobIdSolicitado },
+          { status: 202 }
+        );
+      }
       return NextResponse.json(
         { error: "O n8n não retornou um JSON válido." },
         { status: 502 }

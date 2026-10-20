@@ -23,6 +23,11 @@ const texto = (valor: unknown) =>
 
 const esperar = (tempoMs: number) => new Promise<void>(resolve => setTimeout(resolve, tempoMs));
 
+function criarJobIdCliente(): string {
+    const uuid = globalThis.crypto?.randomUUID?.();
+    return `job-${uuid || `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
+}
+
 async function lerJson(response: Response, contexto: string): Promise<unknown> {
     try {
         return await response.json();
@@ -114,18 +119,34 @@ class ErroFinalJobN8n extends Error { }
 
 /** Inicia a ação e converte o resultado assíncrono no array final do contrato antigo. */
 export async function solicitarResultadoAcaoAso(payload: unknown): Promise<unknown[]> {
+    const jobIdSolicitado = criarJobIdCliente();
+    const payloadObjeto = comoObjeto(payload);
+    if (!payloadObjeto) {
+        throw new Error("Não foi possível iniciar a operação com um payload válido.");
+    }
+    const payloadComJobId = { ...payloadObjeto, jobId: jobIdSolicitado };
+
     let response: Response;
     try {
         response = await fetch("/api/enviar-asos-concluidos", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
+            body: JSON.stringify(payloadComJobId),
         });
     } catch {
         throw new Error("A operação não pôde ser iniciada e nenhum resultado foi confirmado.");
     }
 
-    const retorno = await lerJson(response, "A API de envio");
+    let retorno: unknown;
+    try {
+        retorno = await lerJson(response, "A API de envio");
+    } catch (error) {
+        const possivelTimeoutIntermediario = response.ok || [408, 502, 503, 504].includes(response.status);
+        if (possivelTimeoutIntermediario) {
+            return aguardarJobN8n(jobIdSolicitado);
+        }
+        throw error;
+    }
     const envelope = normalizarEnvelopeJob(retorno);
     const status = texto(envelope?.status).toLowerCase();
     const jobId = texto(envelope?.jobId);
@@ -140,6 +161,10 @@ export async function solicitarResultadoAcaoAso(payload: unknown): Promise<unkno
         throw new Error(texto(envelope?.mensagem) || "Erro ao iniciar o processamento.");
     }
     if (STATUS_EM_PROCESSAMENTO.has(status) && jobId) return aguardarJobN8n(jobId);
+
+    if ([408, 502, 503, 504].includes(response.status)) {
+        return aguardarJobN8n(jobIdSolicitado);
+    }
 
     if (!response.ok) {
         throw new Error(`A API não iniciou a operação (HTTP ${response.status}).`);
