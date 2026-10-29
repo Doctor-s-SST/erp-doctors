@@ -8,12 +8,16 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   "/sistema-filas/senhas-recepcao": ["admin", "recepcao", "especialista", "painel"],
   "/sistema-filas/relatorios/": ["admin", "painel", "recepcao", "operador", "especialista"],
   "/aso/": ["admin", "operador", "especialista", "recepcao"],
-  // "/aso/": ["admin", "painel", "recepcao", "operador",],
+  // Todas as regras cujo prefixo casa com a rota são aplicadas: o especialista
+  // só entra em /aso/assinatura-aso.
+  "/aso/aso-pendente": ["admin", "operador", "recepcao"],
+  "/aso/prazo-exames": ["admin", "operador", "recepcao"],
   "/sistema-filas/filas": ["admin", "especialista", "recepcao", "painel"],
   "/configuracoes/unidade": ["admin"],
   "/configuracoes/users": ["admin"],
   "/configuracoes/salas-profissionais": ["admin"],
   "/configuracoes/grupos-especialidades": ["admin", "operador"],
+  "/configuracoes/painel": ["admin"],
   "/dashboards/": ["admin",],
   "/sistema-filas/analise-dados": ["admin", "especialista", "recepcao", "operador"],
 }

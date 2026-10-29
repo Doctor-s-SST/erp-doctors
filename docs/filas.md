@@ -42,9 +42,10 @@ Os parâmetros essenciais são `p_atendimento_id`, `p_atendimento_exame_id`, `p_
 - `EM_FILA`: paciente chamado e aguardando a etapa.
 - `EM_ATENDIMENTO`: atendimento em curso; apenas a mesma sala/profissional pode operar o item.
 - `FINALIZADO`: etapa concluída e sem novas ações.
-- `CANCELADO`: apresenta o registro como encerrado/cancelado.
 
-`status_atendimento`, `bloqueado`, `num_sala` e `profissional` complementam o status principal. Não simplifique a permissão de botões usando somente `status`.
+A especialidade não cancela atendimentos. Quando a recepção cancela um atendimento (`atendimentos.status = CANCELADO`), a fila apenas o exibe como encerrado.
+
+`status_atendimento`, `bloqueado`, `num_sala` e `profissional` complementam o status principal. A trava de chamada fica em `chamadas_bloqueio` (uma linha por etapa). Não simplifique a permissão de botões usando somente `status`.
 
 ## Exames e finalização
 

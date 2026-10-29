@@ -31,11 +31,15 @@ Regra permanente: toda alteração funcional deve atualizar, na mesma entrega, o
 5. valide `npx tsc --noEmit`, lint direcionado e build;
 6. teste com usuário de cada papel afetado;
 7. confira n8n e banco quando houver integração;
-8. atualize documentação e migração.
+8. atualize documentação e migração; para rotas, workflows, telas ou tabelas novas, siga [atualizacao-documentacao.md](atualizacao-documentacao.md), que cobre os `.md`, o Swagger e o documento técnico.
 
 ## Nova página
 
-Crie `page.tsx`, defina permissão no proxy, adicione ao menu com os mesmos papéis, aplique unidade em consultas e documente em `paginas.md`.
+Crie `page.tsx`, defina permissão no proxy (`ROUTE_PERMISSIONS`), adicione ao menu com os mesmos papéis, aplique unidade em consultas e documente em `paginas.md`. Uma rota que não esteja em `ROUTE_PERMISSIONS` fica acessível a qualquer usuário logado.
+
+## Nova rota de API
+
+Use `getAuthSession()` no início do handler, use `auth.unidadeId` em vez de dados do corpo, chame o n8n somente pelo servidor com `x-api-key` e documente em `api.md` e no Swagger.
 
 ## Novo estado de atendimento
 
@@ -59,11 +63,23 @@ Evite enviar listas grandes diretamente para `.in(...)`: o PostgREST codifica os
 
 - páginas operacionais muito extensas concentram consulta, regra e UI;
 - uso frequente de `any` reduz proteção de tipos;
-- esquema e migrações do Supabase não estão versionados;
+- o esquema do Supabase está versionado como fotografia (`docs/sql/schema_public.sql`), mas ainda sem migrações;
+- 24 funções antigas ou duplicadas continuam no banco (ver [funcoes-banco.md](funcoes-banco.md));
 - desenvolvimento compartilha dados de produção;
 - permissões aparecem em proxy e menu, exigindo sincronização manual;
 - há rota de análise por especialidade implementada, mas oculta no menu;
 - há dois conjuntos históricos de componentes UI; evite criar uma terceira variante.
+
+Pendências de segurança levantadas em outubro de 2026 (detalhes na seção 9 do documento técnico):
+
+- **políticas RLS abertas:** sem login é possível ler todos os pacientes (nome, CPF, nascimento) e alterar ou excluir exames; usuários logados alteram pacientes e unidades de qualquer unidade e podem mudar o próprio papel; RLS desativado em `chamadas_bloqueio` e `debug_reabertura_exames` (ver [banco-de-dados.md](banco-de-dados.md#rls));
+- funções `SECURITY DEFINER` sem conferência de unidade (`get_dashboard_completo`, `gerar_senha_java`) e `handle_new_user` aceitando o papel enviado no cadastro (ver [funcoes-banco.md](funcoes-banco.md#pontos-de-atenção));
+- `gerar_senha_novo` sem trava e com data do servidor, podendo repetir senha com o aplicativo Java;
+- `POST /api/gerar-declaracao` não valida sessão;
+- distribuidor SSE sem autenticação e com CORS aberto: quem souber o `unidadeId` recebe filas, nomes de pacientes e chat; porta 8765 também exposta direto na VPS; sem reconexão automática ao banco (ver [distribuidor-sse.md](distribuidor-sse.md#pontos-de-atenção));
+- senha do usuário SOC e `x-api-key` escritas dentro de nodes do n8n, em vez do cofre de credenciais;
+- `consultar_relatorio` termina com erro em cerca de 63% das execuções; investigar consultas a jobs inexistentes ou expirados;
+- na VPS: firewall não sincronizado, UFW inativo, EasyPanel e portas do Docker Swarm expostas, imagens `latest` e backup apenas semanal.
 
 ## Refatorações recomendadas
 

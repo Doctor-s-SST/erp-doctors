@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Serviço Node separado (CommonJS), fora do app Next.js
+    "services/**",
   ]),
 ]);
 
