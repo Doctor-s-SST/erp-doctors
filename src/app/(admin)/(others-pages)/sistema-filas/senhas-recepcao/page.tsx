@@ -999,7 +999,7 @@ export default function RecepcaoPage() {
                         </div>
 
                         {/* LADO DIREITO: BOTÕES DE GERAR SENHA E ATUALIZAR */}
-                            <div className="flex w-full flex-wrap items-center justify-end gap-2">
+                        <div className="flex w-full flex-wrap items-center justify-end gap-2">
                             <div
                                 className="flex h-8 items-center gap-1 bg-blue-600 text-muted p-1 rounded-full hover:bg-blue-500 hover:text-white cursor-pointer transition-all shrink-0 "
                                 onClick={() => gerarSenha("NORMAL")}
@@ -1442,38 +1442,6 @@ export default function RecepcaoPage() {
                         {/* 1. UPLOAD E BOTÃO DE IMPORTAÇÃO */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-                            {/* IMPORTAÇÃO PDF */}
-                            <div className="relative group">
-                                {loadingAction === "processing_pdf" && (
-                                    <div className="absolute inset-0 z-50 bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm rounded-xl flex flex-col items-center justify-center border-2 border-blue-500 border-dashed">
-                                        <RefreshCw className="w-10 h-10 animate-spin text-blue-600 mb-2" />
-                                        <p className="font-black text-blue-600 uppercase tracking-widest text-[10px]">
-                                            Lendo PDF...
-                                        </p>
-                                    </div>
-                                )}
-
-                                <div className="h-full border-2 border-dashed border-gray-200 dark:border-gray-800 hover:border-blue-400 bg-gray-50/50 dark:bg-gray-800/50 transition-all rounded-xl p-4 text-center relative cursor-pointer flex items-center justify-center min-h-[88px]">
-                                    <input
-                                        type="file"
-                                        accept="application/pdf"
-                                        className="absolute inset-0 opacity-0 cursor-pointer z-10"
-                                        onChange={(e) =>
-                                            e.target.files?.[0] && handleUploadPDF(e.target.files[0])
-                                        }
-                                    />
-
-                                    <div className="flex items-center justify-center gap-3">
-                                        <UploadCloud className="w-6 h-6 text-gray-400" />
-
-                                        <p className="text-sm font-bold text-gray-500">
-                                            {formFicha.arquivo?.name ??
-                                                "Importar PDF do ASO"}
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-
                             {/* BUSCA SEQUENCIAL */}
                             <div className="border rounded-xl border-gray-200 dark:border-gray-800 p-2 bg-gray-50/50 dark:bg-gray-800/50 flex flex-col justify-center">
                                 <div className="flex gap-2">
@@ -1504,6 +1472,38 @@ export default function RecepcaoPage() {
                                             </>
                                         )}
                                     </Button>
+                                </div>
+                            </div>
+
+                            {/* IMPORTAÇÃO PDF */}
+                            <div className="relative group">
+                                {loadingAction === "processing_pdf" && (
+                                    <div className="absolute inset-0 z-50 bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm rounded-xl flex flex-col items-center justify-center border-2 border-blue-500 border-dashed">
+                                        <RefreshCw className="w-10 h-10 animate-spin text-blue-600 mb-2" />
+                                        <p className="font-black text-blue-600 uppercase tracking-widest text-[10px]">
+                                            Lendo PDF...
+                                        </p>
+                                    </div>
+                                )}
+
+                                <div className="h-full border-2 border-dashed border-gray-200 dark:border-gray-800 hover:border-blue-400 bg-gray-50/50 dark:bg-gray-800/50 transition-all rounded-xl p-4 text-center relative cursor-pointer flex items-center justify-center min-h-[88px]">
+                                    <input
+                                        type="file"
+                                        accept="application/pdf"
+                                        className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                                        onChange={(e) =>
+                                            e.target.files?.[0] && handleUploadPDF(e.target.files[0])
+                                        }
+                                    />
+
+                                    <div className="flex items-center justify-center gap-3">
+                                        <UploadCloud className="w-6 h-6 text-gray-400" />
+
+                                        <p className="text-sm font-bold text-gray-500">
+                                            {formFicha.arquivo?.name ??
+                                                "Importar PDF do ASO"}
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
                         </div>
