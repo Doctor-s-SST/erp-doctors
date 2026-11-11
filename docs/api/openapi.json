@@ -1183,6 +1183,92 @@
         }
       }
     },
+    "/webhook/download-ged": {
+      "post": {
+        "tags": [
+          "Webhooks n8n (internos)"
+        ],
+        "summary": "Workflow download_ged",
+        "description": "Baixa um documento do GED do SOC e devolve o conteúdo em Base64. Chamado por `POST /api/download-documento-ged`, que converte o Base64 em PDF para o navegador.\n\nURL completa configurada no servidor do ERP em `N8N_WEBHOOK_DOWNLOAD_GED_URL`. Host do n8n não publicado nesta especificação.",
+        "servers": [
+          {
+            "url": "https://{hostWebhookN8n}",
+            "variables": {
+              "hostWebhookN8n": {
+                "default": "host-de-webhook-do-n8n"
+              }
+            }
+          }
+        ],
+        "security": [
+          {
+            "chaveN8n": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "codigoGed",
+                  "codigoEmpresa",
+                  "codigoFuncionario"
+                ],
+                "properties": {
+                  "codigoGed": {
+                    "type": "string"
+                  },
+                  "codigoEmpresa": {
+                    "type": "string"
+                  },
+                  "codigoFuncionario": {
+                    "type": "string"
+                  },
+                  "nomeArquivo": {
+                    "type": "string",
+                    "description": "Repassado pela rota; não é usado pelo workflow"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Documento em Base64. A rota aceita o objeto ou uma lista com um objeto.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "string",
+                      "format": "byte",
+                      "description": "Conteúdo do PDF em Base64"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Chave x-api-key inválida (ramo \"Sem Permissão\" do workflow).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                },
+                "example": {
+                  "error": "Unauthorized"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/webhook/relatorio-atendimentos": {
       "post": {
         "tags": [
