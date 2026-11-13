@@ -3844,8 +3844,32 @@ CREATE TABLE public.grupos_especialidades (
     ativo boolean DEFAULT true,
     criado_em timestamp without time zone DEFAULT now(),
     unidade_id uuid,
-    tipo_filtro text DEFAULT 'todos'::text
+    tipo_filtro text DEFAULT 'todos'::text,
+    exibir_fila boolean DEFAULT true NOT NULL,
+    exibir_dashboard boolean DEFAULT false NOT NULL,
+    especialidade_fila_id uuid
 );
+
+
+--
+-- Name: COLUMN grupos_especialidades.exibir_fila; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.grupos_especialidades.exibir_fila IS 'Quando false, o grupo não aparece no seletor de filtro das filas.';
+
+
+--
+-- Name: COLUMN grupos_especialidades.exibir_dashboard; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.grupos_especialidades.exibir_dashboard IS 'Quando true (e com especialidade_fila_id), o grupo aparece ao expandir o card da especialidade no dashboard.';
+
+
+--
+-- Name: COLUMN grupos_especialidades.especialidade_fila_id; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.grupos_especialidades.especialidade_fila_id IS 'Especialidade cuja fila o grupo representa; limita o grupo à fila dessa especialidade.';
 
 
 --
@@ -4805,6 +4829,14 @@ ALTER TABLE ONLY public.profiles
 
 ALTER TABLE ONLY public.grupo_especialidade_itens
     ADD CONSTRAINT grupo_especialidade_itens_grupo_id_fkey FOREIGN KEY (grupo_id) REFERENCES public.grupos_especialidades(id);
+
+
+--
+-- Name: grupos_especialidades grupos_especialidades_especialidade_fila_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.grupos_especialidades
+    ADD CONSTRAINT grupos_especialidades_especialidade_fila_id_fkey FOREIGN KEY (especialidade_fila_id) REFERENCES public.especialidades(id) ON DELETE SET NULL;
 
 
 --

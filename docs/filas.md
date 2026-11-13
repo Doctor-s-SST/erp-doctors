@@ -67,13 +67,36 @@ Ao terminar o contador, a finalização usa `num_sala` do próprio item de atend
 
 Os grupos aceitam `todos`, `algum`, `apenas_do_grupo` e `obrigatorio_mais_algum`. A comparação usa nomes normalizados sem acentos.
 
+## Grupos de especialidades
+
+A regra fica em `src/lib/grupos-especialidades.ts` (`atendimentoPertenceAoGrupo`) e é a mesma na fila, no relatório geral e no dashboard. As especialidades do atendimento vêm de `atendimento_exames.sala` (nome da especialidade), considerando todos os exames em qualquer status; por isso o paciente não muda de grupo ao longo do dia.
+
+| Tipo | Entra no grupo |
+|---|---|
+| `apenas_do_grupo` | só especialidades do grupo, em qualquer combinação. Ex.: Clínico (Primeiro Andar) com Clínico e Triagem aceita só Clínico ou Clínico + Triagem |
+| `todos` | exatamente as especialidades do grupo |
+| `algum` | pelo menos uma especialidade do grupo, com extras permitidos |
+| `obrigatorio_mais_algum` | todas as obrigatórias e pelo menos uma opcional, sem impeditivas. Ex.: Clínico (Térreo) com Clínico obrigatório e Audiometria, ECG, Laboratório e Toxicológico opcionais |
+
+No `obrigatorio_mais_algum`, a opcional precisa estar cadastrada no próprio grupo. Um atendimento com Clínico e uma especialidade que nenhum grupo cita (por exemplo, uma especialidade nova) fica fora dos grupos de Térreo e de Primeiro Andar. Ao criar especialidade, inclua-a nos grupos correspondentes. No painel de grupos do dashboard, esses casos aparecem como "fora dos grupos".
+
+Configuração de exibição do grupo (`/configuracoes/grupos-especialidades`):
+
+| Campo | Padrão | Efeito |
+|---|---|---|
+| `especialidade_fila_id` | vazio | especialidade cuja fila o grupo representa. Preenchido: o grupo aparece só no filtro da fila dessa especialidade. Vazio: aparece na fila de todas as especialidades do grupo |
+| `exibir_fila` | `true` | quando `false`, o grupo some do filtro da fila; quem estava com ele selecionado volta para "Todos" |
+| `exibir_dashboard` | `false` | o card geral da especialidade da fila no dashboard ganha o botão "Grupos", que abre um painel lateral com o resumo, um gráfico por grupo e a tabela de atendidos por sala; exige `especialidade_fila_id` |
+
+`gruposVisiveisNaFila` aplica `exibir_fila` e `especialidade_fila_id`. O relatório geral continua listando todos os grupos.
+
 ## Checklist de manutenção
 
 1. Teste entrada, expiração e troca manual de sala/profissional.
 2. Confirme chamada, nova chamada, não atendido, cancelamento do temporizador e finalização.
 3. Teste paciente bloqueado por outro profissional e paciente da sessão atual.
 4. Confira exames obrigatórios e não obrigatórios.
-5. Valide os quatro tipos de grupo, pesquisa, tipo de senha e ordenação.
+5. Valide os quatro tipos de grupo, a exibição por especialidade da fila e `exibir_fila`, pesquisa, tipo de senha e ordenação.
 6. Confirme isolamento por `unidade_id` e atualização SSE.
 7. Execute `npx tsc --noEmit`, lint direcionado e build.
 
