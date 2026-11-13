@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface Props {
     open: boolean;
@@ -103,9 +104,15 @@ export function DialogGrupoEspecialidade({
     const [selecionadas, setSelecionadas] = useState<string[]>([]);
     const [tipoFiltro, setTipoFiltro] = useState<TipoFiltro>('apenas_do_grupo');
     const [buscaEspecialidade, setBuscaEspecialidade] = useState('');
+    const [exibirFila, setExibirFila] = useState(true);
+    const [exibirDashboard, setExibirDashboard] = useState(false);
+    const [especialidadeFilaId, setEspecialidadeFilaId] = useState<string>('');
 
     useEffect(() => {
         if (!grupo) {
+            setExibirFila(true);
+            setExibirDashboard(false);
+            setEspecialidadeFilaId('');
             setNome('');
             setSelecionadas([]);
             setObrigatorias([]);
@@ -118,6 +125,9 @@ export function DialogGrupoEspecialidade({
         setNome(grupo.nome || '');
         setTipoFiltro(grupo.tipo_filtro || 'apenas_do_grupo');
         setBuscaEspecialidade('');
+        setExibirFila(grupo.exibir_fila !== false);
+        setExibirDashboard(grupo.exibir_dashboard === true);
+        setEspecialidadeFilaId(grupo.especialidade_fila_id || '');
 
         const itens = grupo.grupo_especialidade_itens || [];
         setSelecionadas(itens.map((i: any) => i.especialidade_id));
@@ -202,6 +212,15 @@ export function DialogGrupoEspecialidade({
         setExcludentes([]);
     };
 
+    // A especialidade da fila precisa ser uma das especialidades do grupo (não impeditiva).
+    const especialidadesParaFila = useMemo(
+        () => especialidades.filter(e => selecionadas.includes(e.id) && !excludentes.includes(e.id)),
+        [especialidades, selecionadas, excludentes]
+    );
+
+    const especialidadeFilaValida =
+        !!especialidadeFilaId && especialidadesParaFila.some(e => e.id === especialidadeFilaId);
+
     const criterioAtual = useMemo(() => {
         return CRITERIOS.find(c => c.id === tipoFiltro) || CRITERIOS[0];
     }, [tipoFiltro]);
@@ -233,6 +252,17 @@ export function DialogGrupoEspecialidade({
             return;
         }
 
+        if (exibirDashboard && !especialidadeFilaValida) {
+            toast.warning('Para exibir no dashboard, informe a especialidade da fila');
+            return;
+        }
+
+        const configExibicao = {
+            exibir_fila: exibirFila,
+            exibir_dashboard: exibirDashboard,
+            especialidade_fila_id: especialidadeFilaValida ? especialidadeFilaId : null,
+        };
+
         try {
             setLoading(true);
             let grupoId: string;
@@ -243,7 +273,8 @@ export function DialogGrupoEspecialidade({
                     .from('grupos_especialidades')
                     .update({
                         nome: nome.trim(),
-                        tipo_filtro: tipoFiltro
+                        tipo_filtro: tipoFiltro,
+                        ...configExibicao
                     })
                     .eq('id', grupo.id);
 
@@ -264,7 +295,8 @@ export function DialogGrupoEspecialidade({
                     .insert({
                         unidade_id: unidadeId,
                         nome: nome.trim(),
-                        tipo_filtro: tipoFiltro
+                        tipo_filtro: tipoFiltro,
+                        ...configExibicao
                     })
                     .select()
                     .single();
@@ -539,6 +571,73 @@ export function DialogGrupoEspecialidade({
                                         )}
                                     </div>
                                 </ScrollArea>
+                            </div>
+                        </div>
+
+                        {/* EXIBIÇÃO NA FILA E NO DASHBOARD */}
+                        <div className="space-y-3">
+                            <div className="flex items-center gap-1.5">
+                                <label className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                                    Exibição
+                                </label>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <HelpCircle className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-help" />
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="max-w-xs p-2.5 text-xs">
+                                        Com a especialidade da fila preenchida, o filtro aparece só na fila dessa especialidade e o card do dashboard conta os atendimentos dela. Sem ela, o filtro aparece na fila de todas as especialidades do grupo.
+                                    </TooltipContent>
+                                </Tooltip>
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">
+                                    Especialidade da fila
+                                </span>
+                                <Select
+                                    value={especialidadeFilaValida ? especialidadeFilaId : 'nenhuma'}
+                                    onValueChange={(valor) => setEspecialidadeFilaId(valor === 'nenhuma' ? '' : valor)}
+                                >
+                                    <SelectTrigger className="h-9 text-xs bg-slate-50/50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800">
+                                        <SelectValue placeholder="Todas as especialidades do grupo" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="nenhuma" className="text-xs">
+                                            Todas as especialidades do grupo
+                                        </SelectItem>
+                                        {especialidadesParaFila.map(esp => (
+                                            <SelectItem key={esp.id} value={esp.id} className="text-xs">
+                                                {esp.nome}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                <label className="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 cursor-pointer select-none">
+                                    <Checkbox
+                                        checked={exibirFila}
+                                        onCheckedChange={(v) => setExibirFila(v === true)}
+                                        className="mt-0.5 data-[state=checked]:bg-emerald-600 data-[state=checked]:border-emerald-600"
+                                    />
+                                    <span className="space-y-0.5">
+                                        <span className="block text-xs font-bold text-slate-800 dark:text-slate-200">Exibir na fila</span>
+                                        <span className="block text-[11px] text-slate-500 dark:text-slate-400">Mostra o grupo no filtro da fila do especialista.</span>
+                                    </span>
+                                </label>
+
+                                <label className="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 cursor-pointer select-none">
+                                    <Checkbox
+                                        checked={exibirDashboard}
+                                        onCheckedChange={(v) => setExibirDashboard(v === true)}
+                                        className="mt-0.5 data-[state=checked]:bg-emerald-600 data-[state=checked]:border-emerald-600"
+                                    />
+                                    <span className="space-y-0.5">
+                                        <span className="block text-xs font-bold text-slate-800 dark:text-slate-200">Exibir no dashboard</span>
+                                        <span className="block text-[11px] text-slate-500 dark:text-slate-400">Cria um card próprio no dashboard diário. Exige a especialidade da fila.</span>
+                                    </span>
+                                </label>
                             </div>
                         </div>
                     </div>

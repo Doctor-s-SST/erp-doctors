@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo, useRef } from "react"
 import { useParams } from "next/navigation"
 import { supabase } from "@/lib/supabase"
+import { atendimentoPertenceAoGrupo, gruposVisiveisNaFila } from "@/lib/grupos-especialidades"
 import { carregarSessaoFila, FilaSession, limparSessaoFila, salvarSessaoFila } from "@/lib/fila-session"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -233,6 +234,8 @@ export default function FilaPage() {
                     id,
                     nome,
                     tipo_filtro,
+                    exibir_fila,
+                    especialidade_fila_id,
                     grupo_especialidade_itens(
                         id,
                         especialidade_id,
@@ -251,12 +254,10 @@ export default function FilaPage() {
             if (gruposError) {
                 console.error("Erro ao carregar grupos:", gruposError);
             } else {
-                const gruposDaEspecialidade = (gruposData || []).filter(
-                    (grupo) =>
-                        grupo.grupo_especialidade_itens?.some(
-                            (item) => item.especialidade_id === id
-                        )
-                ) as unknown as GrupoEspecialidade[];
+                const gruposDaEspecialidade = gruposVisiveisNaFila(
+                    (gruposData || []) as unknown as GrupoEspecialidade[],
+                    String(id)
+                );
 
                 setGruposEspecialidades(gruposDaEspecialidade);
 
@@ -738,101 +739,12 @@ export default function FilaPage() {
         // Filtro por Grupo de Especialidades
         if (grupoSelecionado !== "todos" && grupoAtual) {
 
-            lista = lista.filter(item => {
-
-                const itensGrupo = grupoAtual.grupo_especialidade_itens || [];
-                const especialidadesExcludentes = itensGrupo
-                    .filter((item) => item.excludente === true)
-                    .map((item) => normalizarTextoFila(item.especialidades.nome));
-                const especialidadesGrupo = itensGrupo
-                    .filter((item) => item.excludente !== true)
-                    .map((item) => normalizarTextoFila(item.especialidades.nome));
-
-                const especialidadesAtendimento =
-                    especialidadesPorAtendimento[item.atendimento_id] || [];
-
-                if (especialidadesExcludentes.some(
-                    (especialidade) => especialidadesAtendimento.includes(especialidade)
-                )) {
-                    return false;
-                }
-
-                // TODAS as especialidades do grupo (comparação exata)
-                if (grupoAtual.tipo_filtro === "todos") {
-
-                    const grupoOrdenado = [...especialidadesGrupo].sort();
-                    const atendimentoOrdenado = [...especialidadesAtendimento].sort();
-
-                    return (
-                        grupoOrdenado.length === atendimentoOrdenado.length &&
-                        grupoOrdenado.every(
-                            (esp, idx) => esp === atendimentoOrdenado[idx]
-                        )
-                    );
-                }
-
-                // PELO MENOS UMA especialidade do grupo
-                if (grupoAtual.tipo_filtro === "algum") {
-
-                    return especialidadesGrupo.some(
-                        (espGrupo: string) =>
-                            especialidadesAtendimento.includes(espGrupo)
-                    );
-                }
-
-                // APENAS especialidades do grupo (qualquer combinação entre elas, sem nada além)
-                if (grupoAtual.tipo_filtro === "apenas_do_grupo") {
-
-                    return (
-                        especialidadesAtendimento.length > 0 &&
-                        especialidadesAtendimento.every((esp: string) =>
-                            especialidadesGrupo.includes(esp)
-                        )
-                    );
-                }
-
-                // OBRIGATÓRIA(S) + PELO MENOS UMA ADICIONAL
-                if (grupoAtual.tipo_filtro === "obrigatorio_mais_algum") {
-
-                    const obrigatorias = itensGrupo
-                        .filter((i) => i.obrigatoria === true && i.excludente !== true)
-                        .map((i) => normalizarTextoFila(i.especialidades.nome));
-
-                    const adicionais = itensGrupo
-                        .filter((i) => i.obrigatoria !== true && i.excludente !== true)
-                        .map((i) => normalizarTextoFila(i.especialidades.nome));
-
-                    const permitidas = new Set([...obrigatorias, ...adicionais]);
-
-                    // Só entram na checagem de "fora do grupo" as
-                    // especialidades que o PRÓPRIO grupo referencia.
-                    // Especialidades universais (ex: TRIAGEM) que o
-                    // grupo nem menciona não bloqueiam o match.
-                    const especialidadesRelevantes = especialidadesAtendimento.filter(
-                        (esp: string) => especialidadesGrupo.includes(esp)
-                    );
-
-                    const todasObrigatoriasPresentes = obrigatorias.every(
-                        (o: string) => especialidadesAtendimento.includes(o)
-                    );
-
-                    const possuiPeloMenosUmaAdicional = especialidadesAtendimento.some(
-                        (esp: string) => adicionais.includes(esp)
-                    );
-
-                    const nenhumaForaDoGrupo = especialidadesRelevantes.every(
-                        (esp: string) => permitidas.has(esp)
-                    );
-
-                    return (
-                        todasObrigatoriasPresentes &&
-                        possuiPeloMenosUmaAdicional &&
-                        nenhumaForaDoGrupo
-                    );
-                }
-
-                return true;
-            });
+            lista = lista.filter(item =>
+                atendimentoPertenceAoGrupo(
+                    grupoAtual,
+                    especialidadesPorAtendimento[item.atendimento_id] || []
+                )
+            );
         }
 
         // Aplicar Filtro

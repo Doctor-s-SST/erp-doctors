@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/lib/supabase"
-import { format, startOfMonth, endOfMonth } from "date-fns"
+import { format, startOfMonth, endOfMonth, addDays } from "date-fns"
 
 // UI Components
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -23,6 +23,91 @@ import { FiltroPeriodoDashboard } from "./components/FiltroPeriodoDashboard"
 import { CardIndicadorDashboard } from "./components/CardIndicadorDashboard"
 import type { DashboardView } from "./types"
 import type { DashboardPayload, RecepcaoItem, SalaEspecialidadeItem } from "@/lib/dashboard-analytics"
+import { montarCardsPorGrupo, type CardGrupoDashboard, type EspecialidadeDashboard, type LinhaExameDashboard } from "@/lib/dashboard-grupos"
+import { normalizarEspecialidade, type GrupoRegra } from "@/lib/grupos-especialidades"
+
+const TAMANHO_PAGINA = 1000
+
+interface DadosGruposDashboard {
+    grupos: GrupoRegra[]
+    especialidades: EspecialidadeDashboard[]
+    linhas: LinhaExameDashboard[]
+}
+
+/**
+ * Carrega o necessário para os cards por grupo: grupos marcados para o
+ * dashboard, especialidades e os exames dos atendimentos do dia.
+ * Só retorna linhas quando há ao menos um grupo marcado.
+ */
+async function carregarDadosGrupos(unidadeId: string, dataInicio: Date, dataFim: Date): Promise<DadosGruposDashboard> {
+    const { data: grupos, error: erroGrupos } = await supabase
+        .from("grupos_especialidades")
+        .select(`
+            id,
+            nome,
+            tipo_filtro,
+            exibir_dashboard,
+            especialidade_fila_id,
+            grupo_especialidade_itens(
+                especialidade_id,
+                obrigatoria,
+                excludente,
+                especialidades(id, nome)
+            )
+        `)
+        .eq("unidade_id", unidadeId)
+        .eq("ativo", true)
+        .eq("exibir_dashboard", true)
+        .not("especialidade_fila_id", "is", null)
+
+    if (erroGrupos) throw erroGrupos
+    if (!grupos?.length) return { grupos: [], especialidades: [], linhas: [] }
+
+    const { data: especialidades, error: erroEsp } = await supabase
+        .from("especialidades")
+        .select("id, nome, tempo_finalizacao_segundos")
+        .eq("unidade_id", unidadeId)
+
+    if (erroEsp) throw erroEsp
+
+    // Mesmo recorte de data da get_dashboard_completo (atendimentos.created_at no período).
+    const inicio = format(dataInicio, "yyyy-MM-dd")
+    const fimExclusivo = format(addDays(dataFim, 1), "yyyy-MM-dd")
+    const linhas: LinhaExameDashboard[] = []
+
+    for (let pagina = 0; ; pagina++) {
+        const { data, error } = await supabase
+            .from("atendimento_exames")
+            .select("id, atendimento_id, sala, num_sala, status, profissional, iniciado_em, finalizado_em, atendimentos!inner(created_at)")
+            .eq("unidade_id", unidadeId)
+            .gte("atendimentos.created_at", inicio)
+            .lt("atendimentos.created_at", fimExclusivo)
+            .order("id")
+            .range(pagina * TAMANHO_PAGINA, (pagina + 1) * TAMANHO_PAGINA - 1)
+
+        if (error) throw error
+
+        for (const item of data || []) {
+            linhas.push({
+                atendimento_id: item.atendimento_id,
+                sala: item.sala,
+                num_sala: item.num_sala,
+                status: item.status,
+                profissional: item.profissional,
+                iniciado_em: item.iniciado_em,
+                finalizado_em: item.finalizado_em,
+            })
+        }
+
+        if (!data || data.length < TAMANHO_PAGINA) break
+    }
+
+    return {
+        grupos: grupos as unknown as GrupoRegra[],
+        especialidades: (especialidades || []) as EspecialidadeDashboard[],
+        linhas,
+    }
+}
 
 export default function DashboardPage() {
     const [view, setView] = useState<DashboardView>("diario")
@@ -85,6 +170,23 @@ export default function DashboardPage() {
         refetchInterval: false,
 
         enabled: !!unidadeId,
+        placeholderData: (previousData) => previousData,
+        staleTime: 2000,
+        refetchOnWindowFocus: false,
+    })
+
+    // Cards por grupo de especialidades: só na visão diária.
+    // A chave começa com 'dashboard' para ser invalidada junto pelo SSE.
+    const { data: dadosGrupos } = useQuery({
+        queryKey: [
+            'dashboard',
+            'grupos',
+            format(dataInicio, 'yyyy-MM-dd'),
+            format(dataFim, 'yyyy-MM-dd'),
+            unidadeId
+        ],
+        queryFn: () => carregarDadosGrupos(unidadeId, dataInicio, dataFim),
+        enabled: !!unidadeId && view === "diario",
         placeholderData: (previousData) => previousData,
         staleTime: 2000,
         refetchOnWindowFocus: false,
@@ -208,7 +310,7 @@ export default function DashboardPage() {
             </header>
 
             {/* CONTEÚDO DINÂMICO BASEADO NA VIEW */}
-            <ViewDiaria data={data} />
+            <ViewDiaria data={data} dadosGrupos={view === "diario" ? dadosGrupos : undefined} />
         </div>
     )
 }
@@ -219,12 +321,28 @@ export default function DashboardPage() {
 /* ==========================================================================
    VIEW DIÁRIA (Foco em Pizza e Senhas)
    ========================================================================== */
-function ViewDiaria({ data }: { data: DashboardPayload | null | undefined }) {
+function ViewDiaria({
+    data,
+    dadosGrupos,
+}: {
+    data: DashboardPayload | null | undefined
+    dadosGrupos?: DadosGruposDashboard
+}) {
     const analytics = resolveDashboardAnalytics(data)
     const cards = analytics.cards
     const especialidadesOrdenadas = [
         ...(analytics.distribuicoes.especialidades || [])
     ].sort((a, b) => (b.total || 0) - (a.total || 0))
+
+    // Especialidades com grupo marcado para o dashboard viram um card por grupo, lado a lado.
+    const cardsPorGrupo = dadosGrupos?.grupos.length
+        ? montarCardsPorGrupo(
+            dadosGrupos.grupos,
+            dadosGrupos.especialidades,
+            dadosGrupos.linhas,
+            analytics.distribuicoes.especialidades || []
+        )
+        : new Map<string, CardGrupoDashboard[]>()
     const indicadores = [
         { titulo: "Senhas Geradas", valor: cards.geradas ?? 0 },
         { titulo: "Em Atendimento", valor: cards.em_atendimento ?? 0 },
@@ -252,18 +370,32 @@ function ViewDiaria({ data }: { data: DashboardPayload | null | undefined }) {
                 </div>
 
                 {/* ESPECIALIDADES */}
-                {especialidadesOrdenadas.map(esp => (
-                    <div
-                        key={esp.especialidade}
+                {especialidadesOrdenadas.flatMap(esp => {
+                    const cardsGrupo = cardsPorGrupo.get(normalizarEspecialidade(esp.especialidade))
 
-                    >
-                        <CardPizzaSmall
-                            title={esp.especialidade}
-                            data={esp.salas}
-                            aguardando={esp.aguardando}
-                        />
-                    </div>
-                ))}
+                    if (cardsGrupo?.length) {
+                        return cardsGrupo.map(card => (
+                            <div key={card.chave}>
+                                <CardPizzaSmall
+                                    title={card.titulo}
+                                    data={card.salas}
+                                    aguardando={card.aguardando}
+                                    destaque={card.foraDosGrupos ? "alerta" : "grupo"}
+                                />
+                            </div>
+                        ))
+                    }
+
+                    return [
+                        <div key={esp.especialidade}>
+                            <CardPizzaSmall
+                                title={esp.especialidade}
+                                data={esp.salas}
+                                aguardando={esp.aguardando}
+                            />
+                        </div>
+                    ]
+                })}
             </div>
         </div>
     )
@@ -277,13 +409,19 @@ function CardPizzaSmall({
     title,
     data,
     aguardando = 0,
+    destaque,
 }: {
     title: string;
     data: Array<RecepcaoItem | SalaEspecialidadeItem>;
     aguardando?: number;
+    destaque?: "grupo" | "alerta";
 }) {
     return (
-        <Card className={`w-full dark:bg-gray-900 border-gray-800`}>
+        <Card className={cn(
+            "w-full dark:bg-gray-900 border-gray-800",
+            destaque === "grupo" && "border-t-4 border-t-blue-500",
+            destaque === "alerta" && "border-t-4 border-t-amber-500"
+        )}>
             <CardHeader className="p-1 border-b dark:border-gray-800">
                 <CardTitle className="text-1xl font-black uppercase text-center text-gray-500 dark:text-gray-100">
                     {title}
