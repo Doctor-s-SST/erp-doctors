@@ -1,7 +1,7 @@
 -- Grupos de especialidades: exibição na fila, no dashboard e especialidade da fila.
 --
 -- exibir_fila             mostra o grupo no seletor de filtro da fila (padrão: sim, mantém o comportamento atual)
--- exibir_dashboard        mostra o grupo como card próprio no dashboard (padrão: não)
+-- exibir_dashboard        mostra o grupo ao expandir o card da especialidade no dashboard (padrão: não)
 -- especialidade_fila_id   especialidade cuja fila o grupo representa. Quando preenchida, o grupo
 --                         aparece só na fila dessa especialidade e o card do dashboard usa os
 --                         atendimentos dessa especialidade. Vazia: aparece em todas as filas das
@@ -24,7 +24,7 @@ ALTER TABLE public.grupos_especialidades
     FOREIGN KEY (especialidade_fila_id) REFERENCES public.especialidades(id) ON DELETE SET NULL;
 
 COMMENT ON COLUMN public.grupos_especialidades.exibir_fila IS 'Quando false, o grupo não aparece no seletor de filtro das filas.';
-COMMENT ON COLUMN public.grupos_especialidades.exibir_dashboard IS 'Quando true (e com especialidade_fila_id), o grupo vira um card próprio no dashboard diário.';
+COMMENT ON COLUMN public.grupos_especialidades.exibir_dashboard IS 'Quando true (e com especialidade_fila_id), o grupo aparece ao expandir o card da especialidade no dashboard.';
 COMMENT ON COLUMN public.grupos_especialidades.especialidade_fila_id IS 'Especialidade cuja fila o grupo representa; limita o grupo à fila dessa especialidade.';
 
 COMMIT;

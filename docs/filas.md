@@ -78,7 +78,7 @@ A regra fica em `src/lib/grupos-especialidades.ts` (`atendimentoPertenceAoGrupo`
 | `algum` | pelo menos uma especialidade do grupo, com extras permitidos |
 | `obrigatorio_mais_algum` | todas as obrigatórias e pelo menos uma opcional, sem impeditivas. Ex.: Clínico (Térreo) com Clínico obrigatório e Audiometria, ECG, Laboratório e Toxicológico opcionais |
 
-No `obrigatorio_mais_algum`, a opcional precisa estar cadastrada no próprio grupo. Um atendimento com Clínico e uma especialidade que nenhum grupo cita (por exemplo, uma especialidade nova) fica fora dos grupos de Térreo e de Primeiro Andar. Ao criar especialidade, inclua-a nos grupos correspondentes. O dashboard mostra esses casos num card "fora dos grupos".
+No `obrigatorio_mais_algum`, a opcional precisa estar cadastrada no próprio grupo. Um atendimento com Clínico e uma especialidade que nenhum grupo cita (por exemplo, uma especialidade nova) fica fora dos grupos de Térreo e de Primeiro Andar. Ao criar especialidade, inclua-a nos grupos correspondentes. No painel de grupos do dashboard, esses casos aparecem como "fora dos grupos".
 
 Configuração de exibição do grupo (`/configuracoes/grupos-especialidades`):
 
@@ -86,7 +86,7 @@ Configuração de exibição do grupo (`/configuracoes/grupos-especialidades`):
 |---|---|---|
 | `especialidade_fila_id` | vazio | especialidade cuja fila o grupo representa. Preenchido: o grupo aparece só no filtro da fila dessa especialidade. Vazio: aparece na fila de todas as especialidades do grupo |
 | `exibir_fila` | `true` | quando `false`, o grupo some do filtro da fila; quem estava com ele selecionado volta para "Todos" |
-| `exibir_dashboard` | `false` | o grupo vira um card próprio no dashboard diário, no lugar do card geral da especialidade da fila; exige `especialidade_fila_id` |
+| `exibir_dashboard` | `false` | o card geral da especialidade da fila no dashboard ganha o botão "Grupos", que abre um painel lateral com o resumo, um gráfico por grupo e a tabela de atendidos por sala; exige `especialidade_fila_id` |
 
 `gruposVisiveisNaFila` aplica `exibir_fila` e `especialidade_fila_id`. O relatório geral continua listando todos os grupos.
 

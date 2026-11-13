@@ -635,7 +635,7 @@ export function DialogGrupoEspecialidade({
                                     />
                                     <span className="space-y-0.5">
                                         <span className="block text-xs font-bold text-slate-800 dark:text-slate-200">Exibir no dashboard</span>
-                                        <span className="block text-[11px] text-slate-500 dark:text-slate-400">Cria um card próprio no dashboard diário. Exige a especialidade da fila.</span>
+                                        <span className="block text-[11px] text-slate-500 dark:text-slate-400">Aparece no painel de grupos do card da especialidade no dashboard. Exige a especialidade da fila.</span>
                                     </span>
                                 </label>
                             </div>

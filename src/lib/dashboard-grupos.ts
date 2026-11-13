@@ -1,5 +1,6 @@
 /**
- * Cards por grupo de especialidades no dashboard diário.
+ * Cards por grupo de especialidades no dashboard (painel lateral aberto pelo
+ * card geral da especialidade, em qualquer visão: diária, mensal ou período).
  *
  * Usa a mesma regra da fila (`atendimentoPertenceAoGrupo`) sobre as mesmas
  * especialidades do atendimento (`atendimento_exames.sala`, todos os exames),
@@ -39,6 +40,8 @@ export interface CardGrupoDashboard {
     especialidade: string
     aguardando: number
     total: number
+    /** Tempo médio (min) dos atendimentos finalizados do grupo, todas as salas. */
+    tempo_medio: number
     salas: (SalaEspecialidadeItem & { profissional?: string })[]
     foraDosGrupos?: boolean
 }
@@ -126,12 +129,18 @@ function montarCard(
         return na - nb
     })
 
+    const todosMinutos = Array.from(porSala.values()).flatMap((acc) => acc.minutos)
+    const tempoMedioGrupo = todosMinutos.length
+        ? Math.round((todosMinutos.reduce((a, b) => a + b, 0) / todosMinutos.length) * 10) / 10
+        : 0
+
     return {
         chave,
         titulo,
         especialidade: especialidade.nome,
         aguardando: aguardando.size,
         total: salas.reduce((acc, s) => acc + s.total, 0),
+        tempo_medio: tempoMedioGrupo,
         salas,
         foraDosGrupos,
     }

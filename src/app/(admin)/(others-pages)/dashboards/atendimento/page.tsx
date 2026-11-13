@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/lib/supabase"
 import { format, startOfMonth, endOfMonth, addDays } from "date-fns"
@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils"
 // Icons
 import {
     Activity,
+    Layers,
     RefreshCcw,
 } from "lucide-react"
 
@@ -21,6 +22,7 @@ import { GraficoPizza } from "@/components/atendimento/dashboards/diario/Grafico
 import { resolveDashboardAnalytics } from "@/lib/dashboard-analytics"
 import { FiltroPeriodoDashboard } from "./components/FiltroPeriodoDashboard"
 import { CardIndicadorDashboard } from "./components/CardIndicadorDashboard"
+import { PainelGruposEspecialidade } from "./components/PainelGruposEspecialidade"
 import type { DashboardView } from "./types"
 import type { DashboardPayload, RecepcaoItem, SalaEspecialidadeItem } from "@/lib/dashboard-analytics"
 import { montarCardsPorGrupo, type CardGrupoDashboard, type EspecialidadeDashboard, type LinhaExameDashboard } from "@/lib/dashboard-grupos"
@@ -28,18 +30,16 @@ import { normalizarEspecialidade, type GrupoRegra } from "@/lib/grupos-especiali
 
 const TAMANHO_PAGINA = 1000
 
-interface DadosGruposDashboard {
+interface ConfigGruposDashboard {
     grupos: GrupoRegra[]
     especialidades: EspecialidadeDashboard[]
-    linhas: LinhaExameDashboard[]
 }
 
 /**
- * Carrega o necessário para os cards por grupo: grupos marcados para o
- * dashboard, especialidades e os exames dos atendimentos do dia.
- * Só retorna linhas quando há ao menos um grupo marcado.
+ * Grupos marcados para o dashboard (com especialidade da fila) e especialidades.
+ * Consulta leve: define quais cards gerais ganham o botão de expandir.
  */
-async function carregarDadosGrupos(unidadeId: string, dataInicio: Date, dataFim: Date): Promise<DadosGruposDashboard> {
+async function carregarConfigGrupos(unidadeId: string): Promise<ConfigGruposDashboard> {
     const { data: grupos, error: erroGrupos } = await supabase
         .from("grupos_especialidades")
         .select(`
@@ -61,7 +61,7 @@ async function carregarDadosGrupos(unidadeId: string, dataInicio: Date, dataFim:
         .not("especialidade_fila_id", "is", null)
 
     if (erroGrupos) throw erroGrupos
-    if (!grupos?.length) return { grupos: [], especialidades: [], linhas: [] }
+    if (!grupos?.length) return { grupos: [], especialidades: [] }
 
     const { data: especialidades, error: erroEsp } = await supabase
         .from("especialidades")
@@ -70,7 +70,13 @@ async function carregarDadosGrupos(unidadeId: string, dataInicio: Date, dataFim:
 
     if (erroEsp) throw erroEsp
 
-    // Mesmo recorte de data da get_dashboard_completo (atendimentos.created_at no período).
+    return {
+        grupos: grupos as unknown as GrupoRegra[],
+        especialidades: (especialidades || []) as EspecialidadeDashboard[],
+    }
+}
+
+async function carregarLinhasExames(unidadeId: string, dataInicio: Date, dataFim: Date): Promise<LinhaExameDashboard[]> {
     const inicio = format(dataInicio, "yyyy-MM-dd")
     const fimExclusivo = format(addDays(dataFim, 1), "yyyy-MM-dd")
     const linhas: LinhaExameDashboard[] = []
@@ -102,11 +108,7 @@ async function carregarDadosGrupos(unidadeId: string, dataInicio: Date, dataFim:
         if (!data || data.length < TAMANHO_PAGINA) break
     }
 
-    return {
-        grupos: grupos as unknown as GrupoRegra[],
-        especialidades: (especialidades || []) as EspecialidadeDashboard[],
-        linhas,
-    }
+    return linhas
 }
 
 export default function DashboardPage() {
@@ -175,18 +177,30 @@ export default function DashboardPage() {
         refetchOnWindowFocus: false,
     })
 
-    // Cards por grupo de especialidades: só na visão diária.
+    // Especialidade cujo painel de grupos está aberto (nome normalizado).
+    const [especialidadeAberta, setEspecialidadeAberta] = useState<string | null>(null)
+
+    // Configuração dos grupos (leve): decide quais cards gerais mostram o botão de grupos.
+    const { data: configGrupos } = useQuery({
+        queryKey: ['dashboard-config-grupos', unidadeId],
+        queryFn: () => carregarConfigGrupos(unidadeId),
+        enabled: !!unidadeId,
+        staleTime: 60000,
+        refetchOnWindowFocus: false,
+    })
+
+    // Exames do período: só quando o painel de grupos está aberto, em qualquer visão.
     // A chave começa com 'dashboard' para ser invalidada junto pelo SSE.
-    const { data: dadosGrupos } = useQuery({
+    const { data: linhasExames, isFetching: carregandoLinhas } = useQuery({
         queryKey: [
             'dashboard',
-            'grupos',
+            'grupos-linhas',
             format(dataInicio, 'yyyy-MM-dd'),
             format(dataFim, 'yyyy-MM-dd'),
             unidadeId
         ],
-        queryFn: () => carregarDadosGrupos(unidadeId, dataInicio, dataFim),
-        enabled: !!unidadeId && view === "diario",
+        queryFn: () => carregarLinhasExames(unidadeId, dataInicio, dataFim),
+        enabled: !!unidadeId && !!especialidadeAberta && !!configGrupos?.grupos.length,
         placeholderData: (previousData) => previousData,
         staleTime: 2000,
         refetchOnWindowFocus: false,
@@ -310,7 +324,19 @@ export default function DashboardPage() {
             </header>
 
             {/* CONTEÚDO DINÂMICO BASEADO NA VIEW */}
-            <ViewDiaria data={data} dadosGrupos={view === "diario" ? dadosGrupos : undefined} />
+            <ViewDiaria
+                data={data}
+                configGrupos={configGrupos}
+                linhasExames={linhasExames}
+                carregandoLinhas={carregandoLinhas}
+                especialidadeAberta={especialidadeAberta}
+                onAbrirGrupos={setEspecialidadeAberta}
+                periodo={
+                    format(dataInicio, 'dd/MM/yyyy') === format(dataFim, 'dd/MM/yyyy')
+                        ? format(dataInicio, 'dd/MM/yyyy')
+                        : `${format(dataInicio, 'dd/MM/yyyy')} a ${format(dataFim, 'dd/MM/yyyy')}`
+                }
+            />
         </div>
     )
 }
@@ -323,26 +349,44 @@ export default function DashboardPage() {
    ========================================================================== */
 function ViewDiaria({
     data,
-    dadosGrupos,
+    configGrupos,
+    linhasExames,
+    carregandoLinhas,
+    especialidadeAberta,
+    onAbrirGrupos,
+    periodo,
 }: {
     data: DashboardPayload | null | undefined
-    dadosGrupos?: DadosGruposDashboard
+    configGrupos?: ConfigGruposDashboard
+    linhasExames?: LinhaExameDashboard[]
+    carregandoLinhas: boolean
+    especialidadeAberta: string | null
+    onAbrirGrupos: (chave: string | null) => void
+    periodo: string
 }) {
     const analytics = resolveDashboardAnalytics(data)
     const cards = analytics.cards
-    const especialidadesOrdenadas = [
-        ...(analytics.distribuicoes.especialidades || [])
-    ].sort((a, b) => (b.total || 0) - (a.total || 0))
+    const distribuicao = analytics.distribuicoes.especialidades || []
+    const especialidadesOrdenadas = [...distribuicao].sort((a, b) => (b.total || 0) - (a.total || 0))
 
-    // Especialidades com grupo marcado para o dashboard viram um card por grupo, lado a lado.
-    const cardsPorGrupo = dadosGrupos?.grupos.length
-        ? montarCardsPorGrupo(
-            dadosGrupos.grupos,
-            dadosGrupos.especialidades,
-            dadosGrupos.linhas,
-            analytics.distribuicoes.especialidades || []
-        )
+    // Quantos grupos de dashboard cada especialidade tem (chave: nome normalizado).
+    const gruposPorEspecialidade = new Map<string, number>()
+    for (const especialidade of configGrupos?.especialidades ?? []) {
+        const quantidade = (configGrupos?.grupos ?? []).filter(
+            g => g.especialidade_fila_id === especialidade.id
+        ).length
+        if (quantidade > 0) gruposPorEspecialidade.set(normalizarEspecialidade(especialidade.nome), quantidade)
+    }
+
+    // Cards por grupo: calculados só quando há exames carregados (painel aberto).
+    const cardsPorGrupo = configGrupos?.grupos.length && linhasExames
+        ? montarCardsPorGrupo(configGrupos.grupos, configGrupos.especialidades, linhasExames, distribuicao)
         : new Map<string, CardGrupoDashboard[]>()
+
+    const espAberta = especialidadeAberta
+        ? distribuicao.find(e => normalizarEspecialidade(e.especialidade) === especialidadeAberta)
+        : undefined
+
     const indicadores = [
         { titulo: "Senhas Geradas", valor: cards.geradas ?? 0 },
         { titulo: "Em Atendimento", valor: cards.em_atendimento ?? 0 },
@@ -370,33 +414,47 @@ function ViewDiaria({
                 </div>
 
                 {/* ESPECIALIDADES */}
-                {especialidadesOrdenadas.flatMap(esp => {
-                    const cardsGrupo = cardsPorGrupo.get(normalizarEspecialidade(esp.especialidade))
+                {especialidadesOrdenadas.map(esp => {
+                    const chave = normalizarEspecialidade(esp.especialidade)
+                    const quantidadeGrupos = gruposPorEspecialidade.get(chave) ?? 0
 
-                    if (cardsGrupo?.length) {
-                        return cardsGrupo.map(card => (
-                            <div key={card.chave}>
-                                <CardPizzaSmall
-                                    title={card.titulo}
-                                    data={card.salas}
-                                    aguardando={card.aguardando}
-                                    destaque={card.foraDosGrupos ? "alerta" : "grupo"}
-                                />
-                            </div>
-                        ))
-                    }
+                    const botaoGrupos = quantidadeGrupos > 0 ? (
+                        <button
+                            type="button"
+                            onClick={() => onAbrirGrupos(chave)}
+                            className="flex items-center gap-1 rounded-md border border-blue-500/30 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-blue-600 hover:bg-blue-500/10 dark:text-blue-300"
+                        >
+                            <Layers className="h-3 w-3" />
+                            Grupos ({quantidadeGrupos})
+                        </button>
+                    ) : undefined
 
-                    return [
+                    return (
                         <div key={esp.especialidade}>
                             <CardPizzaSmall
                                 title={esp.especialidade}
                                 data={esp.salas}
                                 aguardando={esp.aguardando}
+                                acao={botaoGrupos}
                             />
                         </div>
-                    ]
+                    )
                 })}
             </div>
+
+            <PainelGruposEspecialidade
+                aberto={!!espAberta}
+                onAbertoChange={(aberto) => { if (!aberto) onAbrirGrupos(null) }}
+                especialidade={espAberta?.especialidade ?? ""}
+                periodo={periodo}
+                geral={{
+                    total: espAberta?.total ?? 0,
+                    aguardando: espAberta?.aguardando ?? 0,
+                    salas: espAberta?.salas ?? [],
+                }}
+                grupos={especialidadeAberta ? cardsPorGrupo.get(especialidadeAberta) ?? [] : []}
+                carregando={carregandoLinhas}
+            />
         </div>
     )
 }
@@ -409,23 +467,24 @@ function CardPizzaSmall({
     title,
     data,
     aguardando = 0,
-    destaque,
+    acao,
 }: {
     title: string;
     data: Array<RecepcaoItem | SalaEspecialidadeItem>;
     aguardando?: number;
-    destaque?: "grupo" | "alerta";
+    acao?: ReactNode;
 }) {
     return (
-        <Card className={cn(
-            "w-full dark:bg-gray-900 border-gray-800",
-            destaque === "grupo" && "border-t-4 border-t-blue-500",
-            destaque === "alerta" && "border-t-4 border-t-amber-500"
-        )}>
-            <CardHeader className="p-1 border-b dark:border-gray-800">
+        <Card className="w-full dark:bg-gray-900 border-gray-800">
+            <CardHeader className="flex items-center justify-center p-1 border-b dark:border-gray-800">
                 <CardTitle className="text-1xl font-black uppercase text-center text-gray-500 dark:text-gray-100">
                     {title}
                 </CardTitle>
+                {acao && (
+                    <div className="flex justify-center">
+                        {acao}
+                    </div>
+                )}
             </CardHeader>
 
             <CardContent className="p-1 flex flex-col items-center">

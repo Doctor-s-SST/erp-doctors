@@ -3862,7 +3862,7 @@ COMMENT ON COLUMN public.grupos_especialidades.exibir_fila IS 'Quando false, o g
 -- Name: COLUMN grupos_especialidades.exibir_dashboard; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON COLUMN public.grupos_especialidades.exibir_dashboard IS 'Quando true (e com especialidade_fila_id), o grupo vira um card próprio no dashboard diário.';
+COMMENT ON COLUMN public.grupos_especialidades.exibir_dashboard IS 'Quando true (e com especialidade_fila_id), o grupo aparece ao expandir o card da especialidade no dashboard.';
 
 
 --

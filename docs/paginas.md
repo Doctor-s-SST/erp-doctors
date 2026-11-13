@@ -24,7 +24,7 @@ Os perfis abaixo são os liberados pelo proxy de rotas (`ROUTE_PERMISSIONS` em `
 
 | Rota | Perfis | Uso |
 |---|---|---|
-| `/dashboards/atendimento` | admin | indicadores do dia, período ou mês; na visão diária, grupos marcados com `exibir_dashboard` viram cards lado a lado (ex.: Clínico Térreo e Clínico Primeiro Andar) |
+| `/dashboards/atendimento` | admin | indicadores do dia, período ou mês; o card da especialidade que tem grupos com `exibir_dashboard` ganha o botão "Grupos", que abre um painel lateral com a especialidade dividida por grupo (ex.: Clínico Térreo e Clínico Primeiro Andar): resumo, gráficos e tabela por sala, em qualquer visão |
 | `/sistema-filas/analise-dados/indicadores-mensais` | admin, especialista, recepcao, operador | indicadores por período |
 | `/sistema-filas/analise-dados/especialidades` | admin, especialista, recepcao, operador | indicadores por especialidade; oculta no menu |
 | `/sistema-filas/relatorios/geral` | admin, painel, recepcao, operador, especialista | relatório de atendimentos |
