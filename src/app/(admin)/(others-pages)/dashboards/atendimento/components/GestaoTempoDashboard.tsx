@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { addDays, format } from "date-fns"
-import { BarChart3, Download, RefreshCcw, Table2 } from "lucide-react"
+import { ArrowDown, ArrowUp, ArrowUpDown, BarChart3, Download, RefreshCcw, Table2 } from "lucide-react"
 import { toast } from "sonner"
 import {
     Bar,
@@ -31,11 +31,21 @@ import {
     type Farol,
     type LinhaTempo,
     type ResumoEspecialidade,
+    type ResumoProfissional,
 } from "@/lib/gestao-tempo"
 import { exportarGestaoTempo } from "@/lib/exportar-gestao-tempo"
+import {
+    atendimentoPertenceAoGrupo,
+    normalizarEspecialidade,
+    type GrupoRegra,
+} from "@/lib/grupos-especialidades"
 
 const TAMANHO_PAGINA = 1000
 const TAMANHO_LOTE_IDS = 150
+
+/** Valores especiais do filtro de grupo. */
+const GRUPO_TODOS = "todos"
+const GRUPO_FORA = "fora"
 
 /** Nome da "especialidade" que representa a recepção na Gestão de Tempo. */
 const NOME_RECEPCAO = "RECEPÇÃO"
@@ -54,6 +64,43 @@ const ROTULO_FAROL: Record<Farol, string> = {
     sem_meta: "Sem meta",
 }
 
+type ColunaOrdenacao = "profissional" | "quantidade" | "media" | "minimo" | "maximo" | "dentroMeta"
+
+interface Ordenacao {
+    coluna: ColunaOrdenacao
+    direcao: "asc" | "desc"
+}
+
+/** % dos atendimentos do profissional que ficaram dentro da meta (−1 sem meta, vai para o fim). */
+function percentualDentroDaMeta(p: ResumoProfissional): number {
+    const total = p.verde + p.amarelo + p.vermelho
+    return p.meta && total ? p.verde / total : -1
+}
+
+function ordenarProfissionais(lista: ResumoProfissional[], ordenacao: Ordenacao): ResumoProfissional[] {
+    const fator = ordenacao.direcao === "asc" ? 1 : -1
+    const valor = (p: ResumoProfissional): number | string => {
+        switch (ordenacao.coluna) {
+            case "profissional": return p.profissional
+            case "quantidade": return p.quantidade
+            case "media": return p.media
+            case "minimo": return p.minimo
+            case "maximo": return p.maximo
+            case "dentroMeta": return percentualDentroDaMeta(p)
+        }
+    }
+
+    return [...lista].sort((a, b) => {
+        const va = valor(a)
+        const vb = valor(b)
+        const comparacao = typeof va === "string" || typeof vb === "string"
+            ? String(va).localeCompare(String(vb), "pt-BR")
+            : va - vb
+        // Desempate estável pelo nome do profissional.
+        return comparacao * fator || a.profissional.localeCompare(b.profissional, "pt-BR")
+    })
+}
+
 interface Props {
     unidadeId: string
     dataInicio: Date
@@ -64,9 +111,17 @@ interface Props {
 interface DadosGestaoTempo {
     especialidades: EspecialidadeMeta[]
     linhas: LinhaTempo[]
+    /** Grupos marcados para o dashboard (com especialidade da fila). */
+    grupos: GrupoRegra[]
+    /** Especialidades (normalizadas) de cada atendimento, todos os exames, como a fila calcula. */
+    especialidadesPorAtendimento: Record<string, string[]>
 }
 
-/** Etapas finalizadas dos atendimentos do período (mesmo recorte de data do dashboard). */
+/**
+ * Etapas finalizadas dos atendimentos do período (mesmo recorte de data do
+ * dashboard). Lê todas as etapas para saber as especialidades de cada
+ * atendimento (filtro de grupo), mas só as finalizadas entram no tempo.
+ */
 async function carregarDadosGestaoTempo(unidadeId: string, dataInicio: Date, dataFim: Date): Promise<DadosGestaoTempo> {
     const { data: especialidades, error: erroEsp } = await supabase
         .from("especialidades")
@@ -81,14 +136,32 @@ async function carregarDadosGestaoTempo(unidadeId: string, dataInicio: Date, dat
 
     const recepcao = await carregarRecepcao(unidadeId, inicio, fimExclusivo)
 
+    // select("*"): funciona mesmo antes do SQL das colunas de exibição dos grupos.
+    const { data: gruposData } = await supabase
+        .from("grupos_especialidades")
+        .select(`
+            *,
+            grupo_especialidade_itens(
+                especialidade_id,
+                obrigatoria,
+                excludente,
+                especialidades(id, nome)
+            )
+        `)
+        .eq("unidade_id", unidadeId)
+        .eq("ativo", true)
+        .order("nome")
+
+    const grupos = ((gruposData || []) as unknown as GrupoRegra[]).filter(
+        (g) => g.exibir_dashboard === true && !!g.especialidade_fila_id
+    )
+    const especialidadesPorAtendimento: Record<string, string[]> = {}
+
     for (let pagina = 0; ; pagina++) {
         const { data, error } = await supabase
             .from("atendimento_exames")
-            .select("id, atendimento_id, sala, num_sala, profissional, iniciado_em, finalizado_em, atendimentos!inner(created_at, senha_codigo, pacientes(nome))")
+            .select("id, atendimento_id, sala, num_sala, status, profissional, iniciado_em, finalizado_em, atendimentos!inner(created_at, senha_codigo, pacientes(nome))")
             .eq("unidade_id", unidadeId)
-            .eq("status", "FINALIZADO")
-            .not("iniciado_em", "is", null)
-            .not("finalizado_em", "is", null)
             .gte("atendimentos.created_at", inicio)
             .lt("atendimentos.created_at", fimExclusivo)
             .order("id")
@@ -97,6 +170,15 @@ async function carregarDadosGestaoTempo(unidadeId: string, dataInicio: Date, dat
         if (error) throw error
 
         for (const item of data || []) {
+            if (item.atendimento_id && item.sala) {
+                const lista = especialidadesPorAtendimento[item.atendimento_id] ?? []
+                const esp = normalizarEspecialidade(item.sala)
+                if (esp && !lista.includes(esp)) lista.push(esp)
+                especialidadesPorAtendimento[item.atendimento_id] = lista
+            }
+
+            if (item.status !== "FINALIZADO" || !item.iniciado_em || !item.finalizado_em) continue
+
             const atendimento = (Array.isArray(item.atendimentos) ? item.atendimentos[0] : item.atendimentos) as
                 | { senha_codigo?: string | null; pacientes?: { nome?: string | null } | { nome?: string | null }[] | null }
                 | null
@@ -121,6 +203,8 @@ async function carregarDadosGestaoTempo(unidadeId: string, dataInicio: Date, dat
     return {
         especialidades: [...((especialidades || []) as EspecialidadeMeta[]), recepcao.meta],
         linhas: [...recepcao.linhas, ...linhas],
+        grupos,
+        especialidadesPorAtendimento,
     }
 }
 
@@ -216,8 +300,25 @@ async function carregarRecepcao(
  * a meta da especialidade e exportação dos tempos individuais.
  */
 export function GestaoTempoDashboard({ unidadeId, dataInicio, dataFim, periodo }: Props) {
-    const [especialidadeFiltro, setEspecialidadeFiltro] = useState("todas")
+    const [especialidadeFiltro, setEspecialidadeFiltroEstado] = useState("todas")
+    const [grupoFiltro, setGrupoFiltro] = useState(GRUPO_TODOS)
+
+    // Ao trocar a especialidade, o grupo volta para "Todos".
+    const setEspecialidadeFiltro = (valor: string) => {
+        setEspecialidadeFiltroEstado(valor)
+        setGrupoFiltro(GRUPO_TODOS)
+    }
     const [modo, setModo] = useState<"tabelas" | "graficos">("tabelas")
+    // Uma ordenação para todas as tabelas; padrão: maior tempo médio primeiro.
+    const [ordenacao, setOrdenacao] = useState<Ordenacao>({ coluna: "media", direcao: "desc" })
+
+    const ordenarPor = (coluna: ColunaOrdenacao) =>
+        setOrdenacao((atual) =>
+            atual.coluna === coluna
+                ? { coluna, direcao: atual.direcao === "asc" ? "desc" : "asc" }
+                // Texto começa de A-Z; números começam do maior.
+                : { coluna, direcao: coluna === "profissional" ? "asc" : "desc" }
+        )
 
     // Chave começando com 'dashboard': o SSE do dia atual também atualiza esta aba.
     const { data, isFetching, error } = useQuery({
@@ -229,14 +330,46 @@ export function GestaoTempoDashboard({ unidadeId, dataInicio, dataFim, periodo }
         refetchOnWindowFocus: false,
     })
 
-    const calculado = calcularGestaoTempo(data?.linhas ?? [], data?.especialidades ?? [])
+    const linhasTodas = data?.linhas ?? []
+    const especialidadesMeta = data?.especialidades ?? []
+
+    // Grupos da especialidade escolhida (os mesmos do botão "Grupos" do dashboard).
+    const especialidadeSelecionada =
+        especialidadeFiltro === "todas"
+            ? undefined
+            : especialidadesMeta.find(
+                (e) => normalizarEspecialidade(e.nome) === normalizarEspecialidade(especialidadeFiltro)
+            )
+    const gruposDaEspecialidade = (data?.grupos ?? []).filter(
+        (g) => !!especialidadeSelecionada && g.especialidade_fila_id === especialidadeSelecionada.id
+    )
+    const grupoSelecionado = gruposDaEspecialidade.find((g) => g.id === grupoFiltro)
+
+    // Filtro de grupo: só atinge as linhas da especialidade escolhida.
+    const pertenceAoFiltroDeGrupo = (linha: LinhaTempo) => {
+        if (grupoFiltro === GRUPO_TODOS || !especialidadeSelecionada) return true
+        if (normalizarEspecialidade(linha.especialidade) !== normalizarEspecialidade(especialidadeSelecionada.nome)) return true
+
+        const especialidadesAtendimento = data?.especialidadesPorAtendimento[linha.atendimento_id] ?? []
+        if (grupoFiltro === GRUPO_FORA) {
+            return !gruposDaEspecialidade.some((g) => atendimentoPertenceAoGrupo(g, especialidadesAtendimento))
+        }
+        return !!grupoSelecionado && atendimentoPertenceAoGrupo(grupoSelecionado, especialidadesAtendimento)
+    }
+
     // Recepção primeiro, depois as especialidades em ordem alfabética.
+    const ordenarEspecialidades = (lista: ResumoEspecialidade[]) => [
+        ...lista.filter((e) => e.especialidade === NOME_RECEPCAO),
+        ...lista.filter((e) => e.especialidade !== NOME_RECEPCAO),
+    ]
+    // Lista do seletor de especialidade: sempre sem o filtro de grupo.
+    const especialidadesDoSeletor = ordenarEspecialidades(
+        calcularGestaoTempo(linhasTodas, especialidadesMeta).especialidades
+    )
+    const calculado = calcularGestaoTempo(linhasTodas.filter(pertenceAoFiltroDeGrupo), especialidadesMeta)
     const resultado = {
         ...calculado,
-        especialidades: [
-            ...calculado.especialidades.filter((e) => e.especialidade === NOME_RECEPCAO),
-            ...calculado.especialidades.filter((e) => e.especialidade !== NOME_RECEPCAO),
-        ],
+        especialidades: ordenarEspecialidades(calculado.especialidades),
     }
     const especialidadesVisiveis = resultado.especialidades.filter(
         (e) => especialidadeFiltro === "todas" || e.especialidade === especialidadeFiltro
@@ -257,11 +390,20 @@ export function GestaoTempoDashboard({ unidadeId, dataInicio, dataFim, periodo }
             toast.warning("Não há atendimentos finalizados no período")
             return
         }
-        const sufixo = especialidadeFiltro === "todas" ? "" : `_${especialidadeFiltro.replace(/\s+/g, "-")}`
+        const nomeGrupo =
+            grupoFiltro === GRUPO_FORA ? "fora-dos-grupos" : grupoSelecionado ? grupoSelecionado.nome : ""
+        const sufixo = [especialidadeFiltro === "todas" ? "" : especialidadeFiltro, nomeGrupo]
+            .filter(Boolean)
+            .map((parte) => `_${parte.replace(/[^\p{L}\p{N}]+/gu, "-")}`)
+            .join("")
         exportarGestaoTempo(
             profissionaisVisiveis,
             atendimentosVisiveis,
-            periodo,
+            grupoSelecionado
+                ? `${periodo} · ${grupoSelecionado.nome}`
+                : grupoFiltro === GRUPO_FORA
+                    ? `${periodo} · fora dos grupos`
+                    : periodo,
             `gestao-tempo_${format(dataInicio, "yyyy-MM-dd")}_${format(dataFim, "yyyy-MM-dd")}${sufixo}.xlsx`
         )
     }
@@ -279,13 +421,31 @@ export function GestaoTempoDashboard({ unidadeId, dataInicio, dataFim, periodo }
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="todas" className="text-xs font-bold uppercase">Todas as especialidades</SelectItem>
-                            {resultado.especialidades.map((e) => (
+                            {especialidadesDoSeletor.map((e) => (
                                 <SelectItem key={e.especialidade} value={e.especialidade} className="text-xs font-bold uppercase">
                                     {e.especialidade}
                                 </SelectItem>
                             ))}
                         </SelectContent>
                     </Select>
+
+                    {/* GRUPO DA ESPECIALIDADE (grupos marcados para o dashboard) */}
+                    {gruposDaEspecialidade.length > 0 && (
+                        <Select value={grupoFiltro} onValueChange={setGrupoFiltro}>
+                            <SelectTrigger className="h-9 w-64 bg-white text-xs font-bold uppercase dark:bg-gray-900">
+                                <SelectValue placeholder="Grupo" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value={GRUPO_TODOS} className="text-xs font-bold uppercase">Todos os grupos</SelectItem>
+                                {gruposDaEspecialidade.map((g) => (
+                                    <SelectItem key={g.id} value={g.id} className="text-xs font-bold uppercase">
+                                        {g.nome}
+                                    </SelectItem>
+                                ))}
+                                <SelectItem value={GRUPO_FORA} className="text-xs font-bold uppercase">Fora dos grupos</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    )}
 
                     {/* MODO DE VISUALIZAÇÃO */}
                     <div className="flex h-9 items-center rounded-lg border border-gray-200 bg-white p-0.5 dark:border-gray-800 dark:bg-gray-900" role="group" aria-label="Modo de visualização">
@@ -422,16 +582,22 @@ export function GestaoTempoDashboard({ unidadeId, dataInicio, dataFim, periodo }
                         <table className="w-full text-xs">
                             <thead className="bg-gray-50 text-[10px] uppercase tracking-wider text-gray-500 dark:bg-gray-950 dark:text-gray-400">
                                 <tr>
-                                    <th className="p-2.5 text-left font-bold">Profissional</th>
-                                    <th className="p-2.5 text-right font-bold">Atendimentos</th>
-                                    <th className="p-2.5 text-right font-bold">Tempo médio</th>
-                                    <th className="p-2.5 text-right font-bold">Mínimo</th>
-                                    <th className="p-2.5 text-right font-bold">Máximo</th>
-                                    <th className="p-2.5 text-left font-bold">Distribuição</th>
+                                    <CabecalhoOrdenavel rotulo="Profissional" coluna="profissional" ordenacao={ordenacao} onOrdenar={ordenarPor} />
+                                    <CabecalhoOrdenavel rotulo="Atendimentos" coluna="quantidade" ordenacao={ordenacao} onOrdenar={ordenarPor} alinharDireita />
+                                    <CabecalhoOrdenavel rotulo="Tempo médio" coluna="media" ordenacao={ordenacao} onOrdenar={ordenarPor} alinharDireita />
+                                    <CabecalhoOrdenavel rotulo="Mínimo" coluna="minimo" ordenacao={ordenacao} onOrdenar={ordenarPor} alinharDireita />
+                                    <CabecalhoOrdenavel rotulo="Máximo" coluna="maximo" ordenacao={ordenacao} onOrdenar={ordenarPor} alinharDireita />
+                                    <CabecalhoOrdenavel
+                                        rotulo="Distribuição"
+                                        coluna="dentroMeta"
+                                        ordenacao={ordenacao}
+                                        onOrdenar={ordenarPor}
+                                        dica="Ordena pelo percentual de atendimentos dentro da meta"
+                                    />
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                                {esp.profissionais.map((p) => (
+                                {ordenarProfissionais(esp.profissionais, ordenacao).map((p) => (
                                     <tr key={p.chave}>
                                         <td className="p-2.5 font-bold text-gray-800 dark:text-gray-100">{p.profissional}</td>
                                         <td className="p-2.5 text-right tabular-nums">{p.quantidade}</td>
@@ -583,5 +749,45 @@ function GraficoEspecialidades({ especialidades }: { especialidades: ResumoEspec
                 </BarChart>
             </ResponsiveContainer>
         </div>
+    )
+}
+
+function CabecalhoOrdenavel({
+    rotulo,
+    coluna,
+    ordenacao,
+    onOrdenar,
+    alinharDireita = false,
+    dica,
+}: {
+    rotulo: string
+    coluna: ColunaOrdenacao
+    ordenacao: Ordenacao
+    onOrdenar: (coluna: ColunaOrdenacao) => void
+    alinharDireita?: boolean
+    dica?: string
+}) {
+    const ativo = ordenacao.coluna === coluna
+    const Icone = !ativo ? ArrowUpDown : ordenacao.direcao === "asc" ? ArrowUp : ArrowDown
+
+    return (
+        <th
+            className="p-0 font-bold"
+            aria-sort={ativo ? (ordenacao.direcao === "asc" ? "ascending" : "descending") : "none"}
+        >
+            <button
+                type="button"
+                onClick={() => onOrdenar(coluna)}
+                title={dica}
+                className={cn(
+                    "flex w-full items-center gap-1 p-2.5 uppercase tracking-wider transition-colors hover:bg-gray-100 dark:hover:bg-gray-900",
+                    alinharDireita ? "justify-end" : "justify-start",
+                    ativo && "text-amber-600 dark:text-amber-400"
+                )}
+            >
+                {rotulo}
+                <Icone className={cn("h-3 w-3", !ativo && "opacity-40")} />
+            </button>
+        </th>
     )
 }
