@@ -50,6 +50,8 @@ type Especialidade = {
     exames: Exame[]
     tempo_finalizacao_segundos?: number
     obrigar_check_exames?: boolean
+    tempo_meta_minutos?: number | null
+    tolerancia_meta_percentual?: number | null
 }
 
 // ================= COMPONENTS =================
@@ -100,7 +102,7 @@ export default function KanbanExames() {
                 id, 
                 nome, 
             `)
-            .select(`id, nome, tempo_finalizacao_segundos, obrigar_check_exames, exames (*)`)
+            .select(`id, nome, tempo_finalizacao_segundos, obrigar_check_exames, tempo_meta_minutos, tolerancia_meta_percentual, exames (*)`)
             .eq("unidade_id", currentUnidadeId)
             .order('nome', { ascending: true });
 
@@ -237,11 +239,29 @@ export default function KanbanExames() {
                     return
                 }
 
+                const metaInformada = form.tempo_meta_minutos !== undefined && form.tempo_meta_minutos !== null && String(form.tempo_meta_minutos).trim() !== ""
+                const tempoMeta = metaInformada ? Number(String(form.tempo_meta_minutos).replace(",", ".")) : null
+                const tolerancia = form.tolerancia_meta_percentual === undefined || form.tolerancia_meta_percentual === null || String(form.tolerancia_meta_percentual).trim() === ""
+                    ? 20
+                    : Number(form.tolerancia_meta_percentual)
+
+                if (tempoMeta !== null && (!Number.isFinite(tempoMeta) || tempoMeta <= 0)) {
+                    toast.error("A meta de tempo deve ser maior que zero")
+                    return
+                }
+
+                if (!Number.isInteger(tolerancia) || tolerancia < 0 || tolerancia > 500) {
+                    toast.error("A tolerância deve ser um número inteiro entre 0 e 500")
+                    return
+                }
+
                 const payloadEspecialidade = {
                     nome: form.nome.toUpperCase(),
                     tempo_finalizacao_segundos: Number(form.tempo_finalizacao_segundos),
                     obrigar_check_exames:
                         form.obrigar_check_exames ?? false,
+                    tempo_meta_minutos: tempoMeta,
+                    tolerancia_meta_percentual: tolerancia,
                     unidade_id: unidadeId,
                     status: `EM ${form.nome.toUpperCase()}`
                 }
@@ -506,6 +526,12 @@ export default function KanbanExames() {
                                                         obrigar_check_exames:
                                                             col.obrigar_check_exames ?? false,
 
+                                                        tempo_meta_minutos:
+                                                            col.tempo_meta_minutos ?? "",
+
+                                                        tolerancia_meta_percentual:
+                                                            col.tolerancia_meta_percentual ?? 20,
+
                                                         depende_de_especialidades:
                                                             col.depende_de_especialidades || []
                                                     })
@@ -601,6 +627,43 @@ export default function KanbanExames() {
                                             ...form,
                                             tempo_finalizacao_segundos: e.target.value,
                                         })} />
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-2">
+                                        <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">
+                                            Meta de atendimento (min)
+                                        </Label>
+                                        <Input
+                                            type="number"
+                                            min={0.5}
+                                            step={0.5}
+                                            placeholder="Sem meta"
+                                            className="h-12 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-bold text-xs"
+                                            value={form.tempo_meta_minutos ?? ""}
+                                            onChange={(e) => setForm({
+                                                ...form,
+                                                tempo_meta_minutos: e.target.value,
+                                            })} />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">
+                                            Tolerância amarela (%)
+                                        </Label>
+                                        <Input
+                                            type="number"
+                                            min={0}
+                                            max={500}
+                                            step={1}
+                                            className="h-12 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-bold text-xs"
+                                            value={form.tolerancia_meta_percentual ?? 20}
+                                            onChange={(e) => setForm({
+                                                ...form,
+                                                tolerancia_meta_percentual: e.target.value,
+                                            })} />
+                                    </div>
+                                    <p className="col-span-2 text-[11px] text-slate-500 ml-1">
+                                        Farol da Gestão de Tempo: verde até a meta, amarelo até a meta + tolerância, vermelho acima. Sem meta, a especialidade fica sem farol.
+                                    </p>
                                 </div>
                                 <div className="space-y-2">
                                     <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">

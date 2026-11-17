@@ -57,6 +57,8 @@ interface GraficoPizzaProps {
     data: ChartItem[]
     mode?: "recepcao" | "especialidade" | "recepcaoGeral"
     aguardandoExterno?: number
+    /** Quantos dos aguardando podem ser chamados agora. Sem valor, a legenda não aparece. */
+    liberados?: number
 }
 
 function formatarTempo(minutos?: number) {
@@ -195,7 +197,7 @@ function Row({
 /* ============================================================
    COMPONENTE PRINCIPAL
 ============================================================ */
-export function GraficoPizza({ data, mode = "especialidade", aguardandoExterno = 0 }: GraficoPizzaProps) {
+export function GraficoPizza({ data, mode = "especialidade", aguardandoExterno = 0, liberados }: GraficoPizzaProps) {
     const items = Array.isArray(data) ? data : []
 
     // 1. Calculamos os totais
@@ -364,34 +366,54 @@ export function GraficoPizza({ data, mode = "especialidade", aguardandoExterno =
 
             {/* ── LEGENDAS ── */}
             {mode !== "recepcaoGeral" && (
-                <LegendaItem
-                    cor={AGUARDANDO_COLOR}
-                    rotulo="Aguardando"
-                    valor={totalAguardando}
-                    dimmed
-                />
+                <div className="mt-5 flex w-full flex-wrap justify-center gap-2 px-2">
+                    {/* Com "disponíveis" (especialidades): Pendentes / Disponíveis.
+                        Sem (recepção, ou banco sem o SQL novo): Aguardando, como antes. */}
+                    <LegendaItem
+                        rotulo={liberados !== undefined ? "Pendentes" : "Aguardando"}
+                        valor={totalAguardando}
+                        titulo={
+                            liberados !== undefined
+                                ? "Pacientes que ainda vão passar por aqui, mesmo que estejam na recepção ou em outra especialidade"
+                                : undefined
+                        }
+                    />
+                    {liberados !== undefined && (
+                        <LegendaItem
+                            rotulo="Disponíveis"
+                            valor={liberados}
+                            variante="liberado"
+                            titulo="Pendentes que podem ser chamados agora: já passaram pela recepção, não estão em outra especialidade e não têm dependência pendente"
+                        />
+                    )}
+                </div>
             )}
         </div>
     )
 }
 
 function LegendaItem({
-    cor,
     rotulo,
     valor,
-    dimmed = false,
+    titulo,
+    variante = "aguardando",
 }: {
-    cor: string
     rotulo: string
-    valor: number
-    dimmed?: boolean
+    valor: number | string
+    titulo?: string
+    variante?: "aguardando" | "liberado"
 }) {
     return (
-        <div className="w-full flex justify-center gap-1 text-[14px] px-2 mt-5">
-            <Badge className="flex items-center gap-2 min-w-0 bg-amber-400 text-gray-800">
-                <span className="font-bold truncate">{rotulo}:</span>
-                <span className="font-bold truncate">{valor}</span>
-            </Badge>
-        </div>
+        <Badge
+            title={titulo}
+            className={
+                variante === "liberado"
+                    ? "flex min-w-0 items-center gap-2 bg-emerald-500 text-[14px] text-white"
+                    : "flex min-w-0 items-center gap-2 bg-amber-400 text-[14px] text-gray-800"
+            }
+        >
+            <span className="truncate font-bold">{rotulo}:</span>
+            <span className="truncate font-bold">{valor}</span>
+        </Badge>
     )
 }

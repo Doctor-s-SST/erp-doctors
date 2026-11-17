@@ -6,10 +6,10 @@ PostgreSQL do Supabase, hospedado na VPS. As tabelas da aplicação ficam no sch
 
 | Domínio | Tabela | Responsabilidade |
 |---|---|---|
-| Unidade e usuários | `unidades` | dados cadastrais e URLs dos logotipos |
+| Unidade e usuários | `unidades` | dados cadastrais, URLs dos logotipos e meta da recepção na Gestão de Tempo (`tempo_meta_recepcao_minutos`, `tolerancia_meta_recepcao_percentual`) |
 | | `profiles` | perfil do usuário: `role`, `ativo`, `unidade_id`, `especialidade_id` |
 | | `painel_config` | voz do painel: `fala_andar`, `fala_terreo` (uma por unidade) |
-| Estrutura de atendimento | `especialidades` | filas, `tempo_finalizacao_segundos`, `obrigar_check_exames` |
+| Estrutura de atendimento | `especialidades` | filas, `tempo_finalizacao_segundos`, `obrigar_check_exames`, `tempo_meta_minutos` e `tolerancia_meta_percentual` (farol da Gestão de Tempo; script em [`sql/migracoes/2026-11-17_especialidades_meta_tempo.sql`](sql/migracoes/2026-11-17_especialidades_meta_tempo.sql)) |
 | | `especialidade_dependencias` | ordem entre especialidades |
 | | `exames` | exames por especialidade, ordem e `obrigatorio_checkbox` |
 | | `exame_dependencias` | ordem entre exames |

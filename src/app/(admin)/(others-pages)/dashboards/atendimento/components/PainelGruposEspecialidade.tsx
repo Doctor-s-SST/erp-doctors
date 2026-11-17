@@ -13,7 +13,7 @@ interface Props {
     onAbertoChange: (aberto: boolean) => void
     especialidade: string
     periodo: string
-    geral: { total: number; aguardando: number; salas: SalaEspecialidadeItem[] }
+    geral: { total: number; aguardando: number; liberados?: number; salas: SalaEspecialidadeItem[] }
     grupos: CardGrupoDashboard[]
     carregando: boolean
 }
@@ -62,13 +62,14 @@ export function PainelGruposEspecialidade({
                 <div className="flex-1 space-y-6 overflow-y-auto p-5">
                     {/* RESUMO */}
                     <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-                        <ResumoGrupo titulo="Geral" total={geral.total} aguardando={geral.aguardando} />
+                        <ResumoGrupo titulo="Geral" total={geral.total} aguardando={geral.aguardando} liberados={geral.liberados} />
                         {grupos.map((g) => (
                             <ResumoGrupo
                                 key={g.chave}
                                 titulo={g.titulo}
                                 total={g.total}
                                 aguardando={g.aguardando}
+                                liberados={g.liberados}
                                 tempoMedio={g.tempo_medio}
                                 alerta={g.foraDosGrupos}
                             />
@@ -101,7 +102,7 @@ export function PainelGruposEspecialidade({
                                     <p className="pt-1 text-center text-xs font-black uppercase text-gray-600 dark:text-gray-200">
                                         {g.titulo}
                                     </p>
-                                    <GraficoPizza data={g.salas} aguardandoExterno={g.aguardando} mode="especialidade" />
+                                    <GraficoPizza data={g.salas} aguardandoExterno={g.aguardando} liberados={g.liberados} mode="especialidade" />
                                 </div>
                             ))}
                         </div>
@@ -179,12 +180,14 @@ function ResumoGrupo({
     titulo,
     total,
     aguardando,
+    liberados,
     tempoMedio,
     alerta,
 }: {
     titulo: string
     total: number
     aguardando: number
+    liberados?: number
     tempoMedio?: number
     alerta?: boolean
 }) {
@@ -200,9 +203,16 @@ function ResumoGrupo({
             </p>
             <p className="text-2xl font-black tabular-nums text-gray-900 dark:text-white">{total}</p>
             <div className="mt-1 flex flex-wrap gap-x-3 text-[10px] text-gray-500">
-                <span>
-                    Aguardando <b className="text-amber-600 dark:text-amber-400">{aguardando}</b>
+                <span title="Pacientes que ainda vão passar por aqui, mesmo que estejam na recepção ou em outra especialidade">
+                    {liberados !== undefined ? "Pendentes" : "Aguardando"}{" "}
+                    <b className="text-amber-600 dark:text-amber-400">{aguardando}</b>
                 </span>
+                {liberados !== undefined && (
+                    <span title="Pendentes que podem ser chamados agora">
+                        Disponíveis{" "}
+                        <b className="text-emerald-600 dark:text-emerald-400">{liberados}</b>
+                    </span>
+                )}
                 {tempoMedio !== undefined && tempoMedio > 0 && (
                     <span>
                         Médio <b className="text-blue-600 dark:text-blue-400">{formatarMinutos(tempoMedio)}</b>

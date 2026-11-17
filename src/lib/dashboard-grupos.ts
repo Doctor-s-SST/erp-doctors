@@ -9,6 +9,11 @@
  *
  * Contagem por atendimento: um paciente atendido numa sala conta 1, mesmo que
  * a especialidade tenha mais de um exame.
+ *
+ * Aguardando e liberados seguem a get_dashboard_completo: aguardando = etapa
+ * AGUARDANDO (atendimento não cancelado/não atendido/finalizado); liberados =
+ * dos aguardando, os que a fila deixaria chamar agora (já passaram pela
+ * recepção, sem outra etapa EM_FILA/EM_ATENDIMENTO e sem dependência pendente).
  */
 
 import {
@@ -20,6 +25,8 @@ import type { EspecialidadeDistribuicaoItem, SalaEspecialidadeItem } from "@/lib
 
 export interface LinhaExameDashboard {
     atendimento_id: string | null
+    /** Status do atendimento (atendimentos.status), para calcular os liberados. */
+    atendimento_status?: string | null
     sala: string | null
     num_sala: string | null
     status: string | null
@@ -34,11 +41,17 @@ export interface EspecialidadeDashboard {
     tempo_finalizacao_segundos: number | null
 }
 
+export interface DependenciaEspecialidade {
+    especialidade_id: string
+    depende_de_especialidade_id: string
+}
+
 export interface CardGrupoDashboard {
     chave: string
     titulo: string
     especialidade: string
     aguardando: number
+    liberados: number
     total: number
     /** Tempo médio (min) dos atendimentos finalizados do grupo, todas as salas. */
     tempo_medio: number
@@ -47,6 +60,71 @@ export interface CardGrupoDashboard {
 }
 
 const STATUS_ATENDIDO = new Set(["EM_ATENDIMENTO", "FINALIZADO"])
+const STATUS_ATENDIMENTO_ENCERRADO = new Set(["CANCELADO", "NAO_ATENDIDO", "FINALIZADO"])
+const STATUS_ETAPA_OCUPADA = new Set(["EM_ATENDIMENTO", "EM_FILA"])
+
+/** Regras de aguardando/liberado de uma etapa, com o contexto do atendimento. */
+interface RegrasEspera {
+    contaComoAguardando: (linha: LinhaExameDashboard) => boolean
+    estaLiberado: (linha: LinhaExameDashboard) => boolean
+}
+
+function criarRegrasEspera(
+    linhas: LinhaExameDashboard[],
+    especialidades: EspecialidadeDashboard[],
+    dependencias: DependenciaEspecialidade[]
+): RegrasEspera {
+    const porAtendimento = new Map<string, LinhaExameDashboard[]>()
+    for (const linha of linhas) {
+        if (!linha.atendimento_id) continue
+        const lista = porAtendimento.get(linha.atendimento_id) ?? []
+        lista.push(linha)
+        porAtendimento.set(linha.atendimento_id, lista)
+    }
+
+    // Dependências por nome normalizado: "toxicológico" depende de [...].
+    const nomePorId = new Map(especialidades.map((e) => [e.id, normalizarEspecialidade(e.nome)]))
+    const dependeDe = new Map<string, Set<string>>()
+    for (const dep of dependencias) {
+        const esp = nomePorId.get(dep.especialidade_id)
+        const requisito = nomePorId.get(dep.depende_de_especialidade_id)
+        if (!esp || !requisito) continue
+        const conjunto = dependeDe.get(esp) ?? new Set<string>()
+        conjunto.add(requisito)
+        dependeDe.set(esp, conjunto)
+    }
+
+    const contaComoAguardando = (linha: LinhaExameDashboard) =>
+        (linha.status ?? "").toUpperCase() === "AGUARDANDO" &&
+        !STATUS_ATENDIMENTO_ENCERRADO.has((linha.atendimento_status ?? "").toUpperCase())
+
+    const estaLiberado = (linha: LinhaExameDashboard) => {
+        if (!contaComoAguardando(linha)) return false
+
+        const statusAtendimento = (linha.atendimento_status ?? "").toUpperCase()
+        const passouRecepcao =
+            statusAtendimento === "AGUARDANDO_EXAMES" ||
+            (statusAtendimento.startsWith("EM ") && statusAtendimento !== "EM_RECEPCAO" && statusAtendimento !== "EM_FILA")
+        if (!passouRecepcao) return false
+
+        const outras = (porAtendimento.get(linha.atendimento_id as string) ?? []).filter((o) => o !== linha)
+        if (outras.some((o) => STATUS_ETAPA_OCUPADA.has((o.status ?? "").toUpperCase()))) return false
+
+        const requisitos = dependeDe.get(normalizarEspecialidade(linha.sala))
+        if (
+            requisitos &&
+            outras.some(
+                (o) => requisitos.has(normalizarEspecialidade(o.sala)) && (o.status ?? "").toUpperCase() !== "FINALIZADO"
+            )
+        ) {
+            return false
+        }
+
+        return true
+    }
+
+    return { contaComoAguardando, estaLiberado }
+}
 
 /** Especialidades (normalizadas) de cada atendimento, como a fila calcula. */
 export function especialidadesPorAtendimento(linhas: LinhaExameDashboard[]): Map<string, string[]> {
@@ -70,10 +148,12 @@ function montarCard(
     especialidade: EspecialidadeDashboard,
     linhasEspecialidade: LinhaExameDashboard[],
     salasGerais: SalaEspecialidadeItem[],
+    regras: RegrasEspera,
     foraDosGrupos = false
 ): CardGrupoDashboard {
     const descontoMin = (especialidade.tempo_finalizacao_segundos ?? 0) / 60
     const aguardando = new Set<string>()
+    const liberados = new Set<string>()
     const porSala = new Map<string, { atendimentos: Set<string>; minutos: number[]; profissional?: string; ultimo?: string }>()
 
     for (const linha of linhasEspecialidade) {
@@ -81,7 +161,8 @@ function montarCard(
         const status = (linha.status ?? "").toUpperCase()
 
         if (status === "AGUARDANDO") {
-            aguardando.add(atendimentoId)
+            if (regras.contaComoAguardando(linha)) aguardando.add(atendimentoId)
+            if (regras.estaLiberado(linha)) liberados.add(atendimentoId)
             continue
         }
 
@@ -139,6 +220,7 @@ function montarCard(
         titulo,
         especialidade: especialidade.nome,
         aguardando: aguardando.size,
+        liberados: liberados.size,
         total: salas.reduce((acc, s) => acc + s.total, 0),
         tempo_medio: tempoMedioGrupo,
         salas,
@@ -155,10 +237,12 @@ export function montarCardsPorGrupo(
     grupos: GrupoRegra[],
     especialidades: EspecialidadeDashboard[],
     linhas: LinhaExameDashboard[],
-    distribuicao: EspecialidadeDistribuicaoItem[]
+    distribuicao: EspecialidadeDistribuicaoItem[],
+    dependencias: DependenciaEspecialidade[] = []
 ): Map<string, CardGrupoDashboard[]> {
     const resultado = new Map<string, CardGrupoDashboard[]>()
     const espAtendimento = especialidadesPorAtendimento(linhas)
+    const regras = criarRegrasEspera(linhas, especialidades, dependencias)
 
     const gruposDashboard = grupos.filter((g) => g.exibir_dashboard === true && g.especialidade_fila_id)
 
@@ -184,7 +268,7 @@ export function montarCardsPorGrupo(
                 return pertence
             })
 
-            return montarCard(grupo.id, grupo.nome, especialidade, linhasGrupo, salasGerais)
+            return montarCard(grupo.id, grupo.nome, especialidade, linhasGrupo, salasGerais, regras)
         })
 
         // Atendimentos da especialidade que não caem em nenhum grupo do dashboard
@@ -197,6 +281,7 @@ export function montarCardsPorGrupo(
                 especialidade,
                 linhasFora,
                 salasGerais,
+                regras,
                 true
             )
             if (cardFora.total > 0 || cardFora.aguardando > 0) cards.push(cardFora)
