@@ -1,9 +1,8 @@
 "use client"
 
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
-import * as XLSX from "xlsx";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,14 +14,14 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
-import { Download, Upload, Clock, RefreshCw, Plus, Pencil, Trash2 } from "lucide-react";
+import { Clock, RefreshCw, Plus, Pencil, Trash2 } from "lucide-react";
 
 import { PrazoExame } from "./types";
-import { normalizarNomeExame, normalizarTipoFiltro } from "./utils";
+import { normalizarNomeExame } from "./utils";
 import { PrazoExameModal } from "./components/PrazoExameModal";
+import { ImportarPrazosExames } from "./components/ImportarPrazosExames";
 
 export default function PrazosAsoPage() {
-    const fileInputRef = useRef<HTMLInputElement>(null);
     const [prazos, setPrazos] = useState<PrazoExame[]>([]);
     const [loading, setLoading] = useState(false);
     const [unidadeId, setUnidadeId] = useState<string | null>(null);
@@ -182,163 +181,6 @@ export default function PrazosAsoPage() {
         }
     };
 
-    // Gerar e baixar modelo Excel de Exemplo
-    const handleDownloadModelo = () => {
-        const dadosModelo = prazos.map((item) => ({
-            "Nome do Exame": item.nome_exame,
-            "Prazo (Dias)": item.prazo_dias,
-            "Tipo Filtro": item.tipo_filtro === "clinico" || item.tipo_filtro === "complementar" ? item.tipo_filtro : "",
-            "Dispensar Documento GED": item.ignorar_exame ? "Sim" : "Não",
-        }));
-        const worksheet = XLSX.utils.json_to_sheet(dadosModelo);
-        const workbook = XLSX.utils.book_new();
-
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Prazos_ASO");
-
-        worksheet["!cols"] = [
-            { wch: 35 },
-            { wch: 15 },
-            { wch: 18 },
-            { wch: 30 },
-        ];
-
-        XLSX.writeFile(workbook, "Modelo_Importacao_Prazos_ASO.xlsx");
-
-        toast.success(
-            dadosModelo.length > 0
-                ? "Modelo gerado com os prazos cadastrados!"
-                : "Modelo vazio gerado com sucesso!"
-        );
-    };
-
-    // Importar planilha Excel
-    const handleImportExcel = async (
-        event: React.ChangeEvent<HTMLInputElement>
-    ) => {
-        const file = event.target.files?.[0];
-        if (!file) return;
-
-        if (!unidadeId) {
-            toast.error("Unidade do usuário não identificada.");
-            return;
-        }
-
-        setLoading(true);
-
-        try {
-            const dataBuffer = await file.arrayBuffer();
-            const workbook = XLSX.read(dataBuffer);
-            const sheetName = workbook.SheetNames[0];
-            const sheet = workbook.Sheets[sheetName];
-            const rows: any[] = XLSX.utils.sheet_to_json(sheet);
-
-            if (rows.length === 0) {
-                toast.warning("A planilha selecionada está vazia.");
-                return;
-            }
-
-            const payloadBruto = rows
-                .map((row, index) => {
-                    const linhaExcel = index + 2;
-
-                    const tipoFiltro = normalizarTipoFiltro(
-                        row["Tipo Filtro"] ?? row["tipo_filtro"] ?? ""
-                    );
-
-                    const ignorarExameRaw = String(
-                        row["Dispensar Documento GED"] ?? row["Ignorar Exame"] ?? row["ignorar_exame"] ?? ""
-                    ).trim().toLowerCase();
-                    const ignorarExameValor = ["sim", "true", "1"].includes(ignorarExameRaw);
-
-                    return {
-                        linhaExcel,
-                        unidade_id: unidadeId,
-                        nome_exame: normalizarNomeExame(row["Nome do Exame"] || row["nome_exame"] || ""),
-                        prazo_dias: Number(row["Prazo (Dias)"] || row["prazo_dias"] || 0),
-                        tipo_filtro: tipoFiltro,
-                        ignorar_exame: ignorarExameValor,
-                        updated_at: new Date().toISOString(),
-                    };
-                })
-                .filter((item) => item.nome_exame !== "");
-
-            // ============================================================
-            // VALIDAÇÃO DO TIPO DE FILTRO
-            // ============================================================
-
-            const tiposPermitidos = ["clinico", "complementar", ""];
-
-            const linhasInvalidas = payloadBruto.filter(
-                (item) => !tiposPermitidos.includes(item.tipo_filtro)
-            );
-
-            if (linhasInvalidas.length > 0) {
-                const detalhes = linhasInvalidas
-                    .map(
-                        (item) =>
-                            `• Linha ${item.linhaExcel}: ${item.tipo_filtro || "(vazio)"
-                            } → permitido: clinico, complementar ou vazio`
-                    )
-                    .join("\n");
-
-                toast.error(
-                    `Não foi possível importar a planilha.\n\n` +
-                    `Existem tipos de filtro inválidos:\n\n${detalhes}`,
-                    {
-                        duration: 10000,
-                    }
-                );
-
-                return;
-            }
-
-            // ============================================================
-            // REMOVE A LINHA AUXILIAR ANTES DO ENVIO AO SUPABASE
-            // ============================================================
-
-            const payload = payloadBruto.map((item) => ({
-                unidade_id: item.unidade_id,
-                nome_exame: item.nome_exame,
-                prazo_dias: item.prazo_dias,
-                tipo_filtro: item.tipo_filtro,
-                ignorar_exame: item.ignorar_exame,
-                updated_at: item.updated_at,
-            }));
-
-            if (payload.length === 0) {
-                toast.error(
-                    "Formato inválido. Certifique-se de usar a coluna 'Nome do Exame'."
-                );
-                return;
-            }
-
-            const { error } = await supabase
-                .from("prazos_exames")
-                .upsert(payload, {
-                    onConflict: "unidade_id,nome_exame",
-                });
-
-            if (error) {
-                console.error(error);
-                toast.error("Erro ao salvar prazos no banco de dados.");
-            } else {
-                toast.success(
-                    `${payload.length} prazos importados/atualizados com sucesso!`
-                );
-
-                fetchPrazos();
-            }
-        } catch (err) {
-            console.error(err);
-            toast.error("Erro ao processar arquivo Excel.");
-        } finally {
-            setLoading(false);
-
-            if (fileInputRef.current) {
-                fileInputRef.current.value = "";
-            }
-        }
-    };
     return (
         <div className="min-h-fit mt-2 space-y-4 bg-gray-500/20 rounded-xl p-2">
             <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gray-900 p-4 rounded-xl border border-gray-800 shadow-lg">
@@ -366,30 +208,11 @@ export default function PrazosAsoPage() {
                         <Plus className="w-3.5 h-3.5" /> Novo Prazo
                     </Button>
 
-                    <Button
-                        type="button"
-                        variant="outline"
-                        onClick={handleDownloadModelo}
-                        className="h-9 text-xs font-bold uppercase gap-2 bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700"
-                    >
-                        <Download className="w-3.5 h-3.5" /> Modelo Excel
-                    </Button>
-
-                    <input
-                        type="file"
-                        ref={fileInputRef}
-                        onChange={handleImportExcel}
-                        accept=".xlsx, .xls"
-                        className="hidden"
+                    <ImportarPrazosExames
+                        unidadeId={unidadeId}
+                        prazos={prazos}
+                        onImportado={fetchPrazos}
                     />
-                    <Button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={loading || !unidadeId}
-                        className="h-9 text-xs font-bold uppercase gap-2 bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50"
-                    >
-                        <Upload className="w-3.5 h-3.5" /> Importar Planilha
-                    </Button>
                 </div>
             </header>
 

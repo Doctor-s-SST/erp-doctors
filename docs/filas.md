@@ -51,7 +51,18 @@ A especialidade não cancela atendimentos. Quando a recepção cancela um atendi
 
 Os exames da especialidade são cruzados com `atendimentos.exames_list`. A tela preserva exames de outras especialidades e atualiza apenas os pertencentes à etapa atual. Quando a especialidade obriga conferência, os exames marcados como obrigatórios precisam estar concluídos antes da finalização.
 
-Na fila de **Toxicológico**, o botão **Realizado** pode iniciar a finalização enquanto o exame ainda está com status `AGUARDANDO`. O temporizador é persistido em `atendimento_exames.finaliza_em` e restaurado a cada atualização da fila independentemente de o item estar em `AGUARDANDO` ou `EM_ATENDIMENTO`. Uma finalização cancelada pelo usuário não é reativada por um evento SSE atrasado.
+O temporizador é persistido em `atendimento_exames.finaliza_em` e restaurado a cada atualização da fila independentemente de o item estar em `AGUARDANDO` ou `EM_ATENDIMENTO`. Se a fila for fechada, a função `processar_finalizacoes_vencidas`, chamada a cada 15 s por qualquer tela aberta do sistema, conclui a etapa quando o prazo vence; `finalizar_especialidade_novo` ignora etapa já finalizada, então chamadas repetidas não alteram o atendimento.
+
+Na Chamada de Senhas, o contador da recepção (30 s, ou o tempo de encaixe da unidade, padrão 30 min, em Configurações > Unidade > Atendimento) é gravado em `atendimentos.finaliza_recepcao_em`, relido a cada atualização da lista e concluído pela mesma função; recarregar ou sair da tela não perde a finalização. Uma finalização cancelada pelo usuário não é reativada por um evento SSE atrasado.
+
+### Especialidade vinculada
+
+Substitui a antiga regra fixa do Toxicológico (botão **Realizado**). No Kanban, uma especialidade pode ter **Finaliza junto com** (`especialidades.finaliza_com_especialidade_id`). Ela fica vinculada:
+
+- se o atendimento **tem** a especialidade principal: na fila, o paciente aparece com "Finaliza junto com <especialidade>" e não é chamado; quando a principal é finalizada, o trigger `tr_finalizar_especialidades_vinculadas` passa a vinculada por `EM_ATENDIMENTO` e `FINALIZADO`, com os horários, a sala e o profissional da principal; o trigger de log grava as duas linhas em `log_status_atendimento` ("EM <especialidade>" e "FINALIZADO"), como numa etapa normal, e ela aparece na timeline dos relatórios; a Gestão de Tempo ignora essas etapas, porque o tempo já é o da principal;
+- se o atendimento **não tem** a especialidade principal: a vinculada é chamada, atendida e finalizada normalmente na própria fila (ex.: Toxicológico vinculado à Triagem, em atendimento sem Triagem);
+- a fila decide pelas especialidades do atendimento (`atendimento_exames.sala`); enquanto elas carregam, trata o item como vinculado para não oferecer a chamada por engano;
+- na Chamada de Senhas, as vinculadas aparecem por último na lista de especialidades da ficha.
 
 O tempo de confirmação vem de `especialidades.tempo_finalizacao_segundos`, com fallback de 20 segundos. `atendimento_exames.finaliza_em` permite reconstruir temporizadores depois de recarregar a página.
 
@@ -67,13 +78,36 @@ Ao terminar o contador, a finalização usa `num_sala` do próprio item de atend
 
 Os grupos aceitam `todos`, `algum`, `apenas_do_grupo` e `obrigatorio_mais_algum`. A comparação usa nomes normalizados sem acentos.
 
+## Grupos de especialidades
+
+A regra fica em `src/lib/grupos-especialidades.ts` (`atendimentoPertenceAoGrupo`) e é a mesma na fila, no relatório geral e no dashboard. As especialidades do atendimento vêm de `atendimento_exames.sala` (nome da especialidade), considerando todos os exames em qualquer status; por isso o paciente não muda de grupo ao longo do dia.
+
+| Tipo | Entra no grupo |
+|---|---|
+| `apenas_do_grupo` | só especialidades do grupo, em qualquer combinação. Ex.: Clínico (Primeiro Andar) com Clínico e Triagem aceita só Clínico ou Clínico + Triagem |
+| `todos` | exatamente as especialidades do grupo |
+| `algum` | pelo menos uma especialidade do grupo, com extras permitidos |
+| `obrigatorio_mais_algum` | todas as obrigatórias e pelo menos uma opcional, sem impeditivas. Ex.: Clínico (Térreo) com Clínico obrigatório e Audiometria, ECG, Laboratório e Toxicológico opcionais |
+
+No `obrigatorio_mais_algum`, a opcional precisa estar cadastrada no próprio grupo. Um atendimento com Clínico e uma especialidade que nenhum grupo cita (por exemplo, uma especialidade nova) fica fora dos grupos de Térreo e de Primeiro Andar. Ao criar especialidade, inclua-a nos grupos correspondentes. No painel de grupos do dashboard, esses casos aparecem como "fora dos grupos".
+
+Configuração de exibição do grupo (`/configuracoes/grupos-especialidades`):
+
+| Campo | Padrão | Efeito |
+|---|---|---|
+| `especialidade_fila_id` | vazio | especialidade cuja fila o grupo representa. Preenchido: o grupo aparece só no filtro da fila dessa especialidade. Vazio: aparece na fila de todas as especialidades do grupo |
+| `exibir_fila` | `true` | quando `false`, o grupo some do filtro da fila; quem estava com ele selecionado volta para "Todos" |
+| `exibir_dashboard` | `false` | o card geral da especialidade da fila no dashboard ganha o botão "Grupos", que abre um painel lateral com o resumo, um gráfico por grupo e a tabela de atendidos por sala; exige `especialidade_fila_id` |
+
+`gruposVisiveisNaFila` aplica `exibir_fila` e `especialidade_fila_id`. O relatório geral continua listando todos os grupos.
+
 ## Checklist de manutenção
 
 1. Teste entrada, expiração e troca manual de sala/profissional.
 2. Confirme chamada, nova chamada, não atendido, cancelamento do temporizador e finalização.
 3. Teste paciente bloqueado por outro profissional e paciente da sessão atual.
 4. Confira exames obrigatórios e não obrigatórios.
-5. Valide os quatro tipos de grupo, pesquisa, tipo de senha e ordenação.
+5. Valide os quatro tipos de grupo, a exibição por especialidade da fila e `exibir_fila`, pesquisa, tipo de senha e ordenação.
 6. Confirme isolamento por `unidade_id` e atualização SSE.
 7. Execute `npx tsc --noEmit`, lint direcionado e build.
 

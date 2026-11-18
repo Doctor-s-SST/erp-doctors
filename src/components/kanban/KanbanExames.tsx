@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import dynamic from "next/dynamic"
 import { supabase } from "@/lib/supabase"
 import {
     DndContext,
@@ -28,7 +29,19 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
-import { Stethoscope, Activity, Trash2, Loader2, Link2 } from "lucide-react"
+import { Stethoscope, Activity, Trash2, Loader2, Link2, Columns3, Workflow } from "lucide-react"
+import type { ExameFluxo } from "@/components/kanban/FluxoEspecialidades"
+import ImportarExames from "@/components/kanban/ImportarExames"
+
+// React Flow mede o DOM: só no navegador.
+const FluxoEspecialidades = dynamic(() => import("@/components/kanban/FluxoEspecialidades"), {
+    ssr: false,
+    loading: () => (
+        <div className="flex h-[75vh] items-center justify-center">
+            <Loader2 className="w-6 h-6 animate-spin text-emerald-500" />
+        </div>
+    ),
+})
 
 // ================= TYPES =================
 
@@ -44,12 +57,15 @@ type Exame = {
 }
 
 type Especialidade = {
-    depende_de_especialidades: never[]
+    depende_de_especialidades: string[]
     id: string
     nome: string
     exames: Exame[]
     tempo_finalizacao_segundos?: number
     obrigar_check_exames?: boolean
+    tempo_meta_minutos?: number | null
+    tolerancia_meta_percentual?: number | null
+    finaliza_com_especialidade_id?: string | null
 }
 
 // ================= COMPONENTS =================
@@ -86,21 +102,24 @@ export default function KanbanExames() {
     })
     const [activeExame, setActiveExame] = useState<Exame | null>(null)
     const [unidadeId, setUnidadeId] = useState<string | null>(null);
+    const [visao, setVisao] = useState<"kanban" | "fluxo">("kanban");
 
     const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
     const allExames = data.flatMap(esp => esp.exames)
 
-    async function fetchData(currentUnidadeId: string) { // Recebe o ID como argumento
-        setLoading(true)
-        setData([]);
+    async function fetchData(currentUnidadeId: string, silencioso = false) { // Recebe o ID como argumento
+        if (!silencioso) {
+            setLoading(true)
+            setData([]);
+        }
         const { data: rawData, error: errorExames } = await supabase
             .from("especialidades")
             .select(`
                 id, 
                 nome, 
             `)
-            .select(`id, nome, tempo_finalizacao_segundos, obrigar_check_exames, exames (*)`)
+            .select(`id, nome, tempo_finalizacao_segundos, obrigar_check_exames, tempo_meta_minutos, tolerancia_meta_percentual, finaliza_com_especialidade_id, exames (*)`)
             .eq("unidade_id", currentUnidadeId)
             .order('nome', { ascending: true });
 
@@ -237,33 +256,46 @@ export default function KanbanExames() {
                     return
                 }
 
+                const metaInformada = form.tempo_meta_minutos !== undefined && form.tempo_meta_minutos !== null && String(form.tempo_meta_minutos).trim() !== ""
+                const tempoMeta = metaInformada ? Number(String(form.tempo_meta_minutos).replace(",", ".")) : null
+                const tolerancia = form.tolerancia_meta_percentual === undefined || form.tolerancia_meta_percentual === null || String(form.tolerancia_meta_percentual).trim() === ""
+                    ? 20
+                    : Number(form.tolerancia_meta_percentual)
+
+                if (tempoMeta !== null && (!Number.isFinite(tempoMeta) || tempoMeta <= 0)) {
+                    toast.error("A meta de tempo deve ser maior que zero")
+                    return
+                }
+
+                if (!Number.isInteger(tolerancia) || tolerancia < 0 || tolerancia > 500) {
+                    toast.error("A tolerância deve ser um número inteiro entre 0 e 500")
+                    return
+                }
+
                 const payloadEspecialidade = {
                     nome: form.nome.toUpperCase(),
                     tempo_finalizacao_segundos: Number(form.tempo_finalizacao_segundos),
                     obrigar_check_exames:
                         form.obrigar_check_exames ?? false,
+                    tempo_meta_minutos: tempoMeta,
+                    tolerancia_meta_percentual: tolerancia,
+                    // Especialidade vinculada: finalizada junto com a escolhida (trigger no banco).
+                    finaliza_com_especialidade_id: form.finaliza_com_especialidade_id || null,
                     unidade_id: unidadeId,
                     status: `EM ${form.nome.toUpperCase()}`
                 }
 
-                if (editandoEspecialidade) {
-                    await supabase
-                        .from("especialidades")
-                        .update(payloadEspecialidade)
-                        .eq("id", editandoEspecialidade.id)
-                } else {
-                    await supabase
-                        .from("especialidades")
-                        .insert(payloadEspecialidade)
-                }
-
+                // Uma única gravação: antes havia um update/insert repetido aqui,
+                // que criava a especialidade nova em dobro.
                 let especialidadeId = editandoEspecialidade?.id;
 
                 if (editandoEspecialidade) {
-                    await supabase
+                    const { error } = await supabase
                         .from("especialidades")
                         .update(payloadEspecialidade)
                         .eq("id", especialidadeId);
+
+                    if (error) throw error;
                 } else {
                     const { data: novaEspecialidade, error } = await supabase
                         .from("especialidades")
@@ -350,7 +382,7 @@ export default function KanbanExames() {
             toast.success("Salvo com sucesso")
 
             fecharModal()
-            fetchData(unidadeId)
+            fetchData(unidadeId, true)
 
         } catch (err) {
             console.error(err)
@@ -381,7 +413,7 @@ export default function KanbanExames() {
         toast.success("Especialidade removida");
 
         if (unidadeId) {
-            fetchData(unidadeId);
+            fetchData(unidadeId, true);
         }
     }
 
@@ -400,7 +432,66 @@ export default function KanbanExames() {
 
         toast.success("Removido");
         fecharModal();
-        fetchData(unidadeId);
+        fetchData(unidadeId, true);
+    }
+
+    function abrirEdicaoEspecialidade(col: Especialidade) {
+        setTipoModal("especialidade")
+        setEditandoEspecialidade(col)
+        setForm({
+            nome: col.nome,
+            tempo_finalizacao_segundos: col.tempo_finalizacao_segundos || "",
+            obrigar_check_exames: col.obrigar_check_exames ?? false,
+            tempo_meta_minutos: col.tempo_meta_minutos ?? "",
+            tolerancia_meta_percentual: col.tolerancia_meta_percentual ?? 20,
+            finaliza_com_especialidade_id: col.finaliza_com_especialidade_id ?? "",
+            depende_de_especialidades: col.depende_de_especialidades || []
+        })
+        setOpenModal(true)
+    }
+
+    function abrirEdicaoExame(exame: Exame) {
+        setTipoModal("exame")
+        setEditandoExame(exame)
+        setForm({ ...exame })
+        setOpenModal(true)
+    }
+
+    function abrirNovaEspecialidade() {
+        setTipoModal("especialidade")
+        setOpenModal(true)
+    }
+
+    function abrirNovoExame(especialidadeId?: string) {
+        setTipoModal("exame")
+        setForm({ depende_de_especialidades: [], ...(especialidadeId ? { especialidade_id: especialidadeId } : {}) })
+        setOpenModal(true)
+    }
+
+    async function adicionarDependencia(especialidadeId: string, dependeDeId: string) {
+        const { error } = await supabase
+            .from("especialidade_dependencias")
+            .insert({ especialidade_id: especialidadeId, depende_de_especialidade_id: dependeDeId })
+        if (error) {
+            toast.error("Erro ao criar a dependência")
+            return
+        }
+        toast.success("Dependência criada")
+        if (unidadeId) await fetchData(unidadeId, true)
+    }
+
+    async function removerDependencia(especialidadeId: string, dependeDeId: string) {
+        const { error } = await supabase
+            .from("especialidade_dependencias")
+            .delete()
+            .eq("especialidade_id", especialidadeId)
+            .eq("depende_de_especialidade_id", dependeDeId)
+        if (error) {
+            toast.error("Erro ao remover a dependência")
+            return
+        }
+        toast.success("Dependência removida")
+        if (unidadeId) await fetchData(unidadeId, true)
     }
 
     const fecharModal = () => {
@@ -460,17 +551,58 @@ export default function KanbanExames() {
                             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Gestão de Especialidades/Exames</p>
                         </div>
                     </div>
-                    <div className="flex gap-2">
-                        <Button onClick={() => { setTipoModal("especialidade"); setOpenModal(true); }} variant="outline" className="h-9 border-slate-700 text-white text-[10px] font-bold uppercase tracking-widest bg-blue-600 hover:bg-blue-500">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex h-9 items-center rounded-lg border border-gray-700 bg-gray-800 p-0.5" role="group" aria-label="Visualização">
+                            {([
+                                ["kanban", "Kanban", Columns3],
+                                ["fluxo", "Fluxo", Workflow],
+                            ] as const).map(([valor, rotulo, Icone]) => (
+                                <button
+                                    key={valor}
+                                    type="button"
+                                    onClick={() => setVisao(valor)}
+                                    aria-pressed={visao === valor}
+                                    className={`flex h-full items-center gap-1.5 rounded-md px-3 text-[10px] font-bold uppercase tracking-widest transition-colors ${visao === valor ? "bg-emerald-600 text-white" : "text-slate-300 hover:bg-gray-700"}`}
+                                >
+                                    <Icone className="h-3.5 w-3.5" />
+                                    {rotulo}
+                                </button>
+                            ))}
+                        </div>
+                        <ImportarExames
+                            especialidades={data}
+                            onImportado={() => { if (unidadeId) fetchData(unidadeId, true) }}
+                        />
+                        <Button onClick={abrirNovaEspecialidade} variant="outline" className="h-9 border-slate-700 text-white text-[10px] font-bold uppercase tracking-widest bg-blue-600 hover:bg-blue-500">
                             + Especialidade
                         </Button>
-                        <Button onClick={() => { setTipoModal("exame"); setOpenModal(true); }} className="h-9 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold uppercase tracking-widest">
+                        <Button onClick={() => abrirNovoExame()} className="h-9 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold uppercase tracking-widest">
                             + Exame
                         </Button>
                     </div>
                 </div>
 
+                {/* FLUXO */}
+                {visao === "fluxo" && (
+                    <FluxoEspecialidades
+                        unidadeId={unidadeId}
+                        especialidades={data}
+                        onEditarEspecialidade={(id) => {
+                            const col = data.find(e => e.id === id)
+                            if (col) abrirEdicaoEspecialidade(col)
+                        }}
+                        onEditarExame={(exame: ExameFluxo) => {
+                            const original = data.flatMap(e => e.exames).find(e => e.id === exame.id)
+                            if (original) abrirEdicaoExame(original)
+                        }}
+                        onNovoExame={abrirNovoExame}
+                        onAdicionarDependencia={adicionarDependencia}
+                        onRemoverDependencia={removerDependencia}
+                    />
+                )}
+
                 {/* KANBAN BOARD */}
+                {visao === "kanban" && (
                 <div className="pb-4 scrollbar-hide">
                     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
                         <div className="w-full flex gap-4 overflow-x-auto pb-4 items-start custom-scroll justify-center">
@@ -485,36 +617,15 @@ export default function KanbanExames() {
                                         <h2 className="font-black text-slate-900 dark:text-slate-300 uppercase text-[9px] tracking-widest truncate group-hover:text-emerald-500 transition-colors">
                                             <button
                                                 type="button"
-                                                onClick={() => {
-                                                    setTipoModal("especialidade")
-                                                    setEditandoEspecialidade(col)
-
-                                                    // setForm({
-                                                    //     nome: col.nome,
-                                                    //     tempo_finalizacao_segundos:
-                                                    //         col.tempo_finalizacao_segundos || "",
-
-                                                    //     obrigar_check_exames:
-                                                    //         col.obrigar_check_exames ?? false
-                                                    // })
-
-                                                    setForm({
-                                                        nome: col.nome,
-                                                        tempo_finalizacao_segundos:
-                                                            col.tempo_finalizacao_segundos || "",
-
-                                                        obrigar_check_exames:
-                                                            col.obrigar_check_exames ?? false,
-
-                                                        depende_de_especialidades:
-                                                            col.depende_de_especialidades || []
-                                                    })
-
-                                                    setOpenModal(true)
-                                                }}
+                                                onClick={() => abrirEdicaoEspecialidade(col)}
                                                 className="font-black text-slate-900 dark:text-slate-300 uppercase text-[9px] tracking-widest truncate hover:text-emerald-500 transition-colors"
                                             >
                                                 {col.nome}
+                                                {col.finaliza_com_especialidade_id && (
+                                                    <span className="ml-1 rounded bg-violet-100 px-1 py-0.5 text-[8px] text-violet-700 dark:bg-violet-500/20 dark:text-violet-300">
+                                                        com {data.find(e => e.id === col.finaliza_com_especialidade_id)?.nome ?? "outra"}
+                                                    </span>
+                                                )}
                                             </button>
                                         </h2>
 
@@ -535,12 +646,7 @@ export default function KanbanExames() {
                                                         <SortableItem key={exame.id} id={exame.id}>
                                                             <div
                                                                 className="" // Pequeno respiro para a borda do card não ser cortada
-                                                                onClick={() => {
-                                                                    setTipoModal("exame");
-                                                                    setEditandoExame(exame);
-                                                                    setForm({ ...exame });
-                                                                    setOpenModal(true);
-                                                                }}
+                                                                onClick={() => abrirEdicaoExame(exame)}
                                                             >
                                                                 {renderExameCard(exame)}
                                                             </div>
@@ -558,11 +664,12 @@ export default function KanbanExames() {
                         </DragOverlay>
                     </DndContext>
                 </div>
+                )}
             </div>
 
             {/* MODAL UNIFICADO */}
             <Dialog open={openModal} onOpenChange={fecharModal}>
-                <DialogContent className="sm:max-w-105 bg-white dark:bg-slate-900 border-none shadow-2xl p-6 overflow-y-auto max-h-[90vh]">
+                <DialogContent className="sm:max-w-lg bg-white dark:bg-slate-900 border-none shadow-2xl p-6 overflow-y-auto max-h-[90vh]">
                     <DialogHeader className="space-y-3">
                         <div className="bg-emerald-500/10 w-fit p-3 rounded-2xl mx-auto">
                             {tipoModal === "exame" ? <Activity className="w-8 h-8 text-emerald-500" /> : <Stethoscope className="w-8 h-8 text-emerald-500" />}
@@ -570,7 +677,7 @@ export default function KanbanExames() {
                         <DialogTitle className="text-center text-xl font-black uppercase tracking-tight text-slate-800 dark:text-white">
                             {tipoModal === "exame"
                                 ? (editandoExame ? "Editar Exame" : "Novo Exame")
-                                : "Nova Especialidade"}
+                                : (editandoEspecialidade ? "Editar Especialidade" : "Nova Especialidade")}
                         </DialogTitle>
                     </DialogHeader>
 
@@ -585,97 +692,151 @@ export default function KanbanExames() {
                         </div>
 
                         {tipoModal === "especialidade" && (
-                            <>
-                                <div className="space-y-2">
-                                    <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">
-                                        Tempo para Finalização (segundos)
-                                    </Label>
-
-                                    <Input
-                                        type="number"
-                                        min={1}
-                                        required
-                                        className="h-12 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-bold text-xs"
-                                        value={form.tempo_finalizacao_segundos || ""}
-                                        onChange={(e) => setForm({
-                                            ...form,
-                                            tempo_finalizacao_segundos: e.target.value,
-                                        })} />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">
-                                        Exigir checklist dos exames?
-                                    </Label>
-
-                                    <label className="flex items-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 p-4 cursor-pointer bg-slate-50 dark:bg-slate-800">
-                                        <input
-                                            type="checkbox"
-                                            checked={form.obrigar_check_exames ?? false}
-                                            onChange={(e) => setForm({
-                                                ...form,
-                                                obrigar_check_exames: e.target.checked
-                                            })}
-                                            className="h-5 w-5" />
-
-                                        <div>
-                                            <p className="font-bold text-xs uppercase">
-                                                Bloquear finalização
-                                            </p>
-
-                                            <p className="text-[11px] text-slate-500">
-                                                Obriga marcar exames antes
-                                                de finalizar atendimento
-                                            </p>
+                            <div className="space-y-5">
+                                {/* ATENDIMENTO */}
+                                <section className="space-y-3">
+                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
+                                        Atendimento
+                                    </h4>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="space-y-1.5">
+                                            <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">
+                                                Contador de finalização (s)
+                                            </Label>
+                                            <Input
+                                                type="number"
+                                                min={1}
+                                                required
+                                                className="h-11 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-bold text-xs"
+                                                value={form.tempo_finalizacao_segundos || ""}
+                                                onChange={(e) => setForm({
+                                                    ...form,
+                                                    tempo_finalizacao_segundos: e.target.value,
+                                                })} />
                                         </div>
-                                    </label>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>
-                                        Dependências de Especialidade
-                                    </Label>
-
-                                    <div className="max-h-48 overflow-auto border rounded-md p-3 space-y-2">
-                                        {data
-                                            .filter(e => e.id !== editandoEspecialidade?.id)
-                                            .map(esp => (
-                                                <label
-                                                    key={esp.id}
-                                                    className="flex items-center gap-2 cursor-pointer"
-                                                >
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={
-                                                            (form.depende_de_especialidades || []).includes(esp.id)
-                                                        }
-                                                        onChange={(e) => {
-                                                            if (e.target.checked) {
-                                                                setForm({
-                                                                    ...form,
-                                                                    depende_de_especialidades: [
-                                                                        ...(form.depende_de_especialidades || []),
-                                                                        esp.id
-                                                                    ]
-                                                                })
-                                                            } else {
-                                                                setForm({
-                                                                    ...form,
-                                                                    depende_de_especialidades:
-                                                                        form.depende_de_especialidades.filter(
-                                                                            (id: string) => id !== esp.id
-                                                                        )
-                                                                })
-                                                            }
-                                                        }}
-                                                    />
-
-                                                    <span className="text-xs font-bold uppercase">
-                                                        {esp.nome}
-                                                    </span>
-                                                </label>
-                                            ))}
+                                        <label className="flex h-11 cursor-pointer items-center gap-2.5 self-end rounded-md border border-slate-200 bg-slate-50 px-3 dark:border-slate-700 dark:bg-slate-800">
+                                            <input
+                                                type="checkbox"
+                                                checked={form.obrigar_check_exames ?? false}
+                                                onChange={(e) => setForm({
+                                                    ...form,
+                                                    obrigar_check_exames: e.target.checked
+                                                })}
+                                                className="h-4 w-4" />
+                                            <span className="text-[11px] font-bold uppercase leading-tight">
+                                                Exigir checklist dos exames
+                                            </span>
+                                        </label>
                                     </div>
-                                </div>
-                            </>
+                                </section>
+
+                                {/* META DE TEMPO */}
+                                <section className="space-y-3 border-t border-slate-100 pt-4 dark:border-slate-800">
+                                    <div>
+                                        <h4 className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
+                                            Meta de tempo
+                                        </h4>
+                                        <p className="text-[11px] text-slate-500">Farol da Gestão de Tempo e alerta de atendimento prolongado.</p>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="space-y-1.5">
+                                            <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">
+                                                Meta (min)
+                                            </Label>
+                                            <Input
+                                                type="number"
+                                                min={0.5}
+                                                step={0.5}
+                                                placeholder="Sem meta"
+                                                className="h-11 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-bold text-xs"
+                                                value={form.tempo_meta_minutos ?? ""}
+                                                onChange={(e) => setForm({
+                                                    ...form,
+                                                    tempo_meta_minutos: e.target.value,
+                                                })} />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">
+                                                Tolerância (%)
+                                            </Label>
+                                            <Input
+                                                type="number"
+                                                min={0}
+                                                max={500}
+                                                step={1}
+                                                className="h-11 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-bold text-xs"
+                                                value={form.tolerancia_meta_percentual ?? 20}
+                                                onChange={(e) => setForm({
+                                                    ...form,
+                                                    tolerancia_meta_percentual: e.target.value,
+                                                })} />
+                                        </div>
+                                    </div>
+                                </section>
+
+                                {/* ORDEM E VÍNCULO */}
+                                <section className="space-y-3 border-t border-slate-100 pt-4 dark:border-slate-800">
+                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
+                                        Ordem e vínculo
+                                    </h4>
+
+                                    <div className="space-y-1.5">
+                                        <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">
+                                            Depende de
+                                        </Label>
+                                        <p className="text-[11px] text-slate-500 ml-1">Só é liberada depois que as especialidades marcadas terminarem.</p>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {data
+                                                .filter(e => e.id !== editandoEspecialidade?.id)
+                                                .map(esp => {
+                                                    const marcada = (form.depende_de_especialidades || []).includes(esp.id)
+                                                    return (
+                                                        <button
+                                                            key={esp.id}
+                                                            type="button"
+                                                            aria-pressed={marcada}
+                                                            onClick={() => setForm({
+                                                                ...form,
+                                                                depende_de_especialidades: marcada
+                                                                    ? (form.depende_de_especialidades || []).filter((id: string) => id !== esp.id)
+                                                                    : [...(form.depende_de_especialidades || []), esp.id]
+                                                            })}
+                                                            className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase transition-colors ${marcada
+                                                                ? "border-emerald-500 bg-emerald-500 text-white"
+                                                                : "border-slate-200 bg-slate-50 text-slate-600 hover:border-emerald-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                                                                }`}
+                                                        >
+                                                            {esp.nome}
+                                                        </button>
+                                                    )
+                                                })}
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">
+                                            Finaliza junto com
+                                        </Label>
+                                        <select
+                                            className="flex h-11 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-xs font-bold uppercase focus:ring-2 focus:ring-emerald-500 outline-none"
+                                            value={form.finaliza_com_especialidade_id || ""}
+                                            onChange={e => setForm({ ...form, finaliza_com_especialidade_id: e.target.value })}
+                                        >
+                                            <option value="">Não (especialidade normal)</option>
+                                            {data
+                                                .filter(esp => esp.id !== editandoEspecialidade?.id && !esp.finaliza_com_especialidade_id)
+                                                .map(esp => (
+                                                    <option key={esp.id} value={esp.id}>
+                                                        {esp.nome}
+                                                    </option>
+                                                ))}
+                                        </select>
+                                        <p className="text-[11px] text-slate-500 ml-1">
+                                            Não é chamada: finaliza com a especialidade escolhida, mesma sala e profissional. Se o atendimento não tiver essa especialidade, é chamada normalmente.
+                                        </p>
+                                    </div>
+                                </section>
+                            </div>
                         )}
 
                         {tipoModal === "exame" && (

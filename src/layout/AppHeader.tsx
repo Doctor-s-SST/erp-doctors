@@ -1,6 +1,8 @@
 "use client";
 import { ThemeToggleButton } from "@/components/common/ThemeToggleButton";
 import UserDropdown from "@/components/header/UserDropdown";
+import { NotificacoesSino } from "@/components/header/NotificacoesSino";
+import { ProcessadorFinalizacoes } from "@/components/header/ProcessadorFinalizacoes";
 import { useSidebar } from "@/context/SidebarContext";
 import { supabase } from "@/lib/supabase";
 import { MenuIcon } from "lucide-react";
@@ -17,6 +19,8 @@ const AppHeader: React.FC = () => {
   const [isApplicationMenuOpen, setApplicationMenuOpen] = useState(false);
 
   const [unidadeNome, setUnidadeNome] = useState<string>("");
+  const [usuarioId, setUsuarioId] = useState<string>("");
+  const [unidadeId, setUnidadeId] = useState<string>("");
   const [profileData, setProfileData] = useState<ProfileType>({
     email: "",
     first_name: "",
@@ -52,6 +56,8 @@ const AppHeader: React.FC = () => {
             last_name: profile.last_name,
             role: profile.role
           });
+          setUsuarioId(user.id);
+          setUnidadeId(profile.unidade_id || "");
 
 
           const unidades = profile.unidades as
@@ -109,6 +115,12 @@ const AppHeader: React.FC = () => {
           className={`${isApplicationMenuOpen ? "flex" : "hidden"} items-center justify-between w-full gap-4 px-5 lg:flex shadow-theme-md lg:justify-end lg:px-0 lg:shadow-none bg-white dark:bg-black lg:bg-transparent`}
         >
           <div className="flex items-center gap-2 2xsm:gap-3">
+            {/* Conclui contadores de finalização vencidos, em qualquer tela e perfil. */}
+            {unidadeId && <ProcessadorFinalizacoes unidadeId={unidadeId} />}
+            {/* Notificações: por enquanto só admin (alertas de tempo). */}
+            {profileData.role === "admin" && usuarioId && unidadeId && (
+              <NotificacoesSino usuarioId={usuarioId} unidadeId={unidadeId} geraAlertas />
+            )}
             <ThemeToggleButton />
           </div>
           <UserDropdown profile={profileData} />
