@@ -6,7 +6,8 @@ PostgreSQL do Supabase, hospedado na VPS. As tabelas da aplicação ficam no sch
 
 | Domínio | Tabela | Responsabilidade |
 |---|---|---|
-| Unidade e usuários | `unidades` | dados cadastrais, URLs dos logotipos e meta da recepção na Gestão de Tempo (`tempo_meta_recepcao_minutos`, `tolerancia_meta_recepcao_percentual`) |
+| Unidade e usuários | `unidades` | dados cadastrais, URLs dos logotipos meta da recepção na Gestão de Tempo (`tempo_meta_recepcao_minutos`, `tolerancia_meta_recepcao_percentual`) e alertas de tempo (`alertas_tempo_ativos`, `tempo_alerta_espera_minutos`, `tempo_alerta_atendimento_minutos`) |
+| Notificações | `notificacoes`, `notificacoes_lidas` | avisos por unidade do sino do cabeçalho (hoje, alertas de tempo), um por situação (`unidade_id`, `referencia`), e leitura por usuário; leitura sob RLS da própria unidade, gravação só pela função `gerar_alertas_tempo` |
 | | `profiles` | perfil do usuário: `role`, `ativo`, `unidade_id`, `especialidade_id` |
 | | `painel_config` | voz do painel: `fala_andar`, `fala_terreo` (uma por unidade) |
 | Estrutura de atendimento | `especialidades` | filas, `tempo_finalizacao_segundos`, `obrigar_check_exames`, `tempo_meta_minutos` e `tolerancia_meta_percentual` (farol da Gestão de Tempo; script em [`sql/migracoes/2026-11-17_especialidades_meta_tempo.sql`](sql/migracoes/2026-11-17_especialidades_meta_tempo.sql)) |

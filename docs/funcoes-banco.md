@@ -55,6 +55,12 @@ A aba Gestão de Tempo não usa função: lê `especialidades` e as etapas `FINA
 
 O painel de grupos do card da especialidade (em qualquer visão) não usa função: a tela lê `grupos_especialidades` (com `exibir_dashboard`) e `especialidades` ao abrir, e só busca os `atendimento_exames` dos atendimentos do período, paginados de 1000 em 1000 e sob RLS, quando o painel é aberto. O cálculo fica em `src/lib/dashboard-grupos.ts` e o painel em `dashboards/atendimento/components/PainelGruposEspecialidade.tsx`. Aguardando e liberados de cada grupo seguem a mesma regra da `get_dashboard_completo`, calculada no navegador com o status do atendimento, as outras etapas do paciente e `especialidade_dependencias`. Diferente do card geral, que conta linhas de exame, o card por grupo conta atendimentos por sala; a ociosidade exibida é a da sala, vinda da função.
 
+### Notificações (`components/header/NotificacoesSino.tsx`)
+
+| Função | O que faz |
+|---|---|
+| `gerar_alertas_tempo(unidade)` | Chamada pelo navegador do admin a cada minuto. Recusa unidade diferente da do usuário (`get_my_unit`). Com `unidades.alertas_tempo_ativos`, grava em `notificacoes`, sem repetir a mesma situação: **ATENDIMENTO_PROLONGADO** (etapa `EM_ATENDIMENTO`, sem contador de finalização, há mais que meta + tolerância da especialidade; sem meta, `tempo_alerta_atendimento_minutos`), **RECEPCAO_PROLONGADA** (atendimento `EM_RECEPCAO` desde o último `EM_RECEPCAO` do log, com a meta da recepção ou o limite padrão) e **PACIENTE_PARADO** (`AGUARDANDO_RECEPCAO` ou `AGUARDANDO_EXAMES`, sem etapa `EM_FILA`/`EM_ATENDIMENTO`, sem mudança no log há mais que `tempo_alerta_espera_minutos`). Só atendimentos do dia. Se nenhum admin estiver com o sistema aberto, não há verificação; dá para trocar por pg_cron sem mudar as telas |
+
 ## Funções usadas pelo aplicativo Java e pelo distribuidor SSE
 
 | Função | Quem usa | O que faz |
