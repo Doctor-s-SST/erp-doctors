@@ -1,9 +1,16 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
-import { useEffect, useState, useRef, useMemo } from "react"
+import { useCallback, useEffect, useState, useRef, useMemo } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { supabase } from "@/lib/supabase"
+import {
+    TEMPO_FINALIZACAO_ENCAIXE_PADRAO_MIN,
+    TEMPO_FINALIZACAO_RECEPCAO_S,
+    formatarContador,
+    processarFinalizacoesVencidas,
+} from "@/lib/finalizacoes"
+import { dataValida, mascararCNPJ, mascararCPF, mascararData, mascararRG, somenteDigitos } from "@/lib/mascaras"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
@@ -45,7 +52,11 @@ export default function RecepcaoPage() {
     const [ordenacao, setOrdenacao] = useState<ConfigOrdenacao>({ coluna: 'tempo_espera', direcao: 'asc' })
     const generatingRef = useRef(false)
     const [exameInput, setExameInput] = useState("")
+    // Contadores de finalização da recepção: id do atendimento -> fim (ms). O fim fica
+    // gravado em atendimentos.finaliza_recepcao_em e é relido a cada atualização.
     const [finalizandoIds, setFinalizandoIds] = useState<Record<string, number>>({});
+    const [relogio, setRelogio] = useState(() => Date.now());
+    const [tempoEncaixeMin, setTempoEncaixeMin] = useState(TEMPO_FINALIZACAO_ENCAIXE_PADRAO_MIN);
     const [especialidadesAuto, setEspecialidadesAuto] = useState<number[]>([]);
     const [especialidadesManual, setEspecialidadesManual] = useState<number[]>([]);
     const [recepcionistas, setRecepcionistas] = useState<{ id: string; nome: string }[]>([])
@@ -122,19 +133,19 @@ export default function RecepcaoPage() {
             // Se elas mudarem por unidade, adicione o .eq("unidade_id", unidadeId)
             const { data } = await supabase
                 .from("especialidades")
-                .select("id, nome, exames(id, nome)")
+                // "*": funciona mesmo antes do SQL da especialidade vinculada.
+                .select("*, exames(id, nome)")
                 .eq("unidade_id", unidadeId);
 
             if (data) {
+                // Especialidades vinculadas (finalizadas junto com outra) por último;
+                // antes era uma regra fixa para o Toxicológico.
                 const ordenadas = [...data].sort((a, b) => {
-                    const nomeA = a.nome.toUpperCase();
-                    const nomeB = b.nome.toUpperCase();
+                    const vinculadaA = a.finaliza_com_especialidade_id ? 1 : 0;
+                    const vinculadaB = b.finaliza_com_especialidade_id ? 1 : 0;
+                    if (vinculadaA !== vinculadaB) return vinculadaA - vinculadaB;
 
-                    // Regra: Toxicológico sempre por último
-                    if (nomeA.includes("TOXICOLOGICO") || nomeA.includes("TOXICOLÓGICO")) return 1;
-                    if (nomeB.includes("TOXICOLOGICO") || nomeB.includes("TOXICOLÓGICO")) return -1;
-
-                    return nomeA.localeCompare(nomeB);
+                    return a.nome.toUpperCase().localeCompare(b.nome.toUpperCase());
                 });
 
                 setEspecialidades(ordenadas);
@@ -478,6 +489,12 @@ export default function RecepcaoPage() {
 
     async function handleSalvarDadosFicha() {
         if (!importModal.item) return;
+
+        const nascimento = mascararData(formFicha.funcionario.nascimento);
+        if (nascimento && !dataValida(nascimento)) {
+            toast.error("Data de nascimento inválida. Use dd/mm/aaaa.");
+            return;
+        }
         setLoadingAction("saving_ficha");
 
         const { error } = await supabase.rpc("registrar_dados_ficha_novo", {
@@ -485,7 +502,7 @@ export default function RecepcaoPage() {
             p_sequencial: formFicha.sequencial,
             p_paciente_nome: formFicha.funcionario.nome,
             p_paciente_cpf: formFicha.funcionario.cpf,
-            p_paciente_nascimento: formatarParaSQL(formFicha.funcionario.nascimento),
+            p_paciente_nascimento: formatarParaSQL(mascararData(formFicha.funcionario.nascimento)),
             p_paciente_rg: formFicha.funcionario.rg,
             p_paciente_cargo: formFicha.funcionario.cargo,
             p_paciente_setor: formFicha.funcionario.setor,
@@ -656,55 +673,98 @@ export default function RecepcaoPage() {
         setLoadingAction(null)
     }
 
-    const timersRef = useRef<{ [key: string]: NodeJS.Timeout }>({});
+    /** Relê do banco os contadores ativos da recepção (sobrevivem a recarregar e sair da tela). */
+    const carregarPrazosFinalizacao = useCallback(async () => {
+        if (!unidadeId) return;
 
-    const cancelarFinalizacao = (id: string) => {
-        if (timersRef.current[id]) {
-            clearInterval(timersRef.current[id]);
-            delete timersRef.current[id];
-        }
+        const { data: prazos, error } = await supabase
+            .from("atendimentos")
+            .select("id, finaliza_recepcao_em")
+            .eq("unidade_id", unidadeId)
+            .eq("status", "EM_RECEPCAO")
+            .not("finaliza_recepcao_em", "is", null);
+
+        if (error) return;
+
+        setFinalizandoIds(Object.fromEntries(
+            (prazos || []).map((p) => [p.id, new Date(p.finaliza_recepcao_em as string).getTime()])
+        ));
+    }, [unidadeId]);
+
+    // A cada atualização da lista (SSE), sincroniza os contadores.
+    useEffect(() => {
+        const timer = setTimeout(() => void carregarPrazosFinalizacao(), 0);
+        return () => clearTimeout(timer);
+    }, [data, carregarPrazosFinalizacao]);
+
+    // Tempo do encaixe configurado na unidade (Configurações > Unidade > Atendimento).
+    useEffect(() => {
+        if (!unidadeId) return;
+        const carregar = async () => {
+            const { data: unidadeConfig } = await supabase.from("unidades").select("*").eq("id", unidadeId).single();
+            const minutos = Number(unidadeConfig?.tempo_finalizacao_encaixe_minutos);
+            if (Number.isFinite(minutos) && minutos > 0) setTempoEncaixeMin(minutos);
+        };
+        const timer = setTimeout(() => void carregar(), 0);
+        return () => clearTimeout(timer);
+    }, [unidadeId]);
+
+    // Com contador ativo: atualiza a tela a cada segundo e, ao vencer, conclui no banco.
+    const finalizandoRef = useRef(finalizandoIds);
+    useEffect(() => {
+        finalizandoRef.current = finalizandoIds;
+    }, [finalizandoIds]);
+
+    const haContadorAtivo = Object.keys(finalizandoIds).length > 0;
+    useEffect(() => {
+        if (!haContadorAtivo || !unidadeId) return;
+
+        const timer = setInterval(() => {
+            const agoraMs = Date.now();
+            setRelogio(agoraMs);
+            if (Object.values(finalizandoRef.current).some((fim) => fim <= agoraMs)) {
+                void processarFinalizacoesVencidas(unidadeId).then(() => carregarPrazosFinalizacao());
+            }
+        }, 1000);
+
+        return () => clearInterval(timer);
+    }, [haContadorAtivo, unidadeId, carregarPrazosFinalizacao]);
+
+    const cancelarFinalizacao = async (id: string) => {
         setFinalizandoIds(prev => {
             const atualizado = { ...prev };
             delete atualizado[id];
             return atualizado;
         });
+
+        const { error } = await supabase
+            .from("atendimentos")
+            .update({ finaliza_recepcao_em: null })
+            .eq("id", id);
+
+        if (error) toast.error("Não foi possível cancelar a finalização.");
     };
 
-    const iniciarFinalizacaoComDelay = (id: string, encaixe: boolean) => {
-        const TEMPO_ESPERA = encaixe ? 1800 : 30; // 30min ou 30s
+    const iniciarFinalizacaoComDelay = async (id: string, encaixe: boolean) => {
+        const segundos = encaixe ? tempoEncaixeMin * 60 : TEMPO_FINALIZACAO_RECEPCAO_S;
+        const fim = Date.now() + segundos * 1000;
 
-        const idsParaFinalizar = obterIdsConsolidados();
+        setRelogio(Date.now());
+        setFinalizandoIds(prev => ({ ...prev, [id]: fim }));
 
-        setFinalizandoIds(prev => ({ ...prev, [id]: TEMPO_ESPERA }));
+        const { error } = await supabase
+            .from("atendimentos")
+            .update({ finaliza_recepcao_em: new Date(fim).toISOString() })
+            .eq("id", id);
 
-        const interval = setInterval(() => {
+        if (error) {
             setFinalizandoIds(prev => {
-                const tempoAtual = prev[id];
-
-                if (tempoAtual === undefined) {
-                    clearInterval(interval);
-                    return prev;
-                }
-
-                if (tempoAtual <= 1) {
-                    clearInterval(interval);
-                    delete timersRef.current[id];
-
-                    executarAcao("finalizar_recepcao_novo", {
-                        p_atendimento_id: id,
-                        p_especialidades_ids: idsParaFinalizar
-                    });
-
-                    const atualizado = { ...prev };
-                    delete atualizado[id];
-                    return atualizado;
-                }
-
-                return { ...prev, [id]: tempoAtual - 1 };
+                const atualizado = { ...prev };
+                delete atualizado[id];
+                return atualizado;
             });
-        }, 1000);
-
-        timersRef.current[id] = interval;
+            toast.error("Não foi possível iniciar a finalização: " + error.message);
+        }
     };
 
     const renderThOrdenavel = (label: string, coluna: keyof Atendimento | 'tempo_espera') => (
@@ -1241,9 +1301,7 @@ export default function RecepcaoPage() {
                                                                                         className="h-8 text-[11px] font-bold bg-gray-600 min-w-[90px] text-white"
                                                                                     >
                                                                                         <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                                                                                        {finalizandoIds[item.id] > 60
-                                                                                            ? `${Math.floor(finalizandoIds[item.id] / 60)}m`
-                                                                                            : `${finalizandoIds[item.id]}s`}
+                                                                                        {formatarContador((finalizandoIds[item.id] - relogio) / 1000)}
                                                                                     </Button>
 
                                                                                     {/* CANCELAR */}
@@ -1261,8 +1319,8 @@ export default function RecepcaoPage() {
                                                                                         <Button
                                                                                             size="sm"
                                                                                             className="h-8 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700"
-                                                                                            onClick={() => {
-                                                                                                cancelarFinalizacao(item.id);
+                                                                                            onClick={async () => {
+                                                                                                await cancelarFinalizacao(item.id);
 
                                                                                                 executarAcao("finalizar_recepcao_novo", {
                                                                                                     p_atendimento_id: item.id,
@@ -1283,7 +1341,7 @@ export default function RecepcaoPage() {
                                                                                         ? 'bg-emerald-600 hover:bg-emerald-700'
                                                                                         : 'bg-gray-300'
                                                                                         }`}
-                                                                                    onClick={() => iniciarFinalizacaoComDelay(item.id, item.encaixe)}
+                                                                                    onClick={() => void iniciarFinalizacaoComDelay(item.id, item.encaixe)}
                                                                                 >
                                                                                     <CheckCircle2 className="w-3 h-3 mr-1" />
                                                                                     Finalizar
@@ -1486,8 +1544,9 @@ export default function RecepcaoPage() {
                                     <Input
                                         placeholder="Nº sequencial..."
                                         className="h-11 font-black text-center text-lg"
+                                        inputMode="numeric"
                                         value={sequencialInput}
-                                        onChange={(e) => setSequencialInput(e.target.value)}
+                                        onChange={(e) => setSequencialInput(somenteDigitos(e.target.value))}
                                         onKeyDown={(e) => {
                                             if (e.key === "Enter") {
                                                 handleBuscarSequencial();
@@ -1559,7 +1618,7 @@ export default function RecepcaoPage() {
                                 </div>
                                 <div className="space-y-1.5">
                                     <Label className="text-[10px] font-black uppercase text-gray-400">Nº Sequencial</Label>
-                                    <Input className="h-10 font-black text-blue-600 text-center text-lg" value={formFicha.sequencial} onChange={(e) => setFormFicha({ ...formFicha, sequencial: e.target.value })} />
+                                    <Input className="h-10 font-black text-blue-600 text-center text-lg" inputMode="numeric" value={formFicha.sequencial} onChange={(e) => setFormFicha({ ...formFicha, sequencial: somenteDigitos(e.target.value) })} />
                                 </div>
                             </div>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -1567,24 +1626,29 @@ export default function RecepcaoPage() {
                                     <Label className="text-[10px] font-black uppercase text-gray-400">CPF</Label>
                                     <Input
                                         className="h-9"
-                                        value={formFicha.funcionario.cpf || ""}
-                                        onChange={(e) => updateNestedField('funcionario', 'cpf', e.target.value)}
+                                        inputMode="numeric"
+                                        placeholder="000.000.000-00"
+                                        value={mascararCPF(formFicha.funcionario.cpf)}
+                                        onChange={(e) => updateNestedField('funcionario', 'cpf', somenteDigitos(e.target.value).slice(0, 11))}
                                     />
                                 </div>
                                 <div className="space-y-1.5">
                                     <Label className="text-[10px] font-black uppercase text-gray-400">RG</Label>
                                     <Input
                                         className="h-9"
-                                        value={formFicha.funcionario.rg || ""}
-                                        onChange={(e) => updateNestedField('funcionario', 'rg', e.target.value)}
+                                        placeholder="00.000.000-0"
+                                        value={mascararRG(formFicha.funcionario.rg)}
+                                        onChange={(e) => updateNestedField('funcionario', 'rg', e.target.value.toUpperCase().replace(/[^0-9X]/g, '').slice(0, 14))}
                                     />
                                 </div>
                                 <div className="space-y-1.5">
                                     <Label className="text-[10px] font-black uppercase text-gray-400">Nascimento</Label>
                                     <Input
                                         className="h-9 text-center"
-                                        value={formFicha.funcionario.nascimento || ""}
-                                        onChange={(e) => updateNestedField('funcionario', 'nascimento', e.target.value)}
+                                        inputMode="numeric"
+                                        placeholder="dd/mm/aaaa"
+                                        value={mascararData(formFicha.funcionario.nascimento)}
+                                        onChange={(e) => updateNestedField('funcionario', 'nascimento', mascararData(e.target.value))}
                                     />
                                 </div>
                             </div>
@@ -1628,8 +1692,10 @@ export default function RecepcaoPage() {
                                         <Label className="text-[10px] font-bold opacity-70">CNPJ</Label>
                                         <Input
                                             className="h-9"
-                                            value={formFicha.empresa.cnpj || ""}
-                                            onChange={(e) => updateNestedField('empresa', 'cnpj', e.target.value)}
+                                            inputMode="numeric"
+                                            placeholder="00.000.000/0000-00"
+                                            value={mascararCNPJ(formFicha.empresa.cnpj)}
+                                            onChange={(e) => updateNestedField('empresa', 'cnpj', somenteDigitos(e.target.value).slice(0, 14))}
                                         />
                                     </div>
                                     <div className="space-y-1.5">
@@ -1710,11 +1776,11 @@ export default function RecepcaoPage() {
                             <div className="text-[10px] font-bold uppercase tracking-widest text-center">
                                 {formFicha.encaixe ? (
                                     <span className="text-amber-600">
-                                        Tempo de finalização: 30 MINUTOS
+                                        Tempo de finalização: {tempoEncaixeMin} {tempoEncaixeMin === 1 ? "MINUTO" : "MINUTOS"}
                                     </span>
                                 ) : (
                                     <span className="text-blue-600">
-                                        Tempo de finalização: 30 SEGUNDOS
+                                        Tempo de finalização: {TEMPO_FINALIZACAO_RECEPCAO_S} SEGUNDOS
                                     </span>
                                 )}
                             </div>

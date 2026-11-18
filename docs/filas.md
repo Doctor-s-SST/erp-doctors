@@ -51,7 +51,18 @@ A especialidade não cancela atendimentos. Quando a recepção cancela um atendi
 
 Os exames da especialidade são cruzados com `atendimentos.exames_list`. A tela preserva exames de outras especialidades e atualiza apenas os pertencentes à etapa atual. Quando a especialidade obriga conferência, os exames marcados como obrigatórios precisam estar concluídos antes da finalização.
 
-Na fila de **Toxicológico**, o botão **Realizado** pode iniciar a finalização enquanto o exame ainda está com status `AGUARDANDO`. O temporizador é persistido em `atendimento_exames.finaliza_em` e restaurado a cada atualização da fila independentemente de o item estar em `AGUARDANDO` ou `EM_ATENDIMENTO`. Uma finalização cancelada pelo usuário não é reativada por um evento SSE atrasado.
+O temporizador é persistido em `atendimento_exames.finaliza_em` e restaurado a cada atualização da fila independentemente de o item estar em `AGUARDANDO` ou `EM_ATENDIMENTO`. Se a fila for fechada, a função `processar_finalizacoes_vencidas`, chamada a cada 15 s por qualquer tela aberta do sistema, conclui a etapa quando o prazo vence; `finalizar_especialidade_novo` ignora etapa já finalizada, então chamadas repetidas não alteram o atendimento.
+
+Na Chamada de Senhas, o contador da recepção (30 s, ou o tempo de encaixe da unidade, padrão 30 min, em Configurações > Unidade > Atendimento) é gravado em `atendimentos.finaliza_recepcao_em`, relido a cada atualização da lista e concluído pela mesma função; recarregar ou sair da tela não perde a finalização. Uma finalização cancelada pelo usuário não é reativada por um evento SSE atrasado.
+
+### Especialidade vinculada
+
+Substitui a antiga regra fixa do Toxicológico (botão **Realizado**). No Kanban, uma especialidade pode ter **Finaliza junto com** (`especialidades.finaliza_com_especialidade_id`). Ela fica vinculada:
+
+- se o atendimento **tem** a especialidade principal: na fila, o paciente aparece com "Finaliza junto com <especialidade>" e não é chamado; quando a principal é finalizada, o trigger `tr_finalizar_especialidades_vinculadas` passa a vinculada por `EM_ATENDIMENTO` e `FINALIZADO`, com os horários, a sala e o profissional da principal; o trigger de log grava as duas linhas em `log_status_atendimento` ("EM <especialidade>" e "FINALIZADO"), como numa etapa normal, e ela aparece na timeline dos relatórios; a Gestão de Tempo ignora essas etapas, porque o tempo já é o da principal;
+- se o atendimento **não tem** a especialidade principal: a vinculada é chamada, atendida e finalizada normalmente na própria fila (ex.: Toxicológico vinculado à Triagem, em atendimento sem Triagem);
+- a fila decide pelas especialidades do atendimento (`atendimento_exames.sala`); enquanto elas carregam, trata o item como vinculado para não oferecer a chamada por engano;
+- na Chamada de Senhas, as vinculadas aparecem por último na lista de especialidades da ficha.
 
 O tempo de confirmação vem de `especialidades.tempo_finalizacao_segundos`, com fallback de 20 segundos. `atendimento_exames.finaliza_em` permite reconstruir temporizadores depois de recarregar a página.
 

@@ -125,7 +125,8 @@ interface DadosGestaoTempo {
 async function carregarDadosGestaoTempo(unidadeId: string, dataInicio: Date, dataFim: Date): Promise<DadosGestaoTempo> {
     const { data: especialidades, error: erroEsp } = await supabase
         .from("especialidades")
-        .select("id, nome, tempo_finalizacao_segundos, tempo_meta_minutos, tolerancia_meta_percentual")
+        // "*": inclui finaliza_com_especialidade_id quando existir (especialidade vinculada).
+        .select("*")
         .eq("unidade_id", unidadeId)
 
     if (erroEsp) throw erroEsp
@@ -200,9 +201,25 @@ async function carregarDadosGestaoTempo(unidadeId: string, dataInicio: Date, dat
         if (!data || data.length < TAMANHO_PAGINA) break
     }
 
+    // Especialidade vinculada finalizada junto com a principal: o tempo é o da
+    // principal, então não entra de novo. Sem a principal no atendimento, ela foi
+    // atendida normalmente e conta.
+    const nomePorId = new Map(
+        ((especialidades || []) as { id: string; nome: string }[]).map((e) => [e.id, normalizarEspecialidade(e.nome)])
+    )
+    const principalDaVinculada = new Map<string, string>()
+    for (const e of (especialidades || []) as { nome: string; finaliza_com_especialidade_id?: string | null }[]) {
+        const principal = e.finaliza_com_especialidade_id ? nomePorId.get(e.finaliza_com_especialidade_id) : undefined
+        if (principal) principalDaVinculada.set(normalizarEspecialidade(e.nome), principal)
+    }
+    const linhasSemVinculadas = linhas.filter((l) => {
+        const principal = principalDaVinculada.get(normalizarEspecialidade(l.especialidade))
+        return !principal || !(especialidadesPorAtendimento[l.atendimento_id] ?? []).includes(principal)
+    })
+
     return {
         especialidades: [...((especialidades || []) as EspecialidadeMeta[]), recepcao.meta],
-        linhas: [...recepcao.linhas, ...linhas],
+        linhas: [...recepcao.linhas, ...linhasSemVinculadas],
         grupos,
         especialidadesPorAtendimento,
     }

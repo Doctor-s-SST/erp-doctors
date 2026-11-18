@@ -580,13 +580,19 @@ CREATE FUNCTION public.finalizar_especialidade_novo(p_atendimento_id uuid, p_ate
     AS $$DECLARE
     v_restam_exames BOOLEAN;
 BEGIN
-    -- 1. Finaliza o exame específico
+    -- 1. Finaliza o exame específico (só se ainda não estiver finalizado)
     UPDATE public.atendimento_exames
     SET
         status = 'FINALIZADO',
         finalizado_em = NOW(),
         finaliza_em = NULL
-    WHERE id = p_atendimento_exame_id;
+    WHERE id = p_atendimento_exame_id
+      AND status::text <> 'FINALIZADO';
+
+    -- Já finalizada por outra chamada: não mexe no atendimento.
+    IF NOT FOUND THEN
+        RETURN;
+    END IF;
 
     -- 2. Verifica se ainda existe algum exame que não foi finalizado nem cancelado
     SELECT EXISTS (
@@ -598,14 +604,12 @@ BEGIN
 
     -- 3. Atualiza o atendimento pai baseado no que resta
     IF v_restam_exames THEN
-        -- Se ainda tem exames, volta para o status de espera por outros
         UPDATE public.atendimentos
         SET
             status = 'AGUARDANDO_EXAMES',
             updated_at = NOW()
         WHERE id = p_atendimento_id;
     ELSE
-        -- SE NÃO RESTA NADA, o atendimento completo da clínica acabou
         UPDATE public.atendimentos
         SET
             status = 'FINALIZADO',
@@ -3689,7 +3693,8 @@ CREATE TABLE public.atendimentos (
     encaixe boolean DEFAULT false,
     tipo_exame text,
     finalizado_recepcao timestamp with time zone,
-    status_teste text
+    status_teste text,
+    finaliza_recepcao_em timestamp with time zone
 );
 
 ALTER TABLE ONLY public.atendimentos REPLICA IDENTITY FULL;
@@ -3828,6 +3833,8 @@ CREATE TABLE public.especialidades (
     status text,
     tempo_meta_minutos numeric(5,1),
     tolerancia_meta_percentual smallint DEFAULT 20 NOT NULL,
+    finaliza_com_especialidade_id uuid,
+    CONSTRAINT especialidades_finaliza_com_diferente_check CHECK (((finaliza_com_especialidade_id IS NULL) OR (finaliza_com_especialidade_id <> id))),
     CONSTRAINT especialidades_tempo_meta_minutos_check CHECK (((tempo_meta_minutos IS NULL) OR (tempo_meta_minutos > (0)::numeric))),
     CONSTRAINT especialidades_tolerancia_meta_percentual_check CHECK (((tolerancia_meta_percentual >= 0) AND (tolerancia_meta_percentual <= 500)))
 );
@@ -4162,6 +4169,8 @@ CREATE TABLE public.unidades (
     alertas_tempo_ativos boolean DEFAULT true NOT NULL,
     tempo_alerta_espera_minutos smallint DEFAULT 10 NOT NULL,
     tempo_alerta_atendimento_minutos smallint DEFAULT 10 NOT NULL,
+    tempo_finalizacao_encaixe_minutos smallint DEFAULT 30 NOT NULL,
+    CONSTRAINT unidades_tempo_finalizacao_encaixe_minutos_check CHECK (((tempo_finalizacao_encaixe_minutos >= 1) AND (tempo_finalizacao_encaixe_minutos <= 240))),
     CONSTRAINT unidades_tempo_alerta_espera_minutos_check CHECK (((tempo_alerta_espera_minutos >= 1) AND (tempo_alerta_espera_minutos <= 600))),
     CONSTRAINT unidades_tempo_alerta_atendimento_minutos_check CHECK (((tempo_alerta_atendimento_minutos >= 1) AND (tempo_alerta_atendimento_minutos <= 600))),
     CONSTRAINT unidades_tempo_meta_recepcao_minutos_check CHECK (((tempo_meta_recepcao_minutos IS NULL) OR (tempo_meta_recepcao_minutos > (0)::numeric))),
@@ -5846,3 +5855,142 @@ COMMENT ON FUNCTION public.gerar_alertas_tempo(uuid) IS 'Grava alertas de pacien
 
 REVOKE ALL ON FUNCTION public.gerar_alertas_tempo(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.gerar_alertas_tempo(uuid) TO authenticated;
+
+
+--
+-- Especialidade vinculada (docs/sql/migracoes/2026-11-18_especialidade_vinculada.sql)
+--
+
+ALTER TABLE ONLY public.especialidades
+    ADD CONSTRAINT especialidades_finaliza_com_especialidade_id_fkey FOREIGN KEY (finaliza_com_especialidade_id) REFERENCES public.especialidades(id) ON DELETE SET NULL;
+
+COMMENT ON COLUMN public.especialidades.finaliza_com_especialidade_id IS 'Especialidade vinculada: é finalizada junto com esta especialidade quando o atendimento a tiver; sem ela, é chamada normalmente.';
+
+CREATE OR REPLACE FUNCTION public.fn_finalizar_especialidades_vinculadas() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    v_especialidade_id uuid;
+    v_ids uuid[];
+BEGIN
+    -- Evita cascata infinita entre vínculos.
+    IF pg_trigger_depth() > 3 THEN
+        RETURN NEW;
+    END IF;
+
+    -- Especialidade da etapa que acabou de ser finalizada.
+    SELECT ex.especialidade_id INTO v_especialidade_id
+    FROM public.exames ex
+    WHERE ex.id = NEW.exame_id;
+
+    -- Etapas pendentes das especialidades vinculadas a ela no mesmo atendimento.
+    SELECT array_agg(ae.id) INTO v_ids
+    FROM public.atendimento_exames ae
+    JOIN public.exames ex ON ex.id = ae.exame_id
+    JOIN public.especialidades esp ON esp.id = ex.especialidade_id
+    WHERE ae.atendimento_id = NEW.atendimento_id
+      AND ae.id <> NEW.id
+      AND ae.status::text NOT IN ('FINALIZADO', 'CANCELADO', 'NAO_ATENDIDO')
+      AND esp.finaliza_com_especialidade_id = v_especialidade_id;
+
+    IF v_ids IS NULL THEN
+        RETURN NEW;
+    END IF;
+
+    -- Duas mudanças, como uma etapa atendida normalmente: o trigger de log grava
+    -- "EM <especialidade>" e depois "FINALIZADO", com os mesmos horários, sala e
+    -- profissional da principal. Assim a etapa aparece na timeline dos relatórios.
+    UPDATE public.atendimento_exames
+    SET
+        status = 'EM_ATENDIMENTO',
+        iniciado_em = COALESCE(NEW.iniciado_em, NOW()),
+        finaliza_em = NULL,
+        num_sala = NEW.num_sala,
+        profissional = NEW.profissional
+    WHERE id = ANY (v_ids);
+
+    UPDATE public.atendimento_exames
+    SET
+        status = 'FINALIZADO',
+        finalizado_em = COALESCE(NEW.finalizado_em, NOW())
+    WHERE id = ANY (v_ids);
+
+    RETURN NEW;
+END;
+$$;
+
+COMMENT ON FUNCTION public.fn_finalizar_especialidades_vinculadas() IS 'Ao finalizar uma etapa, finaliza as etapas das especialidades vinculadas a ela no mesmo atendimento.';
+
+DROP TRIGGER IF EXISTS tr_finalizar_especialidades_vinculadas ON public.atendimento_exames;
+CREATE TRIGGER tr_finalizar_especialidades_vinculadas
+    AFTER UPDATE OF status ON public.atendimento_exames
+    FOR EACH ROW
+    WHEN (NEW.status::text = 'FINALIZADO' AND OLD.status IS DISTINCT FROM NEW.status)
+    EXECUTE FUNCTION public.fn_finalizar_especialidades_vinculadas();
+
+
+--
+-- Contadores de finalização persistentes (docs/sql/migracoes/2026-11-18_finalizacoes_persistentes.sql)
+--
+
+COMMENT ON COLUMN public.unidades.tempo_finalizacao_encaixe_minutos IS 'Contador de finalização da recepção para atendimentos de encaixe (min).';
+
+COMMENT ON COLUMN public.atendimentos.finaliza_recepcao_em IS 'Fim do contador de finalização da recepção; vazio quando não há contador ativo.';
+
+CREATE OR REPLACE FUNCTION public.processar_finalizacoes_vencidas(p_unidade_id uuid) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path = public
+    AS $$
+DECLARE
+    v_qtd integer := 0;
+    r record;
+BEGIN
+    -- Roda com o dono da função: só aceita a unidade do próprio usuário.
+    IF p_unidade_id IS DISTINCT FROM public.get_my_unit() THEN
+        RAISE EXCEPTION 'Unidade não permitida';
+    END IF;
+
+    -- Etapas das especialidades com contador vencido.
+    FOR r IN
+        SELECT ae.id, ae.atendimento_id, ae.sala, ae.num_sala
+        FROM public.atendimento_exames ae
+        JOIN public.atendimentos a ON a.id = ae.atendimento_id
+        WHERE a.unidade_id = p_unidade_id
+          AND ae.finaliza_em IS NOT NULL
+          AND ae.finaliza_em <= NOW()
+          AND ae.status::text NOT IN ('FINALIZADO', 'CANCELADO', 'NAO_ATENDIDO')
+    LOOP
+        PERFORM public.finalizar_especialidade_novo(r.atendimento_id, r.id, r.sala, r.num_sala);
+        v_qtd := v_qtd + 1;
+    END LOOP;
+
+    -- Recepções com contador vencido. O UPDATE com condição garante que só uma
+    -- chamada conclua cada atendimento.
+    FOR r IN
+        UPDATE public.atendimentos
+        SET finaliza_recepcao_em = NULL
+        WHERE unidade_id = p_unidade_id
+          AND status = 'EM_RECEPCAO'
+          AND finaliza_recepcao_em IS NOT NULL
+          AND finaliza_recepcao_em <= NOW()
+        RETURNING id
+    LOOP
+        PERFORM public.finalizar_recepcao_novo(r.id, ARRAY[]::uuid[]);
+        v_qtd := v_qtd + 1;
+    END LOOP;
+
+    -- Contadores que sobraram em atendimentos que já saíram da recepção.
+    UPDATE public.atendimentos
+    SET finaliza_recepcao_em = NULL
+    WHERE unidade_id = p_unidade_id
+      AND finaliza_recepcao_em IS NOT NULL
+      AND status <> 'EM_RECEPCAO';
+
+    RETURN v_qtd;
+END;
+$$;
+
+COMMENT ON FUNCTION public.processar_finalizacoes_vencidas(uuid) IS 'Conclui os contadores de finalização vencidos (especialidades e recepção) da unidade do usuário; devolve quantos concluiu.';
+
+REVOKE ALL ON FUNCTION public.processar_finalizacoes_vencidas(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.processar_finalizacoes_vencidas(uuid) TO authenticated;

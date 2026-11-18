@@ -43,7 +43,7 @@ Convenção: as funções em uso têm o sufixo `_novo`. As versões sem sufixo, 
 | `chamar_paciente_bloqueado_novo(atendimento, etapa, sala, num_sala, profissional)` | Primeira chamada do paciente na sala. Grava a trava em `chamadas_bloqueio`; se outra sala já chamou, devolve `{ sucesso: false }`. Recusa se o paciente estiver em outra especialidade | Etapa vai para `EM_FILA` com sala e profissional; `atendimentos.status` recebe o status da especialidade |
 | `chamar_paciente_novo(...)` | Repete a chamada de um paciente já vinculado à mesma sala e profissional, com trava de linha (`FOR UPDATE NOWAIT`) | Mesmo efeito da chamada acima, sem nova trava |
 | `nao_atendido_especialidade_novo(atendimento, etapa)` | Registra que o paciente não respondeu | Etapa volta para `AGUARDANDO`; atendimento volta para `AGUARDANDO_EXAMES` |
-| `finalizar_especialidade_novo(atendimento, etapa, sala, num_sala)` | Conclui a etapa ao fim do temporizador | Etapa vai para `FINALIZADO` e limpa `finaliza_em`. Se restarem etapas, o atendimento volta para `AGUARDANDO_EXAMES`; se não, vai para `FINALIZADO` |
+| `finalizar_especialidade_novo(atendimento, etapa, sala, num_sala)` | Conclui a etapa ao fim do temporizador. Se a etapa já estiver finalizada (segunda chamada de outra tela ou do processamento abaixo), não faz nada, para não devolver o atendimento a `AGUARDANDO_EXAMES` | Etapa vai para `FINALIZADO` e limpa `finaliza_em`. Se restarem etapas, o atendimento volta para `AGUARDANDO_EXAMES`; se não, vai para `FINALIZADO` |
 
 ### Dashboard (`dashboards/atendimento/page.tsx`)
 
@@ -60,6 +60,7 @@ O painel de grupos do card da especialidade (em qualquer visão) não usa funç�
 | Função | O que faz |
 |---|---|
 | `gerar_alertas_tempo(unidade)` | Chamada pelo navegador do admin a cada minuto. Recusa unidade diferente da do usuário (`get_my_unit`). Com `unidades.alertas_tempo_ativos`, grava em `notificacoes`, sem repetir a mesma situação: **ATENDIMENTO_PROLONGADO** (etapa `EM_ATENDIMENTO`, sem contador de finalização, há mais que meta + tolerância da especialidade; sem meta, `tempo_alerta_atendimento_minutos`), **RECEPCAO_PROLONGADA** (atendimento `EM_RECEPCAO` desde o último `EM_RECEPCAO` do log, com a meta da recepção ou o limite padrão) e **PACIENTE_PARADO** (`AGUARDANDO_RECEPCAO` ou `AGUARDANDO_EXAMES`, sem etapa `EM_FILA`/`EM_ATENDIMENTO`, sem mudança no log há mais que `tempo_alerta_espera_minutos`). Só atendimentos do dia. Se nenhum admin estiver com o sistema aberto, não há verificação; dá para trocar por pg_cron sem mudar as telas |
+| `processar_finalizacoes_vencidas(unidade)` | Chamada a cada 15 s por qualquer tela aberta do sistema (cabeçalho) e na hora pela fila e pela recepção. Recusa unidade diferente da do usuário. Conclui as etapas com `atendimento_exames.finaliza_em` vencido (via `finalizar_especialidade_novo`) e as recepções `EM_RECEPCAO` com `atendimentos.finaliza_recepcao_em` vencido (via `finalizar_recepcao_novo`, uma única vez por atendimento). Se nenhuma tela estiver aberta, conclui quando alguém abrir o sistema |
 | `formatar_duracao_alerta(segundos)` | Formata tempos das mensagens dos alertas como "3 min 36s" |
 
 ## Funções usadas pelo aplicativo Java e pelo distribuidor SSE
@@ -79,6 +80,7 @@ O código do distribuidor está em [`services/distribuidor-sse`](../services/dis
 |---|---|---|---|---|
 | `atendimentos` | `tr_log_status_mudanca` | depois de inserir ou alterar | `fn_log_mudanca_status_atendimento` | Grava em `log_status_atendimento` cada criação ou mudança de status, com cópia dos dados do paciente |
 | `atendimento_exames` | `tr_log_status_exames_mudanca` | depois de alterar | `fn_log_status_exames` | Grava em `log_status_atendimento` cada mudança de status da etapa, com sala, profissional e horários |
+| `atendimento_exames` | `tr_finalizar_especialidades_vinculadas` | depois de alterar o status para `FINALIZADO` | `fn_finalizar_especialidades_vinculadas` | Finaliza no mesmo atendimento as etapas das especialidades vinculadas à que foi finalizada (`especialidades.finaliza_com_especialidade_id`), passando por `EM_ATENDIMENTO` e `FINALIZADO` com os horários, a sala e o profissional da principal, para o log ter o mesmo formato de uma etapa normal e aparecer na timeline dos relatórios. Sem a principal no atendimento, a vinculada não é tocada e é chamada normalmente na fila. Roda dentro do `UPDATE` de `finalizar_especialidade_novo`, antes de ela decidir se o atendimento termina |
 | `atendimentos` | `trg_atendimentos_change` | depois de inserir, alterar ou excluir | `notify_realtime_local` | Envia `pg_notify('fila_alterada', { unidade_id })` |
 | `atendimento_exames` | `trg_atendimento_exames_change` | depois de inserir, alterar ou excluir | `notify_realtime_local` | Envia `pg_notify('fila_alterada', { unidade_id })` |
 | `chat_mensagens` | `trg_chat_notify` | depois de inserir | `notify_chat` | Envia `pg_notify('chat_nova_mensagem', mensagem)` |

@@ -79,4 +79,5 @@ export interface UnidadeConfiguracao {
     alertas_tempo_ativos?: boolean | null;
     tempo_alerta_espera_minutos?: number | null;
     tempo_alerta_atendimento_minutos?: number | null;
+    tempo_finalizacao_encaixe_minutos?: number | null;
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -18,7 +19,9 @@ import {
   UserRound,
   Plus,
   Loader2,
-  UserCog
+  UserCog,
+  List,
+  Workflow
 } from "lucide-react";
 import {
   Accordion,
@@ -33,6 +36,16 @@ import type {
   SalaConfiguracao,
 } from "../types";
 import { filtrarProfissionais, mensagemErroConfiguracao } from "../utils";
+
+// React Flow mede o DOM: só no navegador.
+const FluxoSalasProfissionais = dynamic(() => import("@/components/configuracoes/FluxoSalasProfissionais"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-[75vh] items-center justify-center">
+      <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+    </div>
+  ),
+});
 
 export default function ConfiguracoesPage() {
   const [salas, setSalas] = useState<SalaConfiguracao[]>([]);
@@ -62,6 +75,31 @@ export default function ConfiguracoesPage() {
   const [filtroEspecialidade, setFiltroEspecialidade] = useState("todas");
   const [filtroJornada, setFiltroJornada] = useState("todas");
   const [falaAndar, setFalaAndar] = useState(false);
+
+  // Visualização: lista (acordeões) ou fluxo (Profissionais -> Especialidades -> Salas).
+  const [visao, setVisao] = useState<"lista" | "fluxo">("lista");
+  const [secoesAbertas, setSecoesAbertas] = useState<string[]>([]);
+
+  // Clique num cartão do fluxo: volta para a lista com o item em edição.
+  function editarProfissionalPeloFluxo(p: ProfissionalConfiguracao) {
+    setVisao("lista");
+    setSecoesAbertas(atual => Array.from(new Set([...atual, "item-1"])));
+    setBusca(p.nome);
+    setFiltroEspecialidade("todas");
+    setFiltroJornada("todas");
+    setFiltroStatus("todos");
+    setEditandoProfissional(p);
+  }
+
+  function editarSalaPeloFluxo(sala: SalaConfiguracao) {
+    setVisao("lista");
+    setSecoesAbertas(atual => Array.from(new Set([...atual, "item-2"])));
+    setEditandoSala({
+      ...sala,
+      andar: sala.andar ?? 0,
+      especialidades: sala.sala_especialidades?.map(v => v.especialidade_id) || []
+    });
+  }
 
   async function fetchAll(idDaUnidade?: string) {
     const idAtivo = idDaUnidade || unidadeId;
@@ -392,9 +430,40 @@ export default function ConfiguracoesPage() {
               <p className="text-gray-400 text-[11px] font-bold tracking-[0.2em] uppercase">salas e profissionais</p>
             </div>
           </div>
+
+          <div className="flex h-9 items-center rounded-lg border border-gray-700 bg-gray-800 p-0.5" role="group" aria-label="Visualização">
+            {([
+              ["lista", "Lista", List],
+              ["fluxo", "Fluxo", Workflow],
+            ] as const).map(([valor, rotulo, Icone]) => (
+              <button
+                key={valor}
+                type="button"
+                onClick={() => setVisao(valor)}
+                aria-pressed={visao === valor}
+                className={`flex h-full items-center gap-1.5 rounded-md px-3 text-[10px] font-bold uppercase tracking-widest transition-colors ${visao === valor ? "bg-blue-600 text-white" : "text-slate-300 hover:bg-gray-700"}`}
+              >
+                <Icone className="h-3.5 w-3.5" />
+                {rotulo}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <Accordion type="multiple">
+        {visao === "fluxo" && (
+          <FluxoSalasProfissionais
+            unidadeId={unidadeId}
+            profissionais={profissionais}
+            especialidades={especialidades}
+            salas={salas}
+            onAtualizar={() => fetchAll()}
+            onEditarProfissional={editarProfissionalPeloFluxo}
+            onEditarSala={editarSalaPeloFluxo}
+          />
+        )}
+
+        {visao === "lista" && (
+        <Accordion type="multiple" value={secoesAbertas} onValueChange={setSecoesAbertas}>
           {/* SEÇÃO PROFISSIONAIS */}
           <AccordionItem value="item-1" className="space-y-2">
             <AccordionTrigger className="flex items-center gap-2 border-l-4 border-emerald-500 pl-4">
@@ -950,6 +1019,7 @@ export default function ConfiguracoesPage() {
             </AccordionContent>
           </AccordionItem>
         </Accordion>
+        )}
 
       </div>
     </div >
