@@ -277,6 +277,28 @@ export default function UnidadeConfigPage() {
                                     )}
                                 </div>
 
+                                <div className="flex flex-wrap gap-2 mt-3 text-[10px]">
+                                    {grupo.especialidade_fila_id && (
+                                        <Badge variant="outline">
+                                            Fila: {
+                                                grupo.grupo_especialidade_itens.find(
+                                                    (item) => item.especialidade_id === grupo.especialidade_fila_id
+                                                )?.especialidades.nome ?? "especialidade removida"
+                                            }
+                                        </Badge>
+                                    )}
+                                    {grupo.exibir_fila === false && (
+                                        <Badge variant="outline" className="text-slate-500">
+                                            Oculto na fila
+                                        </Badge>
+                                    )}
+                                    {grupo.exibir_dashboard === true && (
+                                        <Badge variant="outline" className="border-blue-500/40 text-blue-700 dark:text-blue-300">
+                                            No dashboard
+                                        </Badge>
+                                    )}
+                                </div>
+
                                 <div className="
                                         flex
                                         justify-end

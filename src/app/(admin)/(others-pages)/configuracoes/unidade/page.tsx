@@ -6,9 +6,12 @@ import { supabase } from "@/lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import {
+    BellRing,
     Building2,
+    Clock,
     ImagePlus,
     Loader2,
     Save,
@@ -30,6 +33,20 @@ export default function UnidadeConfigPage() {
 
     const [unidade, setUnidade] = useState<UnidadeConfiguracao | null>(null);
 
+    // Abas da configuração: dados da empresa ou parâmetros do atendimento.
+    // As duas compartilham o mesmo formulário e o mesmo botão Salvar.
+    // A aba fica no endereço (#atendimento) para continuar aberta depois do
+    // recarregamento que o Salvar faz. O servidor sempre mostra o carregando
+    // primeiro, então ler o endereço aqui não gera diferença na hidratação.
+    const [aba, setAba] = useState<"empresa" | "atendimento">(() =>
+        typeof window !== "undefined" && window.location.hash === "#atendimento" ? "atendimento" : "empresa"
+    );
+
+    const trocarAba = (valor: "empresa" | "atendimento") => {
+        setAba(valor);
+        window.history.replaceState(null, "", valor === "atendimento" ? "#atendimento" : window.location.pathname);
+    };
+
     const [form, setForm] = useState({
         nome: "",
         flag: "",
@@ -44,6 +61,11 @@ export default function UnidadeConfigPage() {
         cep: "",
         logo_url: "",
         logo_icone_url: "",
+        tempo_meta_recepcao_minutos: "",
+        tolerancia_meta_recepcao_percentual: "20",
+        alertas_tempo_ativos: true,
+        tempo_alerta_espera_minutos: "10",
+        tempo_alerta_atendimento_minutos: "10",
     });
 
     // =========================================
@@ -93,6 +115,14 @@ export default function UnidadeConfigPage() {
 
                 logo_url: unidadeData.logo_url || "",
                 logo_icone_url: unidadeData.logo_icone_url || "",
+
+                tempo_meta_recepcao_minutos:
+                    unidadeData.tempo_meta_recepcao_minutos != null ? String(unidadeData.tempo_meta_recepcao_minutos) : "",
+                tolerancia_meta_recepcao_percentual: String(unidadeData.tolerancia_meta_recepcao_percentual ?? 20),
+
+                alertas_tempo_ativos: unidadeData.alertas_tempo_ativos ?? true,
+                tempo_alerta_espera_minutos: String(unidadeData.tempo_alerta_espera_minutos ?? 10),
+                tempo_alerta_atendimento_minutos: String(unidadeData.tempo_alerta_atendimento_minutos ?? 10),
             });
         } catch (error: unknown) {
             toast.error(mensagemErroConfiguracao(error));
@@ -209,6 +239,34 @@ export default function UnidadeConfigPage() {
     const handleSalvar = async () => {
         try {
             if (!unidade) throw new Error("Unidade não carregada.");
+
+            const metaRecepcao = form.tempo_meta_recepcao_minutos.trim()
+                ? Number(form.tempo_meta_recepcao_minutos.replace(",", "."))
+                : null;
+            const toleranciaRecepcao = form.tolerancia_meta_recepcao_percentual.trim()
+                ? Number(form.tolerancia_meta_recepcao_percentual)
+                : 20;
+
+            if (metaRecepcao !== null && (!Number.isFinite(metaRecepcao) || metaRecepcao <= 0)) {
+                toast.error("A meta da recepção deve ser maior que zero.");
+                return;
+            }
+            if (!Number.isInteger(toleranciaRecepcao) || toleranciaRecepcao < 0 || toleranciaRecepcao > 500) {
+                toast.error("A tolerância da recepção deve ser um número inteiro entre 0 e 500.");
+                return;
+            }
+
+            const limiteEspera = Number(form.tempo_alerta_espera_minutos);
+            const limiteAtendimento = Number(form.tempo_alerta_atendimento_minutos);
+            if (!Number.isInteger(limiteEspera) || limiteEspera < 1 || limiteEspera > 600) {
+                toast.error("O limite de paciente parado deve ser um número inteiro entre 1 e 600 minutos.");
+                return;
+            }
+            if (!Number.isInteger(limiteAtendimento) || limiteAtendimento < 1 || limiteAtendimento > 600) {
+                toast.error("O limite padrão de atendimento deve ser um número inteiro entre 1 e 600 minutos.");
+                return;
+            }
+
             setSaving(true);
 
             const { error } = await supabase
@@ -229,6 +287,13 @@ export default function UnidadeConfigPage() {
 
                     logo_url: form.logo_url,
                     logo_icone_url: form.logo_icone_url,
+
+                    tempo_meta_recepcao_minutos: metaRecepcao,
+                    tolerancia_meta_recepcao_percentual: toleranciaRecepcao,
+
+                    alertas_tempo_ativos: form.alertas_tempo_ativos,
+                    tempo_alerta_espera_minutos: limiteEspera,
+                    tempo_alerta_atendimento_minutos: limiteAtendimento,
                 })
                 .eq("id", unidade.id);
 
@@ -301,12 +366,31 @@ export default function UnidadeConfigPage() {
                             </h1>
                         </div>
                     </div>
+
+                    <Tabs
+                        value={aba}
+                        onValueChange={(valor) => trocarAba(valor as "empresa" | "atendimento")}
+                        className="bg-gray-800 p-1 rounded-lg border border-gray-700"
+                    >
+                        <TabsList className="bg-transparent h-8 gap-1">
+                            <TabsTrigger value="empresa" className="data-[state=active]:bg-emerald-600 text-[10px] uppercase text-white font-bold">
+                                <Building2 className="w-3.5 h-3.5 mr-1" />
+                                Empresa
+                            </TabsTrigger>
+                            <TabsTrigger value="atendimento" className="data-[state=active]:bg-amber-600 text-[10px] uppercase text-white font-bold">
+                                <Clock className="w-3.5 h-3.5 mr-1" />
+                                Atendimento
+                            </TabsTrigger>
+                        </TabsList>
+                    </Tabs>
                 </div>
 
                 {/* CARD */}
                 <Card className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 overflow-hidden shadow-sm">
                     <CardContent className="p-0">
 
+                        {/* ABA EMPRESA */}
+                        {aba === "empresa" && (
                         <div className="px-6 py-4 space-y-10">
 
                             {/* IDENTIDADE VISUAL */}
@@ -670,6 +754,148 @@ export default function UnidadeConfigPage() {
                             </div>
 
                         </div>
+                        )}
+
+                        {/* ABA ATENDIMENTO: METAS DA GESTÃO DE TEMPO */}
+                        {aba === "atendimento" && (
+                        <div className="space-y-3 px-6 py-6">
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <Clock className="w-4 h-4 text-amber-500" />
+                                    <h2 className="text-[11px] font-black uppercase tracking-widest text-slate-500">
+                                        Meta de atendimento da recepção
+                                    </h2>
+                                </div>
+                                <p className="text-[11px] text-slate-500">
+                                    Usada no farol da Gestão de Tempo do dashboard: verde até a meta, amarelo até a meta + tolerância, vermelho acima. Sem meta, a recepção fica sem farol. As metas das especialidades ficam no Kanban.
+                                </p>
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:max-w-xl">
+                                <div>
+                                    <label className="text-[10px] font-black uppercase text-slate-500">
+                                        Meta (min)
+                                    </label>
+                                    <Input
+                                        type="number"
+                                        min={0.5}
+                                        step={0.5}
+                                        placeholder="Sem meta"
+                                        value={form.tempo_meta_recepcao_minutos}
+                                        onChange={(e) =>
+                                            setForm({
+                                                ...form,
+                                                tempo_meta_recepcao_minutos: e.target.value,
+                                            })
+                                        }
+                                        className="h-12"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="text-[10px] font-black uppercase text-slate-500">
+                                        Tolerância amarela (%)
+                                    </label>
+                                    <Input
+                                        type="number"
+                                        min={0}
+                                        max={500}
+                                        step={1}
+                                        value={form.tolerancia_meta_recepcao_percentual}
+                                        onChange={(e) =>
+                                            setForm({
+                                                ...form,
+                                                tolerancia_meta_recepcao_percentual: e.target.value,
+                                            })
+                                        }
+                                        className="h-12"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* ALERTAS DE TEMPO */}
+                            <div className="space-y-3 border-t border-gray-200 pt-6 dark:border-gray-800">
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <BellRing className="w-4 h-4 text-red-500" />
+                                        <h2 className="text-[11px] font-black uppercase tracking-widest text-slate-500">
+                                            Alertas de tempo
+                                        </h2>
+                                    </div>
+                                    <p className="text-[11px] text-slate-500">
+                                        Aparecem para o admin em qualquer tela e ficam no sino de notificações do cabeçalho. O atendimento prolongado usa a meta + tolerância da especialidade (Kanban) ou da recepção; sem meta, usa o limite padrão abaixo.
+                                    </p>
+                                </div>
+
+                                <label className="flex w-fit cursor-pointer items-center gap-3 rounded-xl border border-gray-200 p-3 dark:border-gray-800">
+                                    <input
+                                        type="checkbox"
+                                        checked={form.alertas_tempo_ativos}
+                                        onChange={(e) =>
+                                            setForm({
+                                                ...form,
+                                                alertas_tempo_ativos: e.target.checked,
+                                            })
+                                        }
+                                        className="h-5 w-5"
+                                    />
+                                    <span className="text-xs font-bold uppercase text-slate-700 dark:text-slate-200">
+                                        Alertas ativos
+                                    </span>
+                                </label>
+
+                                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:max-w-xl">
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase text-slate-500">
+                                            Paciente parado (min)
+                                        </label>
+                                        <Input
+                                            type="number"
+                                            min={1}
+                                            max={600}
+                                            step={1}
+                                            disabled={!form.alertas_tempo_ativos}
+                                            value={form.tempo_alerta_espera_minutos}
+                                            onChange={(e) =>
+                                                setForm({
+                                                    ...form,
+                                                    tempo_alerta_espera_minutos: e.target.value,
+                                                })
+                                            }
+                                            className="h-12"
+                                        />
+                                        <p className="mt-1 text-[10px] text-slate-400">
+                                            Tempo sem atendimento em lugar nenhum (recepção ou especialidade).
+                                        </p>
+                                    </div>
+
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase text-slate-500">
+                                            Atendimento prolongado, padrão (min)
+                                        </label>
+                                        <Input
+                                            type="number"
+                                            min={1}
+                                            max={600}
+                                            step={1}
+                                            disabled={!form.alertas_tempo_ativos}
+                                            value={form.tempo_alerta_atendimento_minutos}
+                                            onChange={(e) =>
+                                                setForm({
+                                                    ...form,
+                                                    tempo_alerta_atendimento_minutos: e.target.value,
+                                                })
+                                            }
+                                            className="h-12"
+                                        />
+                                        <p className="mt-1 text-[10px] text-slate-400">
+                                            Usado quando a especialidade ou a recepção não tem meta.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        )}
 
                         {/* FOOTER */}
                         <div className="pt-4 border-t border-gray-200 dark:border-gray-800 flex justify-end">

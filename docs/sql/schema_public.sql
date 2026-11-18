@@ -1253,14 +1253,55 @@ with
       be.profissional,
       jp.minutos_referencia
   ),
+  -- aguardando: atendimentos com etapa AGUARDANDO na especialidade, mesmo que
+  --   o paciente esteja na recepção ou sendo atendido em outra especialidade.
+  -- liberados: dos aguardando, os que podem ser chamados agora, pela mesma regra
+  --   da fila (get_fila_especialidade_novo): já passaram pela recepção, não estão
+  --   em atendimento/chamada em outra etapa e não têm dependência pendente.
   aguardando_por_especialidade as (
     select
       be.especialidade_id,
-      COUNT(*) as aguardando
+      COUNT(distinct be.atendimento_id) as aguardando,
+      COUNT(distinct be.atendimento_id) filter (
+        where
+          (
+            a.status = 'AGUARDANDO_EXAMES'
+            or (
+              a.status like 'EM %'
+              and a.status not in ('EM_RECEPCAO', 'EM_FILA')
+            )
+          )
+          and not exists (
+            select
+              1
+            from
+              public.atendimento_exames ae2
+            where
+              ae2.atendimento_id = be.atendimento_id
+              and ae2.id <> be.id
+              and ae2.status::text in ('EM_ATENDIMENTO', 'EM_FILA')
+          )
+          and not exists (
+            select
+              1
+            from
+              public.exames ex_atual
+              join public.especialidade_dependencias ed on ed.especialidade_id = ex_atual.especialidade_id
+              join public.atendimento_exames ae_dep on ae_dep.atendimento_id = be.atendimento_id
+              join public.exames ex_dep on ex_dep.id = ae_dep.exame_id
+            where
+              ex_atual.id = be.exame_id
+              and ex_dep.especialidade_id = ed.depende_de_especialidade_id
+              and ae_dep.id <> be.id
+              and ae_dep.status::text <> 'FINALIZADO'
+          )
+      ) as liberados
     from
       base_exames be
+      inner join base_atendimentos a on a.id = be.atendimento_id
     where
       be.status_text = 'AGUARDANDO'
+      and COALESCE(a.status, '') not in ('CANCELADO', 'NAO_ATENDIDO', 'FINALIZADO')
     group by
       be.especialidade_id
   ),
@@ -1281,6 +1322,7 @@ with
           COALESCE(SUM(es.total), 0) as total,
           ROUND(AVG(es.tempo_medio)::numeric, 1) as media_min,
           COALESCE(ap.aguardando, 0) as aguardando,
+          COALESCE(ap.liberados, 0) as liberados,
           json_agg(
             json_build_object(
               'nome',
@@ -1316,7 +1358,8 @@ with
         group by
           e.id,
           e.nome,
-          ap.aguardando
+          ap.aguardando,
+          ap.liberados
       ) esp_agg
   ),
   salas_todas as (
@@ -3782,8 +3825,26 @@ CREATE TABLE public.especialidades (
     nome text NOT NULL,
     tempo_finalizacao_segundos smallint,
     obrigar_check_exames boolean DEFAULT false,
-    status text
+    status text,
+    tempo_meta_minutos numeric(5,1),
+    tolerancia_meta_percentual smallint DEFAULT 20 NOT NULL,
+    CONSTRAINT especialidades_tempo_meta_minutos_check CHECK (((tempo_meta_minutos IS NULL) OR (tempo_meta_minutos > (0)::numeric))),
+    CONSTRAINT especialidades_tolerancia_meta_percentual_check CHECK (((tolerancia_meta_percentual >= 0) AND (tolerancia_meta_percentual <= 500)))
 );
+
+
+--
+-- Name: COLUMN especialidades.tempo_meta_minutos; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.especialidades.tempo_meta_minutos IS 'Meta de tempo de atendimento (min) usada no farol da Gestão de Tempo; vazio = sem farol.';
+
+
+--
+-- Name: COLUMN especialidades.tolerancia_meta_percentual; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.especialidades.tolerancia_meta_percentual IS 'Percentual acima da meta que ainda é amarelo no farol; acima disso é vermelho.';
 
 
 --
@@ -3844,8 +3905,32 @@ CREATE TABLE public.grupos_especialidades (
     ativo boolean DEFAULT true,
     criado_em timestamp without time zone DEFAULT now(),
     unidade_id uuid,
-    tipo_filtro text DEFAULT 'todos'::text
+    tipo_filtro text DEFAULT 'todos'::text,
+    exibir_fila boolean DEFAULT true NOT NULL,
+    exibir_dashboard boolean DEFAULT false NOT NULL,
+    especialidade_fila_id uuid
 );
+
+
+--
+-- Name: COLUMN grupos_especialidades.exibir_fila; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.grupos_especialidades.exibir_fila IS 'Quando false, o grupo não aparece no seletor de filtro das filas.';
+
+
+--
+-- Name: COLUMN grupos_especialidades.exibir_dashboard; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.grupos_especialidades.exibir_dashboard IS 'Quando true (e com especialidade_fila_id), o grupo aparece ao expandir o card da especialidade no dashboard.';
+
+
+--
+-- Name: COLUMN grupos_especialidades.especialidade_fila_id; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.grupos_especialidades.especialidade_fila_id IS 'Especialidade cuja fila o grupo representa; limita o grupo à fila dessa especialidade.';
 
 
 --
@@ -4071,8 +4156,31 @@ CREATE TABLE public.unidades (
     bairro text,
     cidade text,
     estado text,
-    cep text
+    cep text,
+    tempo_meta_recepcao_minutos numeric(5,1),
+    tolerancia_meta_recepcao_percentual smallint DEFAULT 20 NOT NULL,
+    alertas_tempo_ativos boolean DEFAULT true NOT NULL,
+    tempo_alerta_espera_minutos smallint DEFAULT 10 NOT NULL,
+    tempo_alerta_atendimento_minutos smallint DEFAULT 10 NOT NULL,
+    CONSTRAINT unidades_tempo_alerta_espera_minutos_check CHECK (((tempo_alerta_espera_minutos >= 1) AND (tempo_alerta_espera_minutos <= 600))),
+    CONSTRAINT unidades_tempo_alerta_atendimento_minutos_check CHECK (((tempo_alerta_atendimento_minutos >= 1) AND (tempo_alerta_atendimento_minutos <= 600))),
+    CONSTRAINT unidades_tempo_meta_recepcao_minutos_check CHECK (((tempo_meta_recepcao_minutos IS NULL) OR (tempo_meta_recepcao_minutos > (0)::numeric))),
+    CONSTRAINT unidades_tolerancia_meta_recepcao_percentual_check CHECK (((tolerancia_meta_recepcao_percentual >= 0) AND (tolerancia_meta_recepcao_percentual <= 500)))
 );
+
+
+--
+-- Name: COLUMN unidades.tempo_meta_recepcao_minutos; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.unidades.tempo_meta_recepcao_minutos IS 'Meta de tempo de atendimento da recepção (min) no farol da Gestão de Tempo; vazio = sem farol.';
+
+
+--
+-- Name: COLUMN unidades.tolerancia_meta_recepcao_percentual; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.unidades.tolerancia_meta_recepcao_percentual IS 'Percentual acima da meta da recepção que ainda é amarelo no farol.';
 
 
 --
@@ -4808,6 +4916,14 @@ ALTER TABLE ONLY public.grupo_especialidade_itens
 
 
 --
+-- Name: grupos_especialidades grupos_especialidades_especialidade_fila_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.grupos_especialidades
+    ADD CONSTRAINT grupos_especialidades_especialidade_fila_id_fkey FOREIGN KEY (especialidade_fila_id) REFERENCES public.especialidades(id) ON DELETE SET NULL;
+
+
+--
 -- Name: log_status_atendimento log_status_atendimento_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5480,3 +5596,253 @@ CREATE POLICY vinculos_unit_isolation ON public.profissional_especialidades TO a
 --
 
 CREATE POLICY vinculos_unit_isolation ON public.sala_especialidades TO authenticated USING ((unidade_id = public.get_my_unit())) WITH CHECK ((unidade_id = public.get_my_unit()));
+
+
+--
+-- Notificações e alertas de tempo (docs/sql/migracoes/2026-11-18_notificacoes_alertas_tempo.sql)
+--
+
+-- 2. Notificações -------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.notificacoes (
+    id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
+    unidade_id uuid NOT NULL REFERENCES public.unidades(id) ON DELETE CASCADE,
+    tipo text NOT NULL,
+    titulo text NOT NULL,
+    mensagem text,
+    atendimento_id uuid REFERENCES public.atendimentos(id) ON DELETE CASCADE,
+    atendimento_exame_id uuid REFERENCES public.atendimento_exames(id) ON DELETE CASCADE,
+    referencia text NOT NULL,
+    dados jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT notificacoes_unidade_referencia_key UNIQUE (unidade_id, referencia)
+);
+
+CREATE INDEX IF NOT EXISTS notificacoes_unidade_created_at_idx
+    ON public.notificacoes (unidade_id, created_at DESC);
+
+COMMENT ON TABLE public.notificacoes IS 'Avisos por unidade exibidos no sino do cabeçalho (alertas de tempo e outros no futuro).';
+COMMENT ON COLUMN public.notificacoes.referencia IS 'Chave da situação que gerou o aviso; evita repetir o mesmo alerta.';
+
+-- 3. Leitura por usuário --------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.notificacoes_lidas (
+    notificacao_id uuid NOT NULL REFERENCES public.notificacoes(id) ON DELETE CASCADE,
+    usuario_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    lida_em timestamp with time zone DEFAULT now() NOT NULL,
+    PRIMARY KEY (notificacao_id, usuario_id)
+);
+
+COMMENT ON TABLE public.notificacoes_lidas IS 'Notificações já lidas por cada usuário.';
+
+-- RLS: leitura só da própria unidade; gravação de notificações só pela função.
+ALTER TABLE public.notificacoes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.notificacoes_lidas ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS notificacoes_leitura_unidade ON public.notificacoes;
+CREATE POLICY notificacoes_leitura_unidade ON public.notificacoes
+    FOR SELECT TO authenticated
+    USING (unidade_id = public.get_my_unit());
+
+DROP POLICY IF EXISTS notificacoes_lidas_proprias ON public.notificacoes_lidas;
+CREATE POLICY notificacoes_lidas_proprias ON public.notificacoes_lidas
+    FOR ALL TO authenticated
+    USING (usuario_id = auth.uid())
+    WITH CHECK (
+        usuario_id = auth.uid()
+        AND EXISTS (
+            SELECT 1 FROM public.notificacoes n
+            WHERE n.id = notificacao_id AND n.unidade_id = public.get_my_unit()
+        )
+    );
+
+REVOKE ALL ON public.notificacoes FROM anon;
+REVOKE ALL ON public.notificacoes_lidas FROM anon;
+GRANT SELECT ON public.notificacoes TO authenticated;
+GRANT SELECT, INSERT, DELETE ON public.notificacoes_lidas TO authenticated;
+
+-- 4. Geração dos alertas ------------------------------------------------------
+-- Formata segundos como "3 min 36s" (usada nas mensagens dos alertas).
+CREATE OR REPLACE FUNCTION public.formatar_duracao_alerta(p_segundos numeric) RETURNS text
+    LANGUAGE sql IMMUTABLE
+    AS $$
+    SELECT CASE
+        WHEN s < 60 THEN s || 's'
+        WHEN s % 60 = 0 THEN (s / 60) || ' min'
+        ELSE (s / 60) || ' min ' || lpad((s % 60)::text, 2, '0') || 's'
+    END
+    FROM (SELECT GREATEST(0, ROUND(p_segundos))::bigint AS s) x
+$$;
+
+CREATE OR REPLACE FUNCTION public.gerar_alertas_tempo(p_unidade_id uuid) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path = public
+    AS $$
+DECLARE
+    v_unidade public.unidades%ROWTYPE;
+    v_qtd integer := 0;
+    v_parcial integer;
+BEGIN
+    -- Roda com o dono da função: só aceita a unidade do próprio usuário.
+    IF p_unidade_id IS DISTINCT FROM public.get_my_unit() THEN
+        RAISE EXCEPTION 'Unidade não permitida';
+    END IF;
+
+    SELECT * INTO v_unidade FROM public.unidades WHERE id = p_unidade_id;
+    IF NOT FOUND OR NOT v_unidade.alertas_tempo_ativos THEN
+        RETURN 0;
+    END IF;
+
+    -- Atendimento prolongado na especialidade
+    INSERT INTO public.notificacoes (unidade_id, tipo, titulo, mensagem, atendimento_id, atendimento_exame_id, referencia, dados)
+    SELECT
+        a.unidade_id,
+        'ATENDIMENTO_PROLONGADO',
+        'Atendimento prolongado: ' || COALESCE(e.nome, ae.sala, 'especialidade'),
+        format(
+            'Senha %s (%s) está em atendimento há %s na sala %s com %s. Limite: %s.',
+            a.senha_codigo,
+            COALESCE(p.nome, 'paciente'),
+            public.formatar_duracao_alerta(EXTRACT(EPOCH FROM (now() - ae.iniciado_em))),
+            COALESCE(NULLIF(TRIM(ae.num_sala), ''), '-'),
+            COALESCE(NULLIF(TRIM(ae.profissional), ''), 'profissional não informado'),
+            public.formatar_duracao_alerta(lim.minutos * 60)
+        ),
+        a.id,
+        ae.id,
+        'ATENDIMENTO:' || ae.id || ':' || FLOOR(EXTRACT(EPOCH FROM ae.iniciado_em))::bigint,
+        jsonb_build_object(
+            'especialidade', COALESCE(e.nome, ae.sala),
+            'sala', ae.num_sala,
+            'profissional', ae.profissional,
+            'senha', a.senha_codigo,
+            'limite_minutos', ROUND(lim.minutos, 1),
+            'desde', ae.iniciado_em
+        )
+    FROM public.atendimento_exames ae
+    JOIN public.atendimentos a ON a.id = ae.atendimento_id
+    LEFT JOIN public.pacientes p ON p.id = a.paciente_id
+    LEFT JOIN public.exames ex ON ex.id = ae.exame_id
+    LEFT JOIN public.especialidades e ON e.id = ex.especialidade_id
+    CROSS JOIN LATERAL (
+        SELECT CASE
+            WHEN e.tempo_meta_minutos IS NOT NULL
+                THEN e.tempo_meta_minutos * (1 + COALESCE(e.tolerancia_meta_percentual, 20) / 100.0)
+            ELSE v_unidade.tempo_alerta_atendimento_minutos::numeric
+        END AS minutos
+    ) lim
+    WHERE a.unidade_id = p_unidade_id
+      AND a.created_at::date = CURRENT_DATE
+      AND ae.status::text = 'EM_ATENDIMENTO'
+      AND ae.finaliza_em IS NULL
+      AND ae.iniciado_em IS NOT NULL
+      AND now() - ae.iniciado_em > make_interval(secs => (lim.minutos * 60)::double precision)
+    ON CONFLICT (unidade_id, referencia) DO NOTHING;
+
+    GET DIAGNOSTICS v_parcial = ROW_COUNT;
+    v_qtd := v_qtd + v_parcial;
+
+    -- Atendimento prolongado na recepção
+    INSERT INTO public.notificacoes (unidade_id, tipo, titulo, mensagem, atendimento_id, referencia, dados)
+    SELECT
+        a.unidade_id,
+        'RECEPCAO_PROLONGADA',
+        'Atendimento prolongado: Recepção',
+        format(
+            'Senha %s (%s) está na recepção há %s com %s%s. Limite: %s.',
+            a.senha_codigo,
+            COALESCE(p.nome, 'paciente não identificado'),
+            public.formatar_duracao_alerta(EXTRACT(EPOCH FROM (now() - r.desde))),
+            COALESCE(NULLIF(TRIM(a.atendente), ''), 'atendente não informado'),
+            CASE WHEN NULLIF(TRIM(a.guiche), '') IS NOT NULL THEN ' no guichê ' || a.guiche ELSE '' END,
+            public.formatar_duracao_alerta(lim.minutos * 60)
+        ),
+        a.id,
+        'RECEPCAO:' || a.id || ':' || FLOOR(EXTRACT(EPOCH FROM r.desde))::bigint,
+        jsonb_build_object(
+            'atendente', a.atendente,
+            'guiche', a.guiche,
+            'senha', a.senha_codigo,
+            'limite_minutos', ROUND(lim.minutos, 1),
+            'desde', r.desde
+        )
+    FROM public.atendimentos a
+    LEFT JOIN public.pacientes p ON p.id = a.paciente_id
+    CROSS JOIN LATERAL (
+        SELECT MAX(l.data_hora) AS desde
+        FROM public.log_status_atendimento l
+        WHERE l.atendimento_id = a.id AND l.status_novo = 'EM_RECEPCAO'
+    ) r
+    CROSS JOIN LATERAL (
+        SELECT CASE
+            WHEN v_unidade.tempo_meta_recepcao_minutos IS NOT NULL
+                THEN v_unidade.tempo_meta_recepcao_minutos * (1 + COALESCE(v_unidade.tolerancia_meta_recepcao_percentual, 20) / 100.0)
+            ELSE v_unidade.tempo_alerta_atendimento_minutos::numeric
+        END AS minutos
+    ) lim
+    WHERE a.unidade_id = p_unidade_id
+      AND a.created_at::date = CURRENT_DATE
+      AND a.status = 'EM_RECEPCAO'
+      AND r.desde IS NOT NULL
+      AND now() - r.desde > make_interval(secs => (lim.minutos * 60)::double precision)
+    ON CONFLICT (unidade_id, referencia) DO NOTHING;
+
+    GET DIAGNOSTICS v_parcial = ROW_COUNT;
+    v_qtd := v_qtd + v_parcial;
+
+    -- Paciente parado (sem atendimento em lugar nenhum)
+    INSERT INTO public.notificacoes (unidade_id, tipo, titulo, mensagem, atendimento_id, referencia, dados)
+    SELECT
+        a.unidade_id,
+        'PACIENTE_PARADO',
+        'Paciente parado há ' || public.formatar_duracao_alerta(EXTRACT(EPOCH FROM (now() - s.desde))),
+        format(
+            'Senha %s (%s) %s. Limite: %s min.',
+            a.senha_codigo,
+            COALESCE(p.nome, 'paciente não identificado'),
+            CASE
+                WHEN a.status = 'AGUARDANDO_RECEPCAO' THEN 'aguarda a recepção'
+                ELSE 'aguarda a próxima especialidade' || COALESCE(' (' || pend.especialidades || ')', '')
+            END,
+            v_unidade.tempo_alerta_espera_minutos
+        ),
+        a.id,
+        'ESPERA:' || a.id || ':' || FLOOR(EXTRACT(EPOCH FROM s.desde))::bigint,
+        jsonb_build_object(
+            'status', a.status,
+            'senha', a.senha_codigo,
+            'pendentes', pend.especialidades,
+            'limite_minutos', v_unidade.tempo_alerta_espera_minutos,
+            'desde', s.desde
+        )
+    FROM public.atendimentos a
+    LEFT JOIN public.pacientes p ON p.id = a.paciente_id
+    CROSS JOIN LATERAL (
+        SELECT GREATEST(a.created_at, MAX(l.data_hora)) AS desde
+        FROM public.log_status_atendimento l
+        WHERE l.atendimento_id = a.id
+    ) s
+    LEFT JOIN LATERAL (
+        SELECT string_agg(DISTINCT ae.sala, ', ') AS especialidades
+        FROM public.atendimento_exames ae
+        WHERE ae.atendimento_id = a.id AND ae.status::text = 'AGUARDANDO'
+    ) pend ON true
+    WHERE a.unidade_id = p_unidade_id
+      AND a.created_at::date = CURRENT_DATE
+      AND a.status IN ('AGUARDANDO_RECEPCAO', 'AGUARDANDO_EXAMES')
+      AND NOT EXISTS (
+          SELECT 1 FROM public.atendimento_exames ae2
+          WHERE ae2.atendimento_id = a.id AND ae2.status::text IN ('EM_FILA', 'EM_ATENDIMENTO')
+      )
+      AND now() - s.desde > make_interval(mins => v_unidade.tempo_alerta_espera_minutos::integer)
+    ON CONFLICT (unidade_id, referencia) DO NOTHING;
+
+    GET DIAGNOSTICS v_parcial = ROW_COUNT;
+    v_qtd := v_qtd + v_parcial;
+
+    RETURN v_qtd;
+END;
+$$;
+
+COMMENT ON FUNCTION public.gerar_alertas_tempo(uuid) IS 'Grava alertas de paciente parado e atendimento prolongado da unidade do usuário; devolve quantos foram criados.';
+
+REVOKE ALL ON FUNCTION public.gerar_alertas_tempo(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.gerar_alertas_tempo(uuid) TO authenticated;
