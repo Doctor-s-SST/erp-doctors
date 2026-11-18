@@ -5660,6 +5660,18 @@ GRANT SELECT ON public.notificacoes TO authenticated;
 GRANT SELECT, INSERT, DELETE ON public.notificacoes_lidas TO authenticated;
 
 -- 4. Geração dos alertas ------------------------------------------------------
+-- Formata segundos como "3 min 36s" (usada nas mensagens dos alertas).
+CREATE OR REPLACE FUNCTION public.formatar_duracao_alerta(p_segundos numeric) RETURNS text
+    LANGUAGE sql IMMUTABLE
+    AS $$
+    SELECT CASE
+        WHEN s < 60 THEN s || 's'
+        WHEN s % 60 = 0 THEN (s / 60) || ' min'
+        ELSE (s / 60) || ' min ' || lpad((s % 60)::text, 2, '0') || 's'
+    END
+    FROM (SELECT GREATEST(0, ROUND(p_segundos))::bigint AS s) x
+$$;
+
 CREATE OR REPLACE FUNCTION public.gerar_alertas_tempo(p_unidade_id uuid) RETURNS integer
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path = public
@@ -5686,13 +5698,13 @@ BEGIN
         'ATENDIMENTO_PROLONGADO',
         'Atendimento prolongado: ' || COALESCE(e.nome, ae.sala, 'especialidade'),
         format(
-            'Senha %s (%s) está em atendimento há %s min na sala %s com %s. Limite: %s min.',
+            'Senha %s (%s) está em atendimento há %s na sala %s com %s. Limite: %s.',
             a.senha_codigo,
             COALESCE(p.nome, 'paciente'),
-            FLOOR(EXTRACT(EPOCH FROM (now() - ae.iniciado_em)) / 60)::int,
+            public.formatar_duracao_alerta(EXTRACT(EPOCH FROM (now() - ae.iniciado_em))),
             COALESCE(NULLIF(TRIM(ae.num_sala), ''), '-'),
             COALESCE(NULLIF(TRIM(ae.profissional), ''), 'profissional não informado'),
-            ROUND(lim.minutos, 1)
+            public.formatar_duracao_alerta(lim.minutos * 60)
         ),
         a.id,
         ae.id,
@@ -5735,13 +5747,13 @@ BEGIN
         'RECEPCAO_PROLONGADA',
         'Atendimento prolongado: Recepção',
         format(
-            'Senha %s (%s) está na recepção há %s min com %s%s. Limite: %s min.',
+            'Senha %s (%s) está na recepção há %s com %s%s. Limite: %s.',
             a.senha_codigo,
             COALESCE(p.nome, 'paciente não identificado'),
-            FLOOR(EXTRACT(EPOCH FROM (now() - r.desde)) / 60)::int,
+            public.formatar_duracao_alerta(EXTRACT(EPOCH FROM (now() - r.desde))),
             COALESCE(NULLIF(TRIM(a.atendente), ''), 'atendente não informado'),
             CASE WHEN NULLIF(TRIM(a.guiche), '') IS NOT NULL THEN ' no guichê ' || a.guiche ELSE '' END,
-            ROUND(lim.minutos, 1)
+            public.formatar_duracao_alerta(lim.minutos * 60)
         ),
         a.id,
         'RECEPCAO:' || a.id || ':' || FLOOR(EXTRACT(EPOCH FROM r.desde))::bigint,
@@ -5781,7 +5793,7 @@ BEGIN
     SELECT
         a.unidade_id,
         'PACIENTE_PARADO',
-        'Paciente parado há ' || FLOOR(EXTRACT(EPOCH FROM (now() - s.desde)) / 60)::int || ' min',
+        'Paciente parado há ' || public.formatar_duracao_alerta(EXTRACT(EPOCH FROM (now() - s.desde))),
         format(
             'Senha %s (%s) %s. Limite: %s min.',
             a.senha_codigo,

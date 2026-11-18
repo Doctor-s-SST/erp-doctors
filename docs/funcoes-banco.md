@@ -60,6 +60,7 @@ O painel de grupos do card da especialidade (em qualquer visão) não usa funç�
 | Função | O que faz |
 |---|---|
 | `gerar_alertas_tempo(unidade)` | Chamada pelo navegador do admin a cada minuto. Recusa unidade diferente da do usuário (`get_my_unit`). Com `unidades.alertas_tempo_ativos`, grava em `notificacoes`, sem repetir a mesma situação: **ATENDIMENTO_PROLONGADO** (etapa `EM_ATENDIMENTO`, sem contador de finalização, há mais que meta + tolerância da especialidade; sem meta, `tempo_alerta_atendimento_minutos`), **RECEPCAO_PROLONGADA** (atendimento `EM_RECEPCAO` desde o último `EM_RECEPCAO` do log, com a meta da recepção ou o limite padrão) e **PACIENTE_PARADO** (`AGUARDANDO_RECEPCAO` ou `AGUARDANDO_EXAMES`, sem etapa `EM_FILA`/`EM_ATENDIMENTO`, sem mudança no log há mais que `tempo_alerta_espera_minutos`). Só atendimentos do dia. Se nenhum admin estiver com o sistema aberto, não há verificação; dá para trocar por pg_cron sem mudar as telas |
+| `formatar_duracao_alerta(segundos)` | Formata tempos das mensagens dos alertas como "3 min 36s" |
 
 ## Funções usadas pelo aplicativo Java e pelo distribuidor SSE
 

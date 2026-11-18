@@ -51,7 +51,7 @@ No módulo ASO, o especialista acessa apenas Assinatura e Envio. O proxy aplica 
 | `/configuracoes/users` | admin | usuários, papéis e ativação |
 | `/profile` | qualquer usuário logado | perfil; oculto no menu |
 
-No cabeçalho, o admin tem o **sino de notificações** (`components/header/NotificacoesSino.tsx`): a cada minuto gera os alertas de tempo, mostra um aviso na tela em qualquer página quando surge um novo e guarda a lista com marcação de lida.
+No cabeçalho, o admin tem o **sino de notificações** (`components/header/NotificacoesSino.tsx`): a cada minuto gera os alertas de tempo, mostra um aviso no canto da tela em qualquer página quando surge um novo e guarda a lista com marcação de lida. Clicar em "Ver atendimento" no aviso ou no item do sino marca como lida e abre a Chamada de Senhas em `/sistema-filas/senhas-recepcao?atendimento=<id>`: a tela limpa os filtros, rola até a linha e a destaca por alguns segundos.
 
 `/` redireciona conforme o perfil. As rotas demonstrativas herdadas do template foram removidas.
 
