@@ -266,24 +266,17 @@ export default function KanbanExames() {
                     status: `EM ${form.nome.toUpperCase()}`
                 }
 
-                if (editandoEspecialidade) {
-                    await supabase
-                        .from("especialidades")
-                        .update(payloadEspecialidade)
-                        .eq("id", editandoEspecialidade.id)
-                } else {
-                    await supabase
-                        .from("especialidades")
-                        .insert(payloadEspecialidade)
-                }
-
+                // Uma única gravação: antes havia um update/insert repetido aqui,
+                // que criava a especialidade nova em dobro.
                 let especialidadeId = editandoEspecialidade?.id;
 
                 if (editandoEspecialidade) {
-                    await supabase
+                    const { error } = await supabase
                         .from("especialidades")
                         .update(payloadEspecialidade)
                         .eq("id", especialidadeId);
+
+                    if (error) throw error;
                 } else {
                     const { data: novaEspecialidade, error } = await supabase
                         .from("especialidades")

@@ -367,10 +367,10 @@ export function GraficoPizza({ data, mode = "especialidade", aguardandoExterno =
             {/* ── LEGENDAS ── */}
             {mode !== "recepcaoGeral" && (
                 <div className="mt-5 flex w-full flex-wrap justify-center gap-2 px-2">
-                    {/* Com "disponíveis" (especialidades): Pendentes / Disponíveis.
+                    {/* Com "disponíveis" (especialidades): Aguardando / Disponíveis.
                         Sem (recepção, ou banco sem o SQL novo): Aguardando, como antes. */}
                     <LegendaItem
-                        rotulo={liberados !== undefined ? "Pendentes" : "Aguardando"}
+                        rotulo="Aguardando"
                         valor={totalAguardando}
                         titulo={
                             liberados !== undefined
@@ -383,7 +383,7 @@ export function GraficoPizza({ data, mode = "especialidade", aguardandoExterno =
                             rotulo="Disponíveis"
                             valor={liberados}
                             variante="liberado"
-                            titulo="Pendentes que podem ser chamados agora: já passaram pela recepção, não estão em outra especialidade e não têm dependência pendente"
+                            titulo="Dos aguardando, os que podem ser chamados agora: já passaram pela recepção, não estão em outra especialidade e não têm dependência pendente"
                         />
                     )}
                 </div>

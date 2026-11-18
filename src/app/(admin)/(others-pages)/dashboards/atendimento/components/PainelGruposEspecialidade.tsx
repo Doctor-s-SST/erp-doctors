@@ -204,11 +204,11 @@ function ResumoGrupo({
             <p className="text-2xl font-black tabular-nums text-gray-900 dark:text-white">{total}</p>
             <div className="mt-1 flex flex-wrap gap-x-3 text-[10px] text-gray-500">
                 <span title="Pacientes que ainda vão passar por aqui, mesmo que estejam na recepção ou em outra especialidade">
-                    {liberados !== undefined ? "Pendentes" : "Aguardando"}{" "}
+                    Aguardando{" "}
                     <b className="text-amber-600 dark:text-amber-400">{aguardando}</b>
                 </span>
                 {liberados !== undefined && (
-                    <span title="Pendentes que podem ser chamados agora">
+                    <span title="Dos aguardando, os que podem ser chamados agora">
                         Disponíveis{" "}
                         <b className="text-emerald-600 dark:text-emerald-400">{liberados}</b>
                     </span>
