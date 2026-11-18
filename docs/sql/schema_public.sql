@@ -1253,14 +1253,55 @@ with
       be.profissional,
       jp.minutos_referencia
   ),
+  -- aguardando: atendimentos com etapa AGUARDANDO na especialidade, mesmo que
+  --   o paciente esteja na recepção ou sendo atendido em outra especialidade.
+  -- liberados: dos aguardando, os que podem ser chamados agora, pela mesma regra
+  --   da fila (get_fila_especialidade_novo): já passaram pela recepção, não estão
+  --   em atendimento/chamada em outra etapa e não têm dependência pendente.
   aguardando_por_especialidade as (
     select
       be.especialidade_id,
-      COUNT(*) as aguardando
+      COUNT(distinct be.atendimento_id) as aguardando,
+      COUNT(distinct be.atendimento_id) filter (
+        where
+          (
+            a.status = 'AGUARDANDO_EXAMES'
+            or (
+              a.status like 'EM %'
+              and a.status not in ('EM_RECEPCAO', 'EM_FILA')
+            )
+          )
+          and not exists (
+            select
+              1
+            from
+              public.atendimento_exames ae2
+            where
+              ae2.atendimento_id = be.atendimento_id
+              and ae2.id <> be.id
+              and ae2.status::text in ('EM_ATENDIMENTO', 'EM_FILA')
+          )
+          and not exists (
+            select
+              1
+            from
+              public.exames ex_atual
+              join public.especialidade_dependencias ed on ed.especialidade_id = ex_atual.especialidade_id
+              join public.atendimento_exames ae_dep on ae_dep.atendimento_id = be.atendimento_id
+              join public.exames ex_dep on ex_dep.id = ae_dep.exame_id
+            where
+              ex_atual.id = be.exame_id
+              and ex_dep.especialidade_id = ed.depende_de_especialidade_id
+              and ae_dep.id <> be.id
+              and ae_dep.status::text <> 'FINALIZADO'
+          )
+      ) as liberados
     from
       base_exames be
+      inner join base_atendimentos a on a.id = be.atendimento_id
     where
       be.status_text = 'AGUARDANDO'
+      and COALESCE(a.status, '') not in ('CANCELADO', 'NAO_ATENDIDO', 'FINALIZADO')
     group by
       be.especialidade_id
   ),
@@ -1281,6 +1322,7 @@ with
           COALESCE(SUM(es.total), 0) as total,
           ROUND(AVG(es.tempo_medio)::numeric, 1) as media_min,
           COALESCE(ap.aguardando, 0) as aguardando,
+          COALESCE(ap.liberados, 0) as liberados,
           json_agg(
             json_build_object(
               'nome',
@@ -1316,7 +1358,8 @@ with
         group by
           e.id,
           e.nome,
-          ap.aguardando
+          ap.aguardando,
+          ap.liberados
       ) esp_agg
   ),
   salas_todas as (
@@ -3782,8 +3825,26 @@ CREATE TABLE public.especialidades (
     nome text NOT NULL,
     tempo_finalizacao_segundos smallint,
     obrigar_check_exames boolean DEFAULT false,
-    status text
+    status text,
+    tempo_meta_minutos numeric(5,1),
+    tolerancia_meta_percentual smallint DEFAULT 20 NOT NULL,
+    CONSTRAINT especialidades_tempo_meta_minutos_check CHECK (((tempo_meta_minutos IS NULL) OR (tempo_meta_minutos > (0)::numeric))),
+    CONSTRAINT especialidades_tolerancia_meta_percentual_check CHECK (((tolerancia_meta_percentual >= 0) AND (tolerancia_meta_percentual <= 500)))
 );
+
+
+--
+-- Name: COLUMN especialidades.tempo_meta_minutos; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.especialidades.tempo_meta_minutos IS 'Meta de tempo de atendimento (min) usada no farol da Gestão de Tempo; vazio = sem farol.';
+
+
+--
+-- Name: COLUMN especialidades.tolerancia_meta_percentual; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.especialidades.tolerancia_meta_percentual IS 'Percentual acima da meta que ainda é amarelo no farol; acima disso é vermelho.';
 
 
 --
@@ -3844,8 +3905,32 @@ CREATE TABLE public.grupos_especialidades (
     ativo boolean DEFAULT true,
     criado_em timestamp without time zone DEFAULT now(),
     unidade_id uuid,
-    tipo_filtro text DEFAULT 'todos'::text
+    tipo_filtro text DEFAULT 'todos'::text,
+    exibir_fila boolean DEFAULT true NOT NULL,
+    exibir_dashboard boolean DEFAULT false NOT NULL,
+    especialidade_fila_id uuid
 );
+
+
+--
+-- Name: COLUMN grupos_especialidades.exibir_fila; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.grupos_especialidades.exibir_fila IS 'Quando false, o grupo não aparece no seletor de filtro das filas.';
+
+
+--
+-- Name: COLUMN grupos_especialidades.exibir_dashboard; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.grupos_especialidades.exibir_dashboard IS 'Quando true (e com especialidade_fila_id), o grupo aparece ao expandir o card da especialidade no dashboard.';
+
+
+--
+-- Name: COLUMN grupos_especialidades.especialidade_fila_id; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.grupos_especialidades.especialidade_fila_id IS 'Especialidade cuja fila o grupo representa; limita o grupo à fila dessa especialidade.';
 
 
 --
@@ -4071,8 +4156,26 @@ CREATE TABLE public.unidades (
     bairro text,
     cidade text,
     estado text,
-    cep text
+    cep text,
+    tempo_meta_recepcao_minutos numeric(5,1),
+    tolerancia_meta_recepcao_percentual smallint DEFAULT 20 NOT NULL,
+    CONSTRAINT unidades_tempo_meta_recepcao_minutos_check CHECK (((tempo_meta_recepcao_minutos IS NULL) OR (tempo_meta_recepcao_minutos > (0)::numeric))),
+    CONSTRAINT unidades_tolerancia_meta_recepcao_percentual_check CHECK (((tolerancia_meta_recepcao_percentual >= 0) AND (tolerancia_meta_recepcao_percentual <= 500)))
 );
+
+
+--
+-- Name: COLUMN unidades.tempo_meta_recepcao_minutos; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.unidades.tempo_meta_recepcao_minutos IS 'Meta de tempo de atendimento da recepção (min) no farol da Gestão de Tempo; vazio = sem farol.';
+
+
+--
+-- Name: COLUMN unidades.tolerancia_meta_recepcao_percentual; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.unidades.tolerancia_meta_recepcao_percentual IS 'Percentual acima da meta da recepção que ainda é amarelo no farol.';
 
 
 --
@@ -4805,6 +4908,14 @@ ALTER TABLE ONLY public.profiles
 
 ALTER TABLE ONLY public.grupo_especialidade_itens
     ADD CONSTRAINT grupo_especialidade_itens_grupo_id_fkey FOREIGN KEY (grupo_id) REFERENCES public.grupos_especialidades(id);
+
+
+--
+-- Name: grupos_especialidades grupos_especialidades_especialidade_fila_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.grupos_especialidades
+    ADD CONSTRAINT grupos_especialidades_especialidade_fila_id_fkey FOREIGN KEY (especialidade_fila_id) REFERENCES public.especialidades(id) ON DELETE SET NULL;
 
 
 --

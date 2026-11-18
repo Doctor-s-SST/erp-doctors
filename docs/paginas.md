@@ -18,13 +18,13 @@ Os perfis abaixo são os liberados pelo proxy de rotas (`ROUTE_PERMISSIONS` em `
 | `/sistema-filas/senhas-recepcao` | admin, recepcao, especialista, painel | chamar senhas, importar ficha, conferir e encaminhar às especialidades |
 | `/sistema-filas/filas` | admin, especialista, recepcao, painel | selecionar especialidade e identificar sala e profissional por uma hora |
 | `/sistema-filas/filas/[id]` | admin, especialista, recepcao, painel | acompanhar a fila via SSE, chamar, conferir exames e finalizar a etapa |
-| `/sistema-filas/kanban` | admin | configurar especialidades, exames, ordem e dependências |
+| `/sistema-filas/kanban` | admin | configurar especialidades (incluindo meta de atendimento e tolerância do farol), exames, ordem e dependências |
 
 ## Análise e relatórios
 
 | Rota | Perfis | Uso |
 |---|---|---|
-| `/dashboards/atendimento` | admin | indicadores do dia, período ou mês |
+| `/dashboards/atendimento` | admin | indicadores do dia, período ou mês; o card da especialidade que tem grupos com `exibir_dashboard` ganha o botão "Grupos", que abre um painel lateral com a especialidade dividida por grupo (ex.: Clínico Térreo e Clínico Primeiro Andar): resumo, gráficos e tabela por sala, em qualquer visão; cards das especialidades com **Aguardando** (todos que ainda passam pela especialidade, mesmo na recepção ou em outra sala) e **Disponíveis** (dos aguardando, os que podem ser chamados agora; o oposto do BLOQUEADO da fila), também no painel de grupos; aba **Gestão de Tempo** com tempo médio por recepcionista e por profissional, farol contra a meta da especialidade, filtro por especialidade e, quando ela tem grupos marcados para o dashboard, por grupo (ex.: Clínico Térreo, Clínico Primeiro Andar ou fora dos grupos), visualização em tabelas ou gráficos, ordenação das tabelas e exportação Excel dos tempos individuais |
 | `/sistema-filas/analise-dados/indicadores-mensais` | admin, especialista, recepcao, operador | indicadores por período |
 | `/sistema-filas/analise-dados/especialidades` | admin, especialista, recepcao, operador | indicadores por especialidade; oculta no menu |
 | `/sistema-filas/relatorios/geral` | admin, painel, recepcao, operador, especialista | relatório de atendimentos |
@@ -44,10 +44,10 @@ No módulo ASO, o especialista acessa apenas Assinatura e Envio. O proxy aplica 
 
 | Rota | Perfis | Uso |
 |---|---|---|
-| `/configuracoes/grupos-especialidades` | admin, operador | grupos de especialidades |
+| `/configuracoes/grupos-especialidades` | admin, operador | grupos de especialidades: critério, especialidade da fila, exibir na fila e exibir no dashboard |
 | `/configuracoes/painel` | admin | voz do painel: andar e térreo |
 | `/configuracoes/salas-profissionais` | admin | salas, profissionais e vínculos |
-| `/configuracoes/unidade` | admin | dados e identidade da unidade |
+| `/configuracoes/unidade` | admin | abas **Empresa** (dados e identidade da unidade) e **Atendimento** (meta e tolerância da recepção na Gestão de Tempo); um único Salvar para as duas |
 | `/configuracoes/users` | admin | usuários, papéis e ativação |
 | `/profile` | qualquer usuário logado | perfil; oculto no menu |
 

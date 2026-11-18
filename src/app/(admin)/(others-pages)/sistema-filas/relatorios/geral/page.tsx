@@ -16,12 +16,12 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { supabase } from '@/lib/supabase';
 
 import { DialogGrupoEspecialidade } from '@/components/grupos/DialogGrupoEspecialidade';
+import { atendimentoPertenceAoGrupo, normalizarEspecialidade } from '@/lib/grupos-especialidades';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
     aguardarJobRelatorio,
     calcularPeriodoRelatorio,
     iniciarJobRelatorio,
-    normalizarTextoRelatorio,
     parseAcionamentoToDate,
     parseTempoToSegundos,
 } from '../../shared/relatorios';
@@ -178,7 +178,6 @@ export default function PaginaRelatorio() {
         return grupos.find(g => String(g.id) === String(grupoSelecionado)) || null;
     }, [grupos, grupoSelecionado]);
 
-    const normalizar = normalizarTextoRelatorio;
 
     const dadosFiltradosOrdenados = useMemo(() => {
         let items = [...dadosRelatorio];
@@ -210,97 +209,12 @@ export default function PaginaRelatorio() {
             grupoAtual
         ) {
 
-            items = items.filter(item => {
-
-                const itensGrupo = grupoAtual.grupo_especialidade_itens || [];
-                const especialidadesExcludentes = itensGrupo
-                    .filter((i: any) => i.excludente === true)
-                    .map((i: any) => normalizar(i.especialidades.nome));
-                const especialidadesGrupo = itensGrupo
-                    .filter((i: any) => i.excludente !== true)
-                    .map((i: any) => normalizar(i.especialidades.nome));
-
-                const especialidadesAtendimento: string[] =
-                    (item.especialidades || []).map((e: string) => normalizar(e));
-
-                if (especialidadesExcludentes.some(
-                    (especialidade: string) => especialidadesAtendimento.includes(especialidade)
-                )) return false;
-
-                // TODAS as especialidades do grupo (match exato)
-                if (grupoAtual.tipo_filtro === 'todos') {
-
-                    const grupoOrdenado = [...especialidadesGrupo].sort();
-                    const atendimentoOrdenado = [...especialidadesAtendimento].sort();
-
-                    return (
-                        grupoOrdenado.length === atendimentoOrdenado.length &&
-                        grupoOrdenado.every(
-                            (esp, idx) => esp === atendimentoOrdenado[idx]
-                        )
-                    );
-                }
-
-                // PELO MENOS UMA especialidade do grupo
-                if (grupoAtual.tipo_filtro === 'algum') {
-
-                    return especialidadesGrupo.some(
-                        (espGrupo: string) =>
-                            especialidadesAtendimento.includes(espGrupo)
-                    );
-                }
-
-                // APENAS especialidades do grupo (qualquer combinação entre elas, sem extras)
-                if (grupoAtual.tipo_filtro === 'apenas_do_grupo') {
-
-                    return (
-                        especialidadesAtendimento.length > 0 &&
-                        especialidadesAtendimento.every(
-                            (esp: string) => especialidadesGrupo.includes(esp)
-                        )
-                    );
-                }
-
-                // OBRIGATÓRIA(S) + PELO MENOS UMA ADICIONAL
-                if (grupoAtual.tipo_filtro === 'obrigatorio_mais_algum') {
-
-                    const obrigatorias = itensGrupo
-                        .filter((i: any) => i.obrigatoria === true && i.excludente !== true)
-                        .map((i: any) => normalizar(i.especialidades.nome));
-
-                    const adicionais = itensGrupo
-                        .filter((i: any) => i.obrigatoria !== true && i.excludente !== true)
-                        .map((i: any) => normalizar(i.especialidades.nome));
-
-                    const permitidas = new Set([...obrigatorias, ...adicionais]);
-
-                    // Filtra apenas especialidades que o grupo referencia
-                    // (especialidades universais como TRIAGEM não bloqueiam o match)
-                    const especialidadesRelevantes = especialidadesAtendimento.filter(
-                        (esp: string) => especialidadesGrupo.includes(esp)
-                    );
-
-                    const todasObrigatoriasPresentes = obrigatorias.every(
-                        (o: string) => especialidadesAtendimento.includes(o)
-                    );
-
-                    const possuiPeloMenosUmaAdicional = especialidadesAtendimento.some(
-                        (esp: string) => adicionais.includes(esp)
-                    );
-
-                    const nenhumaForaDoGrupo = especialidadesRelevantes.every(
-                        (esp: string) => permitidas.has(esp)
-                    );
-
-                    return (
-                        todasObrigatoriasPresentes &&
-                        possuiPeloMenosUmaAdicional &&
-                        nenhumaForaDoGrupo
-                    );
-                }
-
-                return true;
-            });
+            items = items.filter(item =>
+                atendimentoPertenceAoGrupo(
+                    grupoAtual,
+                    (item.especialidades || []).map((e: string) => normalizarEspecialidade(e))
+                )
+            );
         }
 
         // 2. ORDENAÇÃO
