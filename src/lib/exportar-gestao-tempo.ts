@@ -1,5 +1,5 @@
 /**
- * Exportação Excel da Gestão de Tempo: aba "Resumo por profissional" e aba
+ * Exportação Excel da Gestão de Produtividade: aba "Resumo por profissional" e aba
  * "Atendimentos" com o tempo individual de cada atendimento e o farol em cor.
  */
 
@@ -70,7 +70,7 @@ export function exportarGestaoTempo(
     )
 
     const abaResumo = montarAba(
-        `GESTÃO DE TEMPO POR PROFISSIONAL - ${periodo}`,
+        `GESTÃO DE PRODUTIVIDADE POR PROFISSIONAL - ${periodo}`,
         ["Especialidade", "Profissional", "Atendimentos", "Tempo médio (min)", "Tempo médio", "Mínimo (min)", "Máximo (min)", "Meta (min)", "Tolerância (%)", "Dentro da meta", "Na tolerância", "Acima da meta", "Farol"],
         resumoOrdenado.map((p) => [
             p.especialidade,

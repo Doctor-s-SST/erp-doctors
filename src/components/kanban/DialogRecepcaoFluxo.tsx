@@ -136,7 +136,7 @@ export function DialogRecepcaoFluxo({ unidadeId, aberto, config, onAbertoChange,
                     <section className="space-y-3 border-t border-slate-100 pt-4 dark:border-slate-800">
                         <div>
                             <h4 className="text-[10px] font-black uppercase tracking-widest text-blue-600 dark:text-blue-400">Meta de tempo</h4>
-                            <p className="text-[11px] text-slate-500">Farol da Gestão de Tempo e alerta de atendimento prolongado.</p>
+                            <p className="text-[11px] text-slate-500">Farol da Gestão de Produtividade e alerta de atendimento prolongado.</p>
                         </div>
                         <div className="grid grid-cols-2 gap-3">
                             <div className="space-y-1.5">

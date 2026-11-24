@@ -57,7 +57,7 @@ function chaveTipoExame(tipo: string | null | undefined): string {
     return t || TIPO_SEM
 }
 
-/** Nome da "especialidade" que representa a recepção na Gestão de Tempo. */
+/** Nome da "especialidade" que representa a recepção na Gestão de Produtividade. */
 const NOME_RECEPCAO = "RECEPÇÃO"
 
 const COR_FAROL: Record<Farol, string> = {
@@ -326,7 +326,7 @@ async function carregarRecepcao(
 }
 
 /**
- * Aba Gestão de Tempo do dashboard: tempo médio por profissional, farol contra
+ * Aba Gestão de Produtividade do dashboard: tempo médio por profissional, farol contra
  * a meta da especialidade e exportação dos tempos individuais.
  */
 export function GestaoTempoDashboard({ unidadeId, dataInicio, dataFim, periodo }: Props) {
@@ -445,7 +445,7 @@ export function GestaoTempoDashboard({ unidadeId, dataInicio, dataFim, periodo }
             ]
                 .filter(Boolean)
                 .join(" · "),
-            `gestao-tempo_${format(dataInicio, "yyyy-MM-dd")}_${format(dataFim, "yyyy-MM-dd")}${sufixo}.xlsx`
+            `gestao-produtividade_${format(dataInicio, "yyyy-MM-dd")}_${format(dataFim, "yyyy-MM-dd")}${sufixo}.xlsx`
         )
     }
 

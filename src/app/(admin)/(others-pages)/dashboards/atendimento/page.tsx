@@ -320,11 +320,11 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3">
-                    {/* SEÇÃO: ATENDIMENTO OU GESTÃO DE TEMPO */}
+                    {/* SEÇÃO: ATENDIMENTO OU GESTÃO DE PRODUTIVIDADE */}
                     <Tabs value={secao} onValueChange={(v) => setSecao(v as SecaoDashboard)} className="bg-gray-800 p-1 rounded-lg border border-gray-700">
                         <TabsList className="bg-transparent h-8 gap-1">
                             <TabsTrigger value="atendimento" className="data-[state=active]:bg-gray-600 text-[10px] uppercase text-white font-bold">Atendimento</TabsTrigger>
-                            <TabsTrigger value="gestao-tempo" className="data-[state=active]:bg-amber-600 text-[10px] uppercase text-white font-bold">Gestão de Tempo</TabsTrigger>
+                            <TabsTrigger value="gestao-tempo" className="data-[state=active]:bg-amber-600 text-[10px] uppercase text-white font-bold">Gestão de Produtividade</TabsTrigger>
                         </TabsList>
                     </Tabs>
 

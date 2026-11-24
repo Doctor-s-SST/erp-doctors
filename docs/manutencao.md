@@ -17,7 +17,7 @@
 | notificações e alertas de tempo | `components/header/NotificacoesSino.tsx`, `lib/notificacoes.ts`, função `gerar_alertas_tempo`; configuração em `configuracoes/unidade` (aba Atendimento) |
 | Fluxo de salas e profissionais | `components/configuracoes/FluxoSalasProfissionais.tsx`, `configuracoes/salas-profissionais/page.tsx` |
 | Kanban e Fluxo de especialidades | `components/kanban/KanbanExames.tsx`, `components/kanban/FluxoEspecialidades.tsx` (pacote `@xyflow/react`), `components/kanban/DialogRecepcaoFluxo.tsx`; importação de exames por planilha em `components/kanban/ImportarExames.tsx` (`xlsx-js-style`) |
-| gestão de tempo | `dashboards/atendimento/components/GestaoTempoDashboard.tsx`, `lib/gestao-tempo.ts`, `lib/exportar-gestao-tempo.ts`; meta no `components/kanban/KanbanExames.tsx` |
+| gestão de produtividade (antiga gestão de tempo) | `dashboards/atendimento/components/GestaoTempoDashboard.tsx`, `lib/gestao-tempo.ts`, `lib/exportar-gestao-tempo.ts`; meta no `components/kanban/KanbanExames.tsx` |
 | relatórios | `sistema-filas/relatorios/*`, `src/app/api/relatorio*` |
 | indicadores | `analise-dados/*`, `api/indicadores*` |
 | ASO | `aso/*`, `lib/aso-assinatura.ts`, `api/enviar-asos-concluidos` |
