@@ -14,6 +14,7 @@
 | salas/profissionais | `configuracoes/salas-profissionais/page.tsx` |
 | dashboard | `dashboards/atendimento/page.tsx`, `lib/dashboard-analytics.ts`, `lib/dashboard-grupos.ts` |
 | grupos de especialidades | `lib/grupos-especialidades.ts`, `components/grupos/DialogGrupoEspecialidade.tsx`, `docs/filas.md` |
+| notificações e alertas de tempo | `components/header/NotificacoesSino.tsx`, `lib/notificacoes.ts`, função `gerar_alertas_tempo`; configuração em `configuracoes/unidade` (aba Atendimento) |
 | gestão de tempo | `dashboards/atendimento/components/GestaoTempoDashboard.tsx`, `lib/gestao-tempo.ts`, `lib/exportar-gestao-tempo.ts`; meta no `components/kanban/KanbanExames.tsx` |
 | relatórios | `sistema-filas/relatorios/*`, `src/app/api/relatorio*` |
 | indicadores | `analise-dados/*`, `api/indicadores*` |

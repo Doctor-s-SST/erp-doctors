@@ -47,9 +47,11 @@ No módulo ASO, o especialista acessa apenas Assinatura e Envio. O proxy aplica 
 | `/configuracoes/grupos-especialidades` | admin, operador | grupos de especialidades: critério, especialidade da fila, exibir na fila e exibir no dashboard |
 | `/configuracoes/painel` | admin | voz do painel: andar e térreo |
 | `/configuracoes/salas-profissionais` | admin | salas, profissionais e vínculos |
-| `/configuracoes/unidade` | admin | abas **Empresa** (dados e identidade da unidade) e **Atendimento** (meta e tolerância da recepção na Gestão de Tempo); um único Salvar para as duas |
+| `/configuracoes/unidade` | admin | abas **Empresa** (dados e identidade da unidade) e **Atendimento** (meta e tolerância da recepção na Gestão de Tempo e alertas de tempo: ligar/desligar, paciente parado e atendimento prolongado padrão); um único Salvar para as duas |
 | `/configuracoes/users` | admin | usuários, papéis e ativação |
 | `/profile` | qualquer usuário logado | perfil; oculto no menu |
+
+No cabeçalho, o admin tem o **sino de notificações** (`components/header/NotificacoesSino.tsx`): a cada minuto gera os alertas de tempo, mostra um aviso no canto da tela em qualquer página quando surge um novo e guarda a lista com marcação de lida. Clicar em "Ver atendimento" no aviso ou no item do sino marca como lida e abre a Chamada de Senhas em `/sistema-filas/senhas-recepcao?atendimento=<id>`: a tela limpa os filtros, rola até a linha e a destaca por alguns segundos.
 
 `/` redireciona conforme o perfil. As rotas demonstrativas herdadas do template foram removidas.
 

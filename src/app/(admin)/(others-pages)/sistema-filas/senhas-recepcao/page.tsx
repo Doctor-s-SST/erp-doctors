@@ -2,6 +2,7 @@
 "use client"
 
 import { useEffect, useState, useRef, useMemo } from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -29,6 +30,13 @@ import {
 
 export default function RecepcaoPage() {
     const [data, setData] = useState<Atendimento[]>([])
+
+    // Foco vindo das notificações: /sistema-filas/senhas-recepcao?atendimento=<id>
+    const router = useRouter()
+    const pathname = usePathname()
+    const searchParams = useSearchParams()
+    const atendimentoFoco = searchParams.get("atendimento")
+    const [atendimentoDestacado, setAtendimentoDestacado] = useState<string | null>(null)
     const [filtroTipo, setFiltroTipo] = useState<string>("TODOS")
     const [filtroPesquisa, setFiltroPesquisa] = useState("")
     const [loadingAction, setLoadingAction] = useState<string | null>(null)
@@ -52,6 +60,32 @@ export default function RecepcaoPage() {
 
     // Este estado serve apenas para forçar o componente a atualizar a cada minuto
     const [agora, setAgora] = useState(() => Date.now());
+
+    // Ao chegar pela notificação: limpa filtros, rola até a linha e destaca por alguns segundos.
+    useEffect(() => {
+        if (!atendimentoFoco || data.length === 0) return
+
+        const timer = setTimeout(() => {
+            const item = data.find((d) => d.id === atendimentoFoco)
+            // Tira o parâmetro do endereço para a mesma notificação poder ser aberta de novo.
+            router.replace(pathname, { scroll: false })
+
+            if (!item) {
+                toast.info("Esse atendimento não está mais na lista de hoje.")
+                return
+            }
+
+            setFiltroTipo("TODOS")
+            setFiltroPesquisa("")
+            setAtendimentoDestacado(item.id)
+            requestAnimationFrame(() =>
+                document.getElementById(`atendimento-${item.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" })
+            )
+            setTimeout(() => setAtendimentoDestacado((atual) => (atual === item.id ? null : atual)), 8000)
+        }, 0)
+
+        return () => clearTimeout(timer)
+    }, [atendimentoFoco, data, pathname, router])
 
     useEffect(() => {
         const timer = setInterval(() => {
@@ -1088,7 +1122,11 @@ export default function RecepcaoPage() {
                                             return (
                                                 <tr
                                                     key={item.id}
-                                                    className={`${rowStyles} transition-all border-b border-gray-100 dark:border-gray-800`}
+                                                    id={`atendimento-${item.id}`}
+                                                    className={`${rowStyles} transition-all border-b border-gray-100 dark:border-gray-800 ${atendimentoDestacado === item.id
+                                                        ? "outline outline-2 -outline-offset-2 outline-amber-500 bg-amber-100/70 dark:bg-amber-500/20 animate-pulse"
+                                                        : ""
+                                                        }`}
                                                 >
                                                     <td className="p-4">
                                                         <div className="flex flex-col gap-1">

@@ -76,4 +76,7 @@ export interface UnidadeConfiguracao {
     logo_icone_url?: string | null;
     tempo_meta_recepcao_minutos?: number | null;
     tolerancia_meta_recepcao_percentual?: number | null;
+    alertas_tempo_ativos?: boolean | null;
+    tempo_alerta_espera_minutos?: number | null;
+    tempo_alerta_atendimento_minutos?: number | null;
 }
