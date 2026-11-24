@@ -15,7 +15,7 @@ PostgreSQL do Supabase, hospedado na VPS. As tabelas da aplicação ficam no sch
 | | `exame_dependencias` | ordem entre exames |
 | | `salas`, `sala_especialidades` | salas (número, andar) e especialidades atendidas |
 | | `profissionais`, `profissional_especialidades` | profissionais, jornada e especialidades |
-| Grupos | `grupos_especialidades`, `grupo_especialidade_itens` | grupos de filtro e papel de cada item (obrigatória, opcional, excludente) |
+| Grupos | `grupos_especialidades`, `grupo_especialidade_itens` | grupos de filtro e papel de cada item (obrigatória, opcional, excludente); o grupo guarda também `exibir_fila`, `exibir_dashboard` e `especialidade_fila_id` (ver [filas.md](filas.md#grupos-de-especialidades)) |
 | Atendimento | `pacientes` | cadastro importado da ficha do SOC |
 | | `atendimentos` | senha e ciclo do paciente na unidade |
 | | `atendimento_exames` | andamento de cada etapa nas especialidades |
@@ -95,7 +95,7 @@ Em 28/10/2026 o banco ocupava 265 MB. `log_status_atendimento` concentra 55% (14
 
 O esquema completo (tabelas, funções, triggers, índices e políticas RLS, sem dados) está em [`docs/sql/schema_public.sql`](sql/schema_public.sql), exportado em 28/10/2026. As funções e triggers estão explicados em [funcoes-banco.md](funcoes-banco.md).
 
-Ainda não há migrações versionadas: o arquivo é uma fotografia do banco. Ao alterar o banco, prepare script reversível, adicione default para coluna obrigatória nova, atualize tipos e consultas, confirme o RLS e exporte o esquema de novo (comando em [funcoes-banco.md](funcoes-banco.md#como-atualizar-o-esquema-versionado)). Adotar migrações (por exemplo, com Supabase CLI) continua sendo prioridade técnica.
+Ainda não há migrações versionadas: o arquivo é uma fotografia do banco. Scripts de alteração aplicados depois da exportação ficam em [`docs/sql/migracoes/`](sql/migracoes/), com a reversão comentada no fim de cada um. Ao alterar o banco, prepare script reversível, adicione default para coluna obrigatória nova, atualize tipos e consultas, confirme o RLS e exporte o esquema de novo (comando em [funcoes-banco.md](funcoes-banco.md#como-atualizar-o-esquema-versionado)). Adotar migrações (por exemplo, com Supabase CLI) continua sendo prioridade técnica.
 
 `atendimento_exames` tem índices repetidos (quatro em `atendimento_id`, três em `status`) e o chat também; remover as cópias reduz espaço e acelera as gravações.
 

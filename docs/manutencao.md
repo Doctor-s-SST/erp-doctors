@@ -12,7 +12,8 @@
 | sessão de sala/profissional | `src/lib/fila-session.ts` |
 | painel de TV | `painel-senhas/page.tsx`, `configuracoes/painel/page.tsx` |
 | salas/profissionais | `configuracoes/salas-profissionais/page.tsx` |
-| dashboard | `dashboards/atendimento/page.tsx`, `lib/dashboard-analytics.ts` |
+| dashboard | `dashboards/atendimento/page.tsx`, `lib/dashboard-analytics.ts`, `lib/dashboard-grupos.ts` |
+| grupos de especialidades | `lib/grupos-especialidades.ts`, `components/grupos/DialogGrupoEspecialidade.tsx`, `docs/filas.md` |
 | relatórios | `sistema-filas/relatorios/*`, `src/app/api/relatorio*` |
 | indicadores | `analise-dados/*`, `api/indicadores*` |
 | ASO | `aso/*`, `lib/aso-assinatura.ts`, `api/enviar-asos-concluidos` |

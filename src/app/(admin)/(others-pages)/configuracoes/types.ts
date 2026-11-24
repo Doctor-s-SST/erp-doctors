@@ -30,6 +30,9 @@ export interface GrupoEspecialidadeConfiguracao {
     nome: string;
     ativo?: boolean;
     tipo_filtro: "todos" | "algum" | "obrigatorio_mais_algum" | "apenas_do_grupo";
+    exibir_fila?: boolean | null;
+    exibir_dashboard?: boolean | null;
+    especialidade_fila_id?: string | null;
     grupo_especialidade_itens: GrupoEspecialidadeItemConfiguracao[];
 }
 

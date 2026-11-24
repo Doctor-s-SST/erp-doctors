@@ -51,6 +51,8 @@ Convenção: as funções em uso têm o sufixo `_novo`. As versões sem sufixo, 
 |---|---|
 | `get_dashboard_completo(unidade, inicio, fim)` | Monta em uma única consulta todos os dados do dashboard: cards (geradas, em atendimento, aguardando, finalizadas, canceladas), fluxo por hora, mapa de calor, recepção por atendente (com tempo médio), especialidades e salas (total, tempo médio e ociosidade pela jornada do profissional), principais empresas, tipo de atendimento e tempo de permanência |
 
+O painel de grupos do card da especialidade (em qualquer visão) não usa função: a tela lê `grupos_especialidades` (com `exibir_dashboard`) e `especialidades` ao abrir, e só busca os `atendimento_exames` dos atendimentos do período, paginados de 1000 em 1000 e sob RLS, quando o painel é aberto. O cálculo fica em `src/lib/dashboard-grupos.ts` e o painel em `dashboards/atendimento/components/PainelGruposEspecialidade.tsx`. Diferente do card geral, que conta linhas de exame, o card por grupo conta atendimentos por sala; a ociosidade exibida é a da sala, vinda da função.
+
 ## Funções usadas pelo aplicativo Java e pelo distribuidor SSE
 
 | Função | Quem usa | O que faz |
