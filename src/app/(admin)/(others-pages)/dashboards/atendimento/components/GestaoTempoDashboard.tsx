@@ -47,6 +47,16 @@ const TAMANHO_LOTE_IDS = 150
 const GRUPO_TODOS = "todos"
 const GRUPO_FORA = "fora"
 
+/** Valores especiais do filtro de tipo de exame. */
+const TIPO_TODOS = "todos"
+const TIPO_SEM = "__sem_tipo__"
+
+/** Tipo de exame como chave do filtro (vazio = "sem tipo"). */
+function chaveTipoExame(tipo: string | null | undefined): string {
+    const t = (tipo ?? "").trim().toUpperCase()
+    return t || TIPO_SEM
+}
+
 /** Nome da "especialidade" que representa a recepção na Gestão de Tempo. */
 const NOME_RECEPCAO = "RECEPÇÃO"
 
@@ -161,7 +171,7 @@ async function carregarDadosGestaoTempo(unidadeId: string, dataInicio: Date, dat
     for (let pagina = 0; ; pagina++) {
         const { data, error } = await supabase
             .from("atendimento_exames")
-            .select("id, atendimento_id, sala, num_sala, status, profissional, iniciado_em, finalizado_em, atendimentos!inner(created_at, senha_codigo, pacientes(nome))")
+            .select("id, atendimento_id, sala, num_sala, status, profissional, iniciado_em, finalizado_em, atendimentos!inner(created_at, senha_codigo, tipo_exame, pacientes(nome))")
             .eq("unidade_id", unidadeId)
             .gte("atendimentos.created_at", inicio)
             .lt("atendimentos.created_at", fimExclusivo)
@@ -181,7 +191,7 @@ async function carregarDadosGestaoTempo(unidadeId: string, dataInicio: Date, dat
             if (item.status !== "FINALIZADO" || !item.iniciado_em || !item.finalizado_em) continue
 
             const atendimento = (Array.isArray(item.atendimentos) ? item.atendimentos[0] : item.atendimentos) as
-                | { senha_codigo?: string | null; pacientes?: { nome?: string | null } | { nome?: string | null }[] | null }
+                | { senha_codigo?: string | null; tipo_exame?: string | null; pacientes?: { nome?: string | null } | { nome?: string | null }[] | null }
                 | null
             const paciente = Array.isArray(atendimento?.pacientes) ? atendimento?.pacientes[0] : atendimento?.pacientes
 
@@ -195,6 +205,7 @@ async function carregarDadosGestaoTempo(unidadeId: string, dataInicio: Date, dat
                 finalizado_em: item.finalizado_em as string,
                 senha: atendimento?.senha_codigo ?? null,
                 paciente: paciente?.nome ?? null,
+                tipo_exame: atendimento?.tipo_exame ?? null,
             })
         }
 
@@ -251,6 +262,7 @@ async function carregarRecepcao(
         atendente: string | null
         guiche: string | null
         senha_codigo: string | null
+        tipo_exame: string | null
         finalizado_recepcao: string
         pacientes: { nome?: string | null } | { nome?: string | null }[] | null
     }
@@ -259,7 +271,7 @@ async function carregarRecepcao(
     for (let pagina = 0; ; pagina++) {
         const { data, error } = await supabase
             .from("atendimentos")
-            .select("id, atendente, guiche, senha_codigo, finalizado_recepcao, pacientes(nome)")
+            .select("id, atendente, guiche, senha_codigo, tipo_exame, finalizado_recepcao, pacientes(nome)")
             .eq("unidade_id", unidadeId)
             .gte("created_at", inicio)
             .lt("created_at", fimExclusivo)
@@ -306,6 +318,7 @@ async function carregarRecepcao(
             finalizado_em: a.finalizado_recepcao,
             senha: a.senha_codigo,
             paciente: paciente?.nome ?? null,
+            tipo_exame: a.tipo_exame,
         })
     }
 
@@ -319,6 +332,7 @@ async function carregarRecepcao(
 export function GestaoTempoDashboard({ unidadeId, dataInicio, dataFim, periodo }: Props) {
     const [especialidadeFiltro, setEspecialidadeFiltroEstado] = useState("todas")
     const [grupoFiltro, setGrupoFiltro] = useState(GRUPO_TODOS)
+    const [tipoExameFiltro, setTipoExameFiltro] = useState(TIPO_TODOS)
 
     // Ao trocar a especialidade, o grupo volta para "Todos".
     const setEspecialidadeFiltro = (valor: string) => {
@@ -347,7 +361,15 @@ export function GestaoTempoDashboard({ unidadeId, dataInicio, dataFim, periodo }
         refetchOnWindowFocus: false,
     })
 
-    const linhasTodas = data?.linhas ?? []
+    // Tipos de exame do período (atendimentos.tipo_exame) e filtro por tipo.
+    const tiposExame = Array.from(new Set((data?.linhas ?? []).map((l) => chaveTipoExame(l.tipo_exame)))).sort(
+        (a, b) => (a === TIPO_SEM ? 1 : b === TIPO_SEM ? -1 : a.localeCompare(b, "pt-BR"))
+    )
+    const linhasTodas = (data?.linhas ?? []).filter(
+        (l) => tipoExameFiltro === TIPO_TODOS || chaveTipoExame(l.tipo_exame) === tipoExameFiltro
+    )
+    const rotuloTipoExame =
+        tipoExameFiltro === TIPO_TODOS ? "" : tipoExameFiltro === TIPO_SEM ? "sem tipo de exame" : tipoExameFiltro
     const especialidadesMeta = data?.especialidades ?? []
 
     // Grupos da especialidade escolhida (os mesmos do botão "Grupos" do dashboard).
@@ -409,18 +431,20 @@ export function GestaoTempoDashboard({ unidadeId, dataInicio, dataFim, periodo }
         }
         const nomeGrupo =
             grupoFiltro === GRUPO_FORA ? "fora-dos-grupos" : grupoSelecionado ? grupoSelecionado.nome : ""
-        const sufixo = [especialidadeFiltro === "todas" ? "" : especialidadeFiltro, nomeGrupo]
+        const sufixo = [especialidadeFiltro === "todas" ? "" : especialidadeFiltro, nomeGrupo, rotuloTipoExame]
             .filter(Boolean)
             .map((parte) => `_${parte.replace(/[^\p{L}\p{N}]+/gu, "-")}`)
             .join("")
         exportarGestaoTempo(
             profissionaisVisiveis,
             atendimentosVisiveis,
-            grupoSelecionado
-                ? `${periodo} · ${grupoSelecionado.nome}`
-                : grupoFiltro === GRUPO_FORA
-                    ? `${periodo} · fora dos grupos`
-                    : periodo,
+            [
+                periodo,
+                grupoSelecionado ? grupoSelecionado.nome : grupoFiltro === GRUPO_FORA ? "fora dos grupos" : "",
+                rotuloTipoExame,
+            ]
+                .filter(Boolean)
+                .join(" · "),
             `gestao-tempo_${format(dataInicio, "yyyy-MM-dd")}_${format(dataFim, "yyyy-MM-dd")}${sufixo}.xlsx`
         )
     }
@@ -431,7 +455,7 @@ export function GestaoTempoDashboard({ unidadeId, dataInicio, dataFim, periodo }
         <div className="space-y-6">
             {/* FILTRO E EXPORTAÇÃO */}
             <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                     <Select value={especialidadeFiltro} onValueChange={setEspecialidadeFiltro}>
                         <SelectTrigger className="h-9 w-64 bg-white text-xs font-bold uppercase dark:bg-gray-900">
                             <SelectValue placeholder="Especialidade" />
@@ -463,6 +487,21 @@ export function GestaoTempoDashboard({ unidadeId, dataInicio, dataFim, periodo }
                             </SelectContent>
                         </Select>
                     )}
+
+                    {/* TIPO DE EXAME DO ATENDIMENTO (atendimentos.tipo_exame) */}
+                    <Select value={tipoExameFiltro} onValueChange={setTipoExameFiltro}>
+                        <SelectTrigger className="h-9 w-56 bg-white text-xs font-bold uppercase dark:bg-gray-900">
+                            <SelectValue placeholder="Tipo de exame" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value={TIPO_TODOS} className="text-xs font-bold uppercase">Todos os tipos de exame</SelectItem>
+                            {tiposExame.map((t) => (
+                                <SelectItem key={t} value={t} className="text-xs font-bold uppercase">
+                                    {t === TIPO_SEM ? "Sem tipo de exame" : t}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
 
                     {/* MODO DE VISUALIZAÇÃO */}
                     <div className="flex h-9 items-center rounded-lg border border-gray-200 bg-white p-0.5 dark:border-gray-800 dark:bg-gray-900" role="group" aria-label="Modo de visualização">

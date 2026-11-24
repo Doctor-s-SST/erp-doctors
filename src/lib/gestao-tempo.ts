@@ -30,6 +30,8 @@ export interface LinhaTempo {
     finalizado_em: string
     senha: string | null
     paciente: string | null
+    /** atendimentos.tipo_exame (admissional, periódico...). */
+    tipo_exame?: string | null
 }
 
 export interface AtendimentoTempo extends LinhaTempo {

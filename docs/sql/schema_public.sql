@@ -4169,6 +4169,9 @@ CREATE TABLE public.unidades (
     alertas_tempo_ativos boolean DEFAULT true NOT NULL,
     tempo_alerta_espera_minutos smallint DEFAULT 10 NOT NULL,
     tempo_alerta_atendimento_minutos smallint DEFAULT 10 NOT NULL,
+    alerta_paciente_parado_ativo boolean DEFAULT true NOT NULL,
+    alerta_atendimento_prolongado_ativo boolean DEFAULT true NOT NULL,
+    alerta_recepcao_prolongada_ativo boolean DEFAULT true NOT NULL,
     tempo_finalizacao_encaixe_minutos smallint DEFAULT 30 NOT NULL,
     CONSTRAINT unidades_tempo_finalizacao_encaixe_minutos_check CHECK (((tempo_finalizacao_encaixe_minutos >= 1) AND (tempo_finalizacao_encaixe_minutos <= 240))),
     CONSTRAINT unidades_tempo_alerta_espera_minutos_check CHECK (((tempo_alerta_espera_minutos >= 1) AND (tempo_alerta_espera_minutos <= 600))),
@@ -5637,10 +5640,12 @@ CREATE TABLE IF NOT EXISTS public.notificacoes_lidas (
     notificacao_id uuid NOT NULL REFERENCES public.notificacoes(id) ON DELETE CASCADE,
     usuario_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     lida_em timestamp with time zone DEFAULT now() NOT NULL,
+    oculta boolean DEFAULT false NOT NULL,
     PRIMARY KEY (notificacao_id, usuario_id)
 );
 
 COMMENT ON TABLE public.notificacoes_lidas IS 'Notificações já lidas por cada usuário.';
+COMMENT ON COLUMN public.notificacoes_lidas.oculta IS 'O usuário limpou a notificação do sino.';
 
 -- RLS: leitura só da própria unidade; gravação de notificações só pela função.
 ALTER TABLE public.notificacoes ENABLE ROW LEVEL SECURITY;
@@ -5666,7 +5671,7 @@ CREATE POLICY notificacoes_lidas_proprias ON public.notificacoes_lidas
 REVOKE ALL ON public.notificacoes FROM anon;
 REVOKE ALL ON public.notificacoes_lidas FROM anon;
 GRANT SELECT ON public.notificacoes TO authenticated;
-GRANT SELECT, INSERT, DELETE ON public.notificacoes_lidas TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.notificacoes_lidas TO authenticated;
 
 -- 4. Geração dos alertas ------------------------------------------------------
 -- Formata segundos como "3 min 36s" (usada nas mensagens dos alertas).
@@ -5701,6 +5706,7 @@ BEGIN
     END IF;
 
     -- Atendimento prolongado na especialidade
+    IF v_unidade.alerta_atendimento_prolongado_ativo THEN
     INSERT INTO public.notificacoes (unidade_id, tipo, titulo, mensagem, atendimento_id, atendimento_exame_id, referencia, dados)
     SELECT
         a.unidade_id,
@@ -5748,8 +5754,10 @@ BEGIN
 
     GET DIAGNOSTICS v_parcial = ROW_COUNT;
     v_qtd := v_qtd + v_parcial;
+    END IF;
 
     -- Atendimento prolongado na recepção
+    IF v_unidade.alerta_recepcao_prolongada_ativo THEN
     INSERT INTO public.notificacoes (unidade_id, tipo, titulo, mensagem, atendimento_id, referencia, dados)
     SELECT
         a.unidade_id,
@@ -5796,8 +5804,10 @@ BEGIN
 
     GET DIAGNOSTICS v_parcial = ROW_COUNT;
     v_qtd := v_qtd + v_parcial;
+    END IF;
 
     -- Paciente parado (sem atendimento em lugar nenhum)
+    IF v_unidade.alerta_paciente_parado_ativo THEN
     INSERT INTO public.notificacoes (unidade_id, tipo, titulo, mensagem, atendimento_id, referencia, dados)
     SELECT
         a.unidade_id,
@@ -5846,12 +5856,13 @@ BEGIN
 
     GET DIAGNOSTICS v_parcial = ROW_COUNT;
     v_qtd := v_qtd + v_parcial;
+    END IF;
 
     RETURN v_qtd;
 END;
 $$;
 
-COMMENT ON FUNCTION public.gerar_alertas_tempo(uuid) IS 'Grava alertas de paciente parado e atendimento prolongado da unidade do usuário; devolve quantos foram criados.';
+COMMENT ON FUNCTION public.gerar_alertas_tempo(uuid) IS 'Grava alertas de paciente parado e atendimento prolongado (tipos ligados na unidade) da unidade do usuário; devolve quantos foram criados.';
 
 REVOKE ALL ON FUNCTION public.gerar_alertas_tempo(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.gerar_alertas_tempo(uuid) TO authenticated;

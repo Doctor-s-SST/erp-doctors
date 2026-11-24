@@ -66,6 +66,9 @@ export default function UnidadeConfigPage() {
         alertas_tempo_ativos: true,
         tempo_alerta_espera_minutos: "10",
         tempo_alerta_atendimento_minutos: "10",
+        alerta_paciente_parado_ativo: true,
+        alerta_atendimento_prolongado_ativo: true,
+        alerta_recepcao_prolongada_ativo: true,
         tempo_finalizacao_encaixe_minutos: "30",
     });
 
@@ -124,6 +127,9 @@ export default function UnidadeConfigPage() {
                 alertas_tempo_ativos: unidadeData.alertas_tempo_ativos ?? true,
                 tempo_alerta_espera_minutos: String(unidadeData.tempo_alerta_espera_minutos ?? 10),
                 tempo_alerta_atendimento_minutos: String(unidadeData.tempo_alerta_atendimento_minutos ?? 10),
+                alerta_paciente_parado_ativo: unidadeData.alerta_paciente_parado_ativo ?? true,
+                alerta_atendimento_prolongado_ativo: unidadeData.alerta_atendimento_prolongado_ativo ?? true,
+                alerta_recepcao_prolongada_ativo: unidadeData.alerta_recepcao_prolongada_ativo ?? true,
                 tempo_finalizacao_encaixe_minutos: String(unidadeData.tempo_finalizacao_encaixe_minutos ?? 30),
             });
         } catch (error: unknown) {
@@ -301,6 +307,9 @@ export default function UnidadeConfigPage() {
                     alertas_tempo_ativos: form.alertas_tempo_ativos,
                     tempo_alerta_espera_minutos: limiteEspera,
                     tempo_alerta_atendimento_minutos: limiteAtendimento,
+                    alerta_paciente_parado_ativo: form.alerta_paciente_parado_ativo,
+                    alerta_atendimento_prolongado_ativo: form.alerta_atendimento_prolongado_ativo,
+                    alerta_recepcao_prolongada_ativo: form.alerta_recepcao_prolongada_ativo,
                     tempo_finalizacao_encaixe_minutos: tempoEncaixe,
                 })
                 .eq("id", unidade.id);
@@ -886,6 +895,34 @@ export default function UnidadeConfigPage() {
                                     </span>
                                 </label>
 
+                                <div className="space-y-1.5">
+                                    <p className="text-[10px] font-black uppercase text-slate-500">Quais alertas mostrar</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {([
+                                            ["alerta_paciente_parado_ativo", "Paciente parado"],
+                                            ["alerta_atendimento_prolongado_ativo", "Atendimento prolongado (especialidade)"],
+                                            ["alerta_recepcao_prolongada_ativo", "Atendimento prolongado (recepção)"],
+                                        ] as const).map(([campo, rotulo]) => (
+                                            <label
+                                                key={campo}
+                                                className={`flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 dark:border-gray-800 ${form.alertas_tempo_ativos ? "" : "cursor-not-allowed opacity-50"}`}
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    disabled={!form.alertas_tempo_ativos}
+                                                    checked={form[campo]}
+                                                    onChange={(e) => setForm({ ...form, [campo]: e.target.checked })}
+                                                    className="h-4 w-4"
+                                                />
+                                                <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200">{rotulo}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                    <p className="text-[10px] text-slate-400">
+                                        Desmarcado, o alerta deixa de ser gerado e some do sino de todos.
+                                    </p>
+                                </div>
+
                                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:max-w-xl">
                                     <div>
                                         <label className="text-[10px] font-black uppercase text-slate-500">
@@ -896,7 +933,7 @@ export default function UnidadeConfigPage() {
                                             min={1}
                                             max={600}
                                             step={1}
-                                            disabled={!form.alertas_tempo_ativos}
+                                            disabled={!form.alertas_tempo_ativos || !form.alerta_paciente_parado_ativo}
                                             value={form.tempo_alerta_espera_minutos}
                                             onChange={(e) =>
                                                 setForm({
@@ -920,7 +957,7 @@ export default function UnidadeConfigPage() {
                                             min={1}
                                             max={600}
                                             step={1}
-                                            disabled={!form.alertas_tempo_ativos}
+                                            disabled={!form.alertas_tempo_ativos || (!form.alerta_atendimento_prolongado_ativo && !form.alerta_recepcao_prolongada_ativo)}
                                             value={form.tempo_alerta_atendimento_minutos}
                                             onChange={(e) =>
                                                 setForm({
