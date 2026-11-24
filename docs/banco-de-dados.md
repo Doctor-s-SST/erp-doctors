@@ -6,11 +6,11 @@ PostgreSQL do Supabase, hospedado na VPS. As tabelas da aplicação ficam no sch
 
 | Domínio | Tabela | Responsabilidade |
 |---|---|---|
-| Unidade e usuários | `unidades` | dados cadastrais, URLs dos logotipos meta da recepção na Gestão de Tempo (`tempo_meta_recepcao_minutos`, `tolerancia_meta_recepcao_percentual`) e alertas de tempo (`alertas_tempo_ativos`, `tempo_alerta_espera_minutos`, `tempo_alerta_atendimento_minutos`) |
-| Notificações | `notificacoes`, `notificacoes_lidas` | avisos por unidade do sino do cabeçalho (hoje, alertas de tempo), um por situação (`unidade_id`, `referencia`), e leitura por usuário; leitura sob RLS da própria unidade, gravação só pela função `gerar_alertas_tempo` |
+| Unidade e usuários | `unidades` | dados cadastrais, URLs dos logotipos meta da recepção na Gestão de Tempo (`tempo_meta_recepcao_minutos`, `tolerancia_meta_recepcao_percentual`) alertas de tempo (`alertas_tempo_ativos` como chave geral, um liga/desliga por tipo em `alerta_paciente_parado_ativo`, `alerta_atendimento_prolongado_ativo` e `alerta_recepcao_prolongada_ativo`, `tempo_alerta_espera_minutos`, `tempo_alerta_atendimento_minutos`) e contador de finalização do encaixe na recepção (`tempo_finalizacao_encaixe_minutos`, padrão 30) |
+| Notificações | `notificacoes`, `notificacoes_lidas` | avisos por unidade do sino do cabeçalho (hoje, alertas de tempo), um por situação (`unidade_id`, `referencia`), e leitura por usuário (`notificacoes_lidas.oculta` = o usuário limpou a notificação do sino, só para ele); leitura sob RLS da própria unidade, gravação só pela função `gerar_alertas_tempo` |
 | | `profiles` | perfil do usuário: `role`, `ativo`, `unidade_id`, `especialidade_id` |
 | | `painel_config` | voz do painel: `fala_andar`, `fala_terreo` (uma por unidade) |
-| Estrutura de atendimento | `especialidades` | filas, `tempo_finalizacao_segundos`, `obrigar_check_exames`, `tempo_meta_minutos` e `tolerancia_meta_percentual` (farol da Gestão de Tempo; script em [`sql/migracoes/2026-11-17_especialidades_meta_tempo.sql`](sql/migracoes/2026-11-17_especialidades_meta_tempo.sql)) |
+| Estrutura de atendimento | `especialidades` | filas, `tempo_finalizacao_segundos`, `obrigar_check_exames`, `finaliza_com_especialidade_id` (especialidade vinculada, ver [filas.md](filas.md#especialidade-vinculada)), `tempo_meta_minutos` e `tolerancia_meta_percentual` (farol da Gestão de Tempo; script em [`sql/migracoes/2026-11-17_especialidades_meta_tempo.sql`](sql/migracoes/2026-11-17_especialidades_meta_tempo.sql)) |
 | | `especialidade_dependencias` | ordem entre especialidades |
 | | `exames` | exames por especialidade, ordem e `obrigatorio_checkbox` |
 | | `exame_dependencias` | ordem entre exames |
@@ -18,7 +18,7 @@ PostgreSQL do Supabase, hospedado na VPS. As tabelas da aplicação ficam no sch
 | | `profissionais`, `profissional_especialidades` | profissionais, jornada e especialidades |
 | Grupos | `grupos_especialidades`, `grupo_especialidade_itens` | grupos de filtro e papel de cada item (obrigatória, opcional, excludente); o grupo guarda também `exibir_fila`, `exibir_dashboard` e `especialidade_fila_id` (ver [filas.md](filas.md#grupos-de-especialidades)) |
 | Atendimento | `pacientes` | cadastro importado da ficha do SOC |
-| | `atendimentos` | senha e ciclo do paciente na unidade |
+| | `atendimentos` | senha e ciclo do paciente na unidade; `finaliza_recepcao_em` guarda o fim do contador de finalização da recepção |
 | | `atendimento_exames` | andamento de cada etapa nas especialidades |
 | | `chamadas_bloqueio` | trava de chamada: uma sala/profissional por etapa |
 | | `log_status_atendimento` | histórico de status com cópia dos dados do paciente (base dos relatórios) |

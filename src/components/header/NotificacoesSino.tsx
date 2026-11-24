@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowRight, Bell, CheckCheck, Clock, Hourglass, UserRound, X } from "lucide-react"
+import { ArrowRight, Bell, CheckCheck, Clock, Hourglass, Trash2, UserRound, X } from "lucide-react"
 import { toast } from "sonner"
 
 import { Dropdown } from "@/components/ui/dropdown/Dropdown"
 import { cn } from "@/lib/utils"
 import {
     gerarAlertasTempo,
+    limparNotificacoes,
     listarNotificacoes,
     marcarComoLidas,
     type Notificacao,
@@ -159,6 +160,20 @@ export function NotificacoesSino({ usuarioId, unidadeId, geraAlertas }: Props) {
         [usuarioId]
     )
 
+    /** Tira do sino deste usuário (a notificação continua para os demais). */
+    const limpar = useCallback(
+        async (ids: string[]) => {
+            if (!ids.length) return
+            const anteriores = itens
+            setItens((atual) => atual.filter((n) => !ids.includes(n.id)))
+            if (!(await limparNotificacoes(usuarioId, ids))) {
+                setItens(anteriores)
+                toast.error("Não foi possível limpar as notificações.")
+            }
+        },
+        [itens, usuarioId]
+    )
+
     /** Marca como lida e, se houver atendimento, abre na Chamada de Senhas. */
     const abrir = useCallback(
         (n: Notificacao) => {
@@ -176,7 +191,7 @@ export function NotificacoesSino({ usuarioId, unidadeId, geraAlertas }: Props) {
             funcaoDisponivel.current = await gerarAlertasTempo(unidadeId)
         }
 
-        const lista = await listarNotificacoes(usuarioId)
+        const lista = await listarNotificacoes(usuarioId, unidadeId)
         if (!lista) return
 
         // Na primeira carga só registra o que já existe; depois, avisa as novas.
@@ -236,16 +251,30 @@ export function NotificacoesSino({ usuarioId, unidadeId, geraAlertas }: Props) {
                     <h5 className="text-sm font-black uppercase tracking-wide text-gray-800 dark:text-gray-100">
                         Notificações
                     </h5>
-                    {naoLidas.length > 0 && (
-                        <button
-                            type="button"
-                            onClick={() => void marcar(naoLidas.map((n) => n.id))}
-                            className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 hover:underline dark:text-emerald-400"
-                        >
-                            <CheckCheck className="h-3.5 w-3.5" />
-                            Marcar todas como lidas
-                        </button>
-                    )}
+                    <div className="flex items-center gap-3">
+                        {naoLidas.length > 0 && (
+                            <button
+                                type="button"
+                                onClick={() => void marcar(naoLidas.map((n) => n.id))}
+                                className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 hover:underline dark:text-emerald-400"
+                            >
+                                <CheckCheck className="h-3.5 w-3.5" />
+                                Marcar como lidas
+                            </button>
+                        )}
+                        {itens.length > 0 && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    if (confirm("Limpar todas as notificações?")) void limpar(itens.map((n) => n.id))
+                                }}
+                                className="flex items-center gap-1 text-[11px] font-bold text-gray-500 hover:text-red-600 hover:underline dark:text-gray-400 dark:hover:text-red-400"
+                            >
+                                <Trash2 className="h-3.5 w-3.5" />
+                                Limpar todas
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 {itens.length === 0 ? (
@@ -256,7 +285,7 @@ export function NotificacoesSino({ usuarioId, unidadeId, geraAlertas }: Props) {
                             const estilo = estiloDo(n.tipo)
                             const Icone = estilo.icone
                             return (
-                                <li key={n.id}>
+                                <li key={n.id} className="group/item relative">
                                     <button
                                         type="button"
                                         onClick={() => abrir(n)}
@@ -297,6 +326,15 @@ export function NotificacoesSino({ usuarioId, unidadeId, geraAlertas }: Props) {
                                                 )}
                                             </span>
                                         </span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => void limpar([n.id])}
+                                        aria-label="Limpar notificação"
+                                        title="Limpar"
+                                        className="absolute right-1.5 top-1.5 rounded-md p-1 text-gray-400 opacity-0 transition-opacity hover:bg-gray-200 hover:text-red-600 focus:opacity-100 group-hover/item:opacity-100 dark:hover:bg-gray-700 dark:hover:text-red-400"
+                                    >
+                                        <X className="h-3.5 w-3.5" />
                                     </button>
                                 </li>
                             )

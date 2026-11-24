@@ -15,7 +15,6 @@ import { toast } from "sonner"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 import {
-    CheckCircle2,
     User,
     Stethoscope,
     RefreshCw,
@@ -50,9 +49,16 @@ import {
 } from "../utils"
 
 type Sala = { id: string; numero: string; especialidade_id: string }
+/** Momento em que o contador de finalização termina (fora do componente: usa o relógio). */
+function calcularFimFinalizacao(segundos: number): Date {
+    return new Date(Date.now() + segundos * 1000)
+}
+
 export default function FilaPage() {
     const { id } = useParams()
     const [especialidadeNome, setEspecialidadeNome] = useState("Carregando...")
+    // Nome da especialidade com que esta (vinculada) é finalizada; null se for normal.
+    const [finalizaComNome, setFinalizaComNome] = useState<string | null>(null)
     const [data, setData] = useState<ItemFila[]>([])
     const [loading, setLoading] = useState(true)
     const [loadingAction, setLoadingAction] = useState<string | null>(null)
@@ -218,15 +224,27 @@ export default function FilaPage() {
 
         async function inicializar() {
 
+            // select("*"): funciona mesmo antes do SQL da especialidade vinculada.
             const { data: esp } = await supabase
                 .from('especialidades')
-                .select('nome')
+                .select('*')
                 .eq('id', id)
                 .single();
 
             if (!esp || !unidadeId) return;
 
             setEspecialidadeNome(esp.nome);
+
+            if (esp.finaliza_com_especialidade_id) {
+                const { data: principal } = await supabase
+                    .from('especialidades')
+                    .select('nome')
+                    .eq('id', esp.finaliza_com_especialidade_id)
+                    .single();
+                setFinalizaComNome(principal?.nome ?? "outra especialidade");
+            } else {
+                setFinalizaComNome(null);
+            }
 
             const { data: gruposData, error: gruposError } = await supabase
                 .from("grupos_especialidades")
@@ -879,7 +897,7 @@ export default function FilaPage() {
         canceladosRef.current.delete(item.id);
         const tempo = await obterTempoExecucao();
 
-        const fimDate = new Date(Date.now() + tempo * 1000);
+        const fimDate = calcularFimFinalizacao(tempo);
 
         const { error } = await supabase
             .from('atendimento_exames')
@@ -1068,7 +1086,16 @@ export default function FilaPage() {
                                         const isNaoAtendido = naoAtendidosRecentes.includes(item.id);
                                         const isBloqueado = item.bloqueado || styles.label === "BLOQUEADO"
                                         const isEncerrado = isFinalizado || isCancelado
-                                        const isTox = especialidadeNome?.toUpperCase() == ("TOXICOLÓGICO") ? true : false;
+                                        // Especialidade vinculada: se o atendimento tem a especialidade principal,
+                                        // não é chamada e finaliza junto com ela (trigger no banco). Sem a principal,
+                                        // é chamada normalmente. Enquanto as especialidades do atendimento não
+                                        // carregam, trata como vinculada para não oferecer a chamada por engano.
+                                        const especialidadesDoAtendimento = especialidadesPorAtendimento[item.atendimento_id];
+                                        const isVinculadaAguardando = !!finalizaComNome && (
+                                            especialidadesDoAtendimento
+                                                ? especialidadesDoAtendimento.includes(normalizarTextoFila(finalizaComNome))
+                                                : true
+                                        );
 
                                         const rowStyles =
                                             isFinalizado
@@ -1393,46 +1420,12 @@ export default function FilaPage() {
                                                     <div className="flex justify-end gap-1.5 items-center">
                                                         {!isEncerrado ? (
                                                             <>
-                                                                {item.status === "AGUARDANDO" && !isBloqueado && <>
-                                                                    {isTox && (
-                                                                        finalizandoIds[item.id] ? (
-                                                                            <div className="flex items-center gap-2">
-                                                                                <Button
-                                                                                    size="sm"
-                                                                                    disabled
-                                                                                    className="h-8 text-[11px] font-bold bg-slate-600 min-w-[90px] text-white"
-                                                                                >
-                                                                                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                                                                                    {tempoRestante}s
-                                                                                </Button>
-
-                                                                                <TooltipProvider>
-                                                                                    <Tooltip>
-                                                                                        <TooltipTrigger asChild>
-                                                                                            <Button
-                                                                                                size="sm"
-                                                                                                variant="destructive"
-                                                                                                className="h-8 w-8 p-0"
-                                                                                                onClick={() => cancelarFinalizacao(item.id)}
-                                                                                            >
-                                                                                                <X className="w-4 h-4" />
-                                                                                            </Button>
-                                                                                        </TooltipTrigger>
-                                                                                        <TooltipContent>Interromper finalização</TooltipContent>
-                                                                                    </Tooltip>
-                                                                                </TooltipProvider>
-                                                                            </div>
-                                                                        ) : (
-                                                                            <Button
-                                                                                size="sm"
-                                                                                className="h-8 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700"
-                                                                                onClick={() => iniciarFinalizacao(item)}
-                                                                            >
-                                                                                <CheckCircle2 className="w-3 h-3 mr-1" />
-                                                                                Realizado
-                                                                            </Button>
-                                                                        )
-                                                                    )}
+                                                                {item.status === "AGUARDANDO" && !isBloqueado && isVinculadaAguardando && (
+                                                                    <Badge className="bg-violet-100 py-2 text-violet-700 border border-violet-300 dark:bg-violet-500/20 dark:text-violet-300">
+                                                                        Finaliza junto com {finalizaComNome}
+                                                                    </Badge>
+                                                                )}
+                                                                {item.status === "AGUARDANDO" && !isBloqueado && !isVinculadaAguardando && <>
                                                                     {item.ultimo_atendimento && (
                                                                         <Badge className="bg-gray-300 py-3 text-black border border-black/50">
                                                                             Última especialidade!
@@ -1566,45 +1559,6 @@ export default function FilaPage() {
 
                                                                 {isBloqueado && (
                                                                     <>
-                                                                        {isTox && (
-                                                                            finalizandoIds[item.id] ? (
-                                                                                <div className="flex items-center gap-2">
-                                                                                    <Button
-                                                                                        size="sm"
-                                                                                        disabled
-                                                                                        className="h-8 text-[11px] font-bold bg-slate-600 min-w-[90px] text-white"
-                                                                                    >
-                                                                                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                                                                                        {tempoRestante}s
-                                                                                    </Button>
-
-                                                                                    <TooltipProvider>
-                                                                                        <Tooltip>
-                                                                                            <TooltipTrigger asChild>
-                                                                                                <Button
-                                                                                                    size="sm"
-                                                                                                    variant="destructive"
-                                                                                                    className="h-8 w-8 p-0"
-                                                                                                    onClick={() => cancelarFinalizacao(item.id)}
-                                                                                                >
-                                                                                                    <X className="w-4 h-4" />
-                                                                                                </Button>
-                                                                                            </TooltipTrigger>
-                                                                                            <TooltipContent>Interromper finalização</TooltipContent>
-                                                                                        </Tooltip>
-                                                                                    </TooltipProvider>
-                                                                                </div>
-                                                                            ) : (
-                                                                                <Button
-                                                                                    size="sm"
-                                                                                    className="h-8 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700"
-                                                                                    onClick={() => iniciarFinalizacao(item)}
-                                                                                >
-                                                                                    <CheckCircle2 className="w-3 h-3 mr-1" />
-                                                                                    Realizado
-                                                                                </Button>
-                                                                            )
-                                                                        )}
 
                                                                         <Badge
                                                                             className={`${styles.bg} ${styles.color} border-none text-[10px] uppercase font-bold tracking-wider ${styles.animate || ""}`}

@@ -66,6 +66,10 @@ export default function UnidadeConfigPage() {
         alertas_tempo_ativos: true,
         tempo_alerta_espera_minutos: "10",
         tempo_alerta_atendimento_minutos: "10",
+        alerta_paciente_parado_ativo: true,
+        alerta_atendimento_prolongado_ativo: true,
+        alerta_recepcao_prolongada_ativo: true,
+        tempo_finalizacao_encaixe_minutos: "30",
     });
 
     // =========================================
@@ -123,6 +127,10 @@ export default function UnidadeConfigPage() {
                 alertas_tempo_ativos: unidadeData.alertas_tempo_ativos ?? true,
                 tempo_alerta_espera_minutos: String(unidadeData.tempo_alerta_espera_minutos ?? 10),
                 tempo_alerta_atendimento_minutos: String(unidadeData.tempo_alerta_atendimento_minutos ?? 10),
+                alerta_paciente_parado_ativo: unidadeData.alerta_paciente_parado_ativo ?? true,
+                alerta_atendimento_prolongado_ativo: unidadeData.alerta_atendimento_prolongado_ativo ?? true,
+                alerta_recepcao_prolongada_ativo: unidadeData.alerta_recepcao_prolongada_ativo ?? true,
+                tempo_finalizacao_encaixe_minutos: String(unidadeData.tempo_finalizacao_encaixe_minutos ?? 30),
             });
         } catch (error: unknown) {
             toast.error(mensagemErroConfiguracao(error));
@@ -258,6 +266,11 @@ export default function UnidadeConfigPage() {
 
             const limiteEspera = Number(form.tempo_alerta_espera_minutos);
             const limiteAtendimento = Number(form.tempo_alerta_atendimento_minutos);
+            const tempoEncaixe = Number(form.tempo_finalizacao_encaixe_minutos);
+            if (!Number.isInteger(tempoEncaixe) || tempoEncaixe < 1 || tempoEncaixe > 240) {
+                toast.error("O tempo de finalização do encaixe deve ser um número inteiro entre 1 e 240 minutos.");
+                return;
+            }
             if (!Number.isInteger(limiteEspera) || limiteEspera < 1 || limiteEspera > 600) {
                 toast.error("O limite de paciente parado deve ser um número inteiro entre 1 e 600 minutos.");
                 return;
@@ -294,6 +307,10 @@ export default function UnidadeConfigPage() {
                     alertas_tempo_ativos: form.alertas_tempo_ativos,
                     tempo_alerta_espera_minutos: limiteEspera,
                     tempo_alerta_atendimento_minutos: limiteAtendimento,
+                    alerta_paciente_parado_ativo: form.alerta_paciente_parado_ativo,
+                    alerta_atendimento_prolongado_ativo: form.alerta_atendimento_prolongado_ativo,
+                    alerta_recepcao_prolongada_ativo: form.alerta_recepcao_prolongada_ativo,
+                    tempo_finalizacao_encaixe_minutos: tempoEncaixe,
                 })
                 .eq("id", unidade.id);
 
@@ -759,6 +776,40 @@ export default function UnidadeConfigPage() {
                         {/* ABA ATENDIMENTO: METAS DA GESTÃO DE TEMPO */}
                         {aba === "atendimento" && (
                         <div className="space-y-3 px-6 py-6">
+                            {/* FINALIZAÇÃO DO ENCAIXE */}
+                            <div className="space-y-3 border-b border-gray-200 pb-6 dark:border-gray-800">
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <Clock className="w-4 h-4 text-emerald-500" />
+                                        <h2 className="text-[11px] font-black uppercase tracking-widest text-slate-500">
+                                            Finalização do encaixe na recepção
+                                        </h2>
+                                    </div>
+                                    <p className="text-[11px] text-slate-500">
+                                        Tempo do contador ao finalizar um encaixe na Chamada de Senhas (o atendimento normal usa 30 segundos). O contador fica gravado: continua mesmo se a tela for recarregada ou fechada.
+                                    </p>
+                                </div>
+                                <div className="lg:max-w-[16rem]">
+                                    <label className="text-[10px] font-black uppercase text-slate-500">
+                                        Encaixe (min)
+                                    </label>
+                                    <Input
+                                        type="number"
+                                        min={1}
+                                        max={240}
+                                        step={1}
+                                        value={form.tempo_finalizacao_encaixe_minutos}
+                                        onChange={(e) =>
+                                            setForm({
+                                                ...form,
+                                                tempo_finalizacao_encaixe_minutos: e.target.value,
+                                            })
+                                        }
+                                        className="h-12"
+                                    />
+                                </div>
+                            </div>
+
                             <div>
                                 <div className="flex items-center gap-2">
                                     <Clock className="w-4 h-4 text-amber-500" />
@@ -844,6 +895,34 @@ export default function UnidadeConfigPage() {
                                     </span>
                                 </label>
 
+                                <div className="space-y-1.5">
+                                    <p className="text-[10px] font-black uppercase text-slate-500">Quais alertas mostrar</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {([
+                                            ["alerta_paciente_parado_ativo", "Paciente parado"],
+                                            ["alerta_atendimento_prolongado_ativo", "Atendimento prolongado (especialidade)"],
+                                            ["alerta_recepcao_prolongada_ativo", "Atendimento prolongado (recepção)"],
+                                        ] as const).map(([campo, rotulo]) => (
+                                            <label
+                                                key={campo}
+                                                className={`flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 dark:border-gray-800 ${form.alertas_tempo_ativos ? "" : "cursor-not-allowed opacity-50"}`}
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    disabled={!form.alertas_tempo_ativos}
+                                                    checked={form[campo]}
+                                                    onChange={(e) => setForm({ ...form, [campo]: e.target.checked })}
+                                                    className="h-4 w-4"
+                                                />
+                                                <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200">{rotulo}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                    <p className="text-[10px] text-slate-400">
+                                        Desmarcado, o alerta deixa de ser gerado e some do sino de todos.
+                                    </p>
+                                </div>
+
                                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:max-w-xl">
                                     <div>
                                         <label className="text-[10px] font-black uppercase text-slate-500">
@@ -854,7 +933,7 @@ export default function UnidadeConfigPage() {
                                             min={1}
                                             max={600}
                                             step={1}
-                                            disabled={!form.alertas_tempo_ativos}
+                                            disabled={!form.alertas_tempo_ativos || !form.alerta_paciente_parado_ativo}
                                             value={form.tempo_alerta_espera_minutos}
                                             onChange={(e) =>
                                                 setForm({
@@ -878,7 +957,7 @@ export default function UnidadeConfigPage() {
                                             min={1}
                                             max={600}
                                             step={1}
-                                            disabled={!form.alertas_tempo_ativos}
+                                            disabled={!form.alertas_tempo_ativos || (!form.alerta_atendimento_prolongado_ativo && !form.alerta_recepcao_prolongada_ativo)}
                                             value={form.tempo_alerta_atendimento_minutos}
                                             onChange={(e) =>
                                                 setForm({
