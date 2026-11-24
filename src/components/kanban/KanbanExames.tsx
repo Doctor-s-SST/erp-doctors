@@ -736,7 +736,7 @@ export default function KanbanExames() {
                                         <h4 className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
                                             Meta de tempo
                                         </h4>
-                                        <p className="text-[11px] text-slate-500">Farol da Gestão de Tempo e alerta de atendimento prolongado.</p>
+                                        <p className="text-[11px] text-slate-500">Farol da Gestão de Produtividade e alerta de atendimento prolongado.</p>
                                     </div>
                                     <div className="grid grid-cols-2 gap-3">
                                         <div className="space-y-1.5">

@@ -1,5 +1,5 @@
 /**
- * Gestão de Tempo: tempo de atendimento por profissional e farol contra a meta
+ * Gestão de Produtividade: tempo de atendimento por profissional e farol contra a meta
  * da especialidade (`especialidades.tempo_meta_minutos` e
  * `tolerancia_meta_percentual`).
  *

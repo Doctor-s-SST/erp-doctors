@@ -773,7 +773,7 @@ export default function UnidadeConfigPage() {
                         </div>
                         )}
 
-                        {/* ABA ATENDIMENTO: METAS DA GESTÃO DE TEMPO */}
+                        {/* ABA ATENDIMENTO: METAS DA GESTÃO DE PRODUTIVIDADE */}
                         {aba === "atendimento" && (
                         <div className="space-y-3 px-6 py-6">
                             {/* FINALIZAÇÃO DO ENCAIXE */}
@@ -818,7 +818,7 @@ export default function UnidadeConfigPage() {
                                     </h2>
                                 </div>
                                 <p className="text-[11px] text-slate-500">
-                                    Usada no farol da Gestão de Tempo do dashboard: verde até a meta, amarelo até a meta + tolerância, vermelho acima. Sem meta, a recepção fica sem farol. As metas das especialidades ficam no Kanban.
+                                    Usada no farol da Gestão de Produtividade do dashboard: verde até a meta, amarelo até a meta + tolerância, vermelho acima. Sem meta, a recepção fica sem farol. As metas das especialidades ficam no Kanban.
                                 </p>
                             </div>
 
