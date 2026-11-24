@@ -37,7 +37,10 @@ export interface EspecialidadeDistribuicaoItem {
   especialidade: string
   total: number
   media_min: number
+  /** Atendimentos com etapa aguardando na especialidade (mesmo em atendimento em outro lugar). */
   aguardando: number
+  /** Dos aguardando, os que podem ser chamados agora. Ausente antes do SQL de 2026-11-17. */
+  liberados?: number
   salas: SalaEspecialidadeItem[]
 }
 

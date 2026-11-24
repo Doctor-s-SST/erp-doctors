@@ -74,4 +74,6 @@ export interface UnidadeConfiguracao {
     cep?: string | null;
     logo_url?: string | null;
     logo_icone_url?: string | null;
+    tempo_meta_recepcao_minutos?: number | null;
+    tolerancia_meta_recepcao_percentual?: number | null;
 }

@@ -24,8 +24,11 @@ import { FiltroPeriodoDashboard } from "./components/FiltroPeriodoDashboard"
 import { CardIndicadorDashboard } from "./components/CardIndicadorDashboard"
 import { PainelGruposEspecialidade } from "./components/PainelGruposEspecialidade"
 import type { DashboardView } from "./types"
+import { GestaoTempoDashboard } from "./components/GestaoTempoDashboard"
+
+type SecaoDashboard = "atendimento" | "gestao-tempo"
 import type { DashboardPayload, RecepcaoItem, SalaEspecialidadeItem } from "@/lib/dashboard-analytics"
-import { montarCardsPorGrupo, type CardGrupoDashboard, type EspecialidadeDashboard, type LinhaExameDashboard } from "@/lib/dashboard-grupos"
+import { montarCardsPorGrupo, type CardGrupoDashboard, type DependenciaEspecialidade, type EspecialidadeDashboard, type LinhaExameDashboard } from "@/lib/dashboard-grupos"
 import { normalizarEspecialidade, type GrupoRegra } from "@/lib/grupos-especialidades"
 
 const TAMANHO_PAGINA = 1000
@@ -33,6 +36,7 @@ const TAMANHO_PAGINA = 1000
 interface ConfigGruposDashboard {
     grupos: GrupoRegra[]
     especialidades: EspecialidadeDashboard[]
+    dependencias: DependenciaEspecialidade[]
 }
 
 /**
@@ -61,7 +65,7 @@ async function carregarConfigGrupos(unidadeId: string): Promise<ConfigGruposDash
         .not("especialidade_fila_id", "is", null)
 
     if (erroGrupos) throw erroGrupos
-    if (!grupos?.length) return { grupos: [], especialidades: [] }
+    if (!grupos?.length) return { grupos: [], especialidades: [], dependencias: [] }
 
     const { data: especialidades, error: erroEsp } = await supabase
         .from("especialidades")
@@ -70,9 +74,21 @@ async function carregarConfigGrupos(unidadeId: string): Promise<ConfigGruposDash
 
     if (erroEsp) throw erroEsp
 
+    // Dependências entre especialidades (ex.: toxicológico por último), usadas nos "liberados".
+    const idsEspecialidades = (especialidades || []).map((e) => e.id)
+    const { data: dependencias, error: erroDep } = idsEspecialidades.length
+        ? await supabase
+            .from("especialidade_dependencias")
+            .select("especialidade_id, depende_de_especialidade_id")
+            .in("especialidade_id", idsEspecialidades)
+        : { data: [], error: null }
+
+    if (erroDep) throw erroDep
+
     return {
         grupos: grupos as unknown as GrupoRegra[],
         especialidades: (especialidades || []) as EspecialidadeDashboard[],
+        dependencias: (dependencias || []) as DependenciaEspecialidade[],
     }
 }
 
@@ -84,7 +100,7 @@ async function carregarLinhasExames(unidadeId: string, dataInicio: Date, dataFim
     for (let pagina = 0; ; pagina++) {
         const { data, error } = await supabase
             .from("atendimento_exames")
-            .select("id, atendimento_id, sala, num_sala, status, profissional, iniciado_em, finalizado_em, atendimentos!inner(created_at)")
+            .select("id, atendimento_id, sala, num_sala, status, profissional, iniciado_em, finalizado_em, atendimentos!inner(created_at, status)")
             .eq("unidade_id", unidadeId)
             .gte("atendimentos.created_at", inicio)
             .lt("atendimentos.created_at", fimExclusivo)
@@ -94,8 +110,13 @@ async function carregarLinhasExames(unidadeId: string, dataInicio: Date, dataFim
         if (error) throw error
 
         for (const item of data || []) {
+            const atendimento = (Array.isArray(item.atendimentos) ? item.atendimentos[0] : item.atendimentos) as
+                | { status?: string | null }
+                | null
+
             linhas.push({
                 atendimento_id: item.atendimento_id,
+                atendimento_status: atendimento?.status ?? null,
                 sala: item.sala,
                 num_sala: item.num_sala,
                 status: item.status,
@@ -113,6 +134,7 @@ async function carregarLinhasExames(unidadeId: string, dataInicio: Date, dataFim
 
 export default function DashboardPage() {
     const [view, setView] = useState<DashboardView>("diario")
+    const [secao, setSecao] = useState<SecaoDashboard>("atendimento")
     const [unidadeId, setUnidadeId] = useState("")
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -298,6 +320,14 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3">
+                    {/* SEÇÃO: ATENDIMENTO OU GESTÃO DE TEMPO */}
+                    <Tabs value={secao} onValueChange={(v) => setSecao(v as SecaoDashboard)} className="bg-gray-800 p-1 rounded-lg border border-gray-700">
+                        <TabsList className="bg-transparent h-8 gap-1">
+                            <TabsTrigger value="atendimento" className="data-[state=active]:bg-gray-600 text-[10px] uppercase text-white font-bold">Atendimento</TabsTrigger>
+                            <TabsTrigger value="gestao-tempo" className="data-[state=active]:bg-amber-600 text-[10px] uppercase text-white font-bold">Gestão de Tempo</TabsTrigger>
+                        </TabsList>
+                    </Tabs>
+
                     {/* TABS DE VISUALIZAÇÃO */}
                     <Tabs value={view} onValueChange={(v) => handleViewChange(v as DashboardView)} className="bg-gray-800 p-1 rounded-lg border border-gray-700">
                         <TabsList className="bg-transparent h-8 gap-1">
@@ -324,19 +354,32 @@ export default function DashboardPage() {
             </header>
 
             {/* CONTEÚDO DINÂMICO BASEADO NA VIEW */}
-            <ViewDiaria
-                data={data}
-                configGrupos={configGrupos}
-                linhasExames={linhasExames}
-                carregandoLinhas={carregandoLinhas}
-                especialidadeAberta={especialidadeAberta}
-                onAbrirGrupos={setEspecialidadeAberta}
-                periodo={
-                    format(dataInicio, 'dd/MM/yyyy') === format(dataFim, 'dd/MM/yyyy')
-                        ? format(dataInicio, 'dd/MM/yyyy')
-                        : `${format(dataInicio, 'dd/MM/yyyy')} a ${format(dataFim, 'dd/MM/yyyy')}`
-                }
-            />
+            {secao === "gestao-tempo" ? (
+                <GestaoTempoDashboard
+                    unidadeId={unidadeId}
+                    dataInicio={dataInicio}
+                    dataFim={dataFim}
+                    periodo={
+                        format(dataInicio, 'dd/MM/yyyy') === format(dataFim, 'dd/MM/yyyy')
+                            ? format(dataInicio, 'dd/MM/yyyy')
+                            : `${format(dataInicio, 'dd/MM/yyyy')} a ${format(dataFim, 'dd/MM/yyyy')}`
+                    }
+                />
+            ) : (
+                <ViewDiaria
+                    data={data}
+                    configGrupos={configGrupos}
+                    linhasExames={linhasExames}
+                    carregandoLinhas={carregandoLinhas}
+                    especialidadeAberta={especialidadeAberta}
+                    onAbrirGrupos={setEspecialidadeAberta}
+                    periodo={
+                        format(dataInicio, 'dd/MM/yyyy') === format(dataFim, 'dd/MM/yyyy')
+                            ? format(dataInicio, 'dd/MM/yyyy')
+                            : `${format(dataInicio, 'dd/MM/yyyy')} a ${format(dataFim, 'dd/MM/yyyy')}`
+                    }
+                />
+            )}
         </div>
     )
 }
@@ -380,7 +423,7 @@ function ViewDiaria({
 
     // Cards por grupo: calculados só quando há exames carregados (painel aberto).
     const cardsPorGrupo = configGrupos?.grupos.length && linhasExames
-        ? montarCardsPorGrupo(configGrupos.grupos, configGrupos.especialidades, linhasExames, distribuicao)
+        ? montarCardsPorGrupo(configGrupos.grupos, configGrupos.especialidades, linhasExames, distribuicao, configGrupos.dependencias)
         : new Map<string, CardGrupoDashboard[]>()
 
     const espAberta = especialidadeAberta
@@ -435,6 +478,7 @@ function ViewDiaria({
                                 title={esp.especialidade}
                                 data={esp.salas}
                                 aguardando={esp.aguardando}
+                                liberados={esp.liberados}
                                 acao={botaoGrupos}
                             />
                         </div>
@@ -450,6 +494,7 @@ function ViewDiaria({
                 geral={{
                     total: espAberta?.total ?? 0,
                     aguardando: espAberta?.aguardando ?? 0,
+                    liberados: espAberta?.liberados,
                     salas: espAberta?.salas ?? [],
                 }}
                 grupos={especialidadeAberta ? cardsPorGrupo.get(especialidadeAberta) ?? [] : []}
@@ -467,11 +512,13 @@ function CardPizzaSmall({
     title,
     data,
     aguardando = 0,
+    liberados,
     acao,
 }: {
     title: string;
     data: Array<RecepcaoItem | SalaEspecialidadeItem>;
     aguardando?: number;
+    liberados?: number;
     acao?: ReactNode;
 }) {
     return (
@@ -492,6 +539,7 @@ function CardPizzaSmall({
                     <GraficoPizza
                         data={data || []}
                         aguardandoExterno={aguardando}
+                        liberados={liberados}
                         mode={title == "Recepção" ? "recepcao" : "especialidade"}
                     />
                 </div>
