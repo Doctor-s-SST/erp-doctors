@@ -18,6 +18,7 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   "/configuracoes/salas-profissionais": ["admin"],
   "/configuracoes/grupos-especialidades": ["admin", "operador"],
   "/configuracoes/painel": ["admin"],
+  "/configuracoes/integracoes": ["admin"],
   "/dashboards/": ["admin",],
   "/sistema-filas/analise-dados": ["admin", "especialista", "recepcao", "operador"],
 }

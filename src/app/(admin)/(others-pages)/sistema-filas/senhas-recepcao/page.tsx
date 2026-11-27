@@ -18,12 +18,15 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
-import { FileEdit, CheckCircle2, RefreshCw, User, Monitor, XCircle, Filter, ArrowUpDown, Clock, PlusCircle, MonitorCheck, UploadCloud, Save, Building2, Stethoscope, BellRing, Loader2, X, Search, Printer, Plus, ClipboardList, Activity } from "lucide-react"
+import { FileEdit, CheckCircle2, RefreshCw, User, Monitor, XCircle, Filter, ArrowUpDown, Clock, PlusCircle, MonitorCheck, UploadCloud, Save, Building2, Stethoscope, BellRing, Loader2, X, Search, Printer, Plus, ClipboardList, Activity, CalendarClock } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useReactToPrint } from "react-to-print";
 import { TemplateFicha } from "@/components/atendimento/ficha-impressao/TemplateFicha";
 import { StatusSenhaRecep } from "@/components/atendimento/status-senha-recep/StatusSenhaRecep"
+import { AgendadosDoDia } from "@/components/recepcao/AgendadosDoDia"
+import { BuscaAgendado } from "@/components/recepcao/BuscaAgendado"
+import type { Agendamento } from "@/lib/agendamentos"
 import type {
     AtendimentoRecepcao as Atendimento,
     ConfigOrdenacaoRecepcao as ConfigOrdenacao,
@@ -45,6 +48,8 @@ export default function RecepcaoPage() {
     const atendimentoFoco = searchParams.get("atendimento")
     const [atendimentoDestacado, setAtendimentoDestacado] = useState<string | null>(null)
     const [filtroTipo, setFiltroTipo] = useState<string>("TODOS")
+    // Fila de senhas ou lista de agendados do dia (SOC).
+    const [visao, setVisao] = useState<"fila" | "agendados">("fila")
     const [filtroPesquisa, setFiltroPesquisa] = useState("")
     const [loadingAction, setLoadingAction] = useState<string | null>(null)
     const [session, setSession] = useState<{ guiche?: string, nome?: string }>({})
@@ -856,8 +861,36 @@ export default function RecepcaoPage() {
         }
     };
 
-    const handleBuscarSequencial = async () => {
-        if (!sequencialInput.trim()) {
+    // Agendado escolhido na ficha: com sequencial, importa a ficha do SOC; sem, preenche o que tiver.
+    const handleSelecionarAgendado = (agendamento: Agendamento) => {
+        if (agendamento.atendimento_id) {
+            toast.warning(`${agendamento.nome ?? "Este agendado"} já está ligado a outra senha hoje.`);
+        }
+        if (agendamento.sequencial_ficha) {
+            setSequencialInput(agendamento.sequencial_ficha);
+            void handleBuscarSequencial(agendamento.sequencial_ficha);
+            return;
+        }
+        setFormFicha(prev => ({
+            ...prev,
+            funcionario: {
+                ...prev.funcionario,
+                nome: formatarNome(agendamento.nome ?? "") || prev.funcionario.nome,
+                cpf: agendamento.cpf || prev.funcionario.cpf,
+                codigo_funcionario: agendamento.codigo_funcionario || prev.funcionario.codigo_funcionario,
+            },
+            empresa: {
+                ...prev.empresa,
+                razao_social: agendamento.nome_empresa || prev.empresa.razao_social,
+                codigo_empresa: agendamento.codigo_empresa || prev.empresa.codigo_empresa,
+            },
+        }));
+        toast.info("Agendado sem sequencial no SOC: dados básicos preenchidos. Importe a ficha pelo sequencial ou PDF quando houver.");
+    };
+
+    const handleBuscarSequencial = async (valor?: string) => {
+        const sequencial = (valor ?? sequencialInput).trim();
+        if (!sequencial) {
             toast.error("Digite o número sequencial");
             return;
         }
@@ -873,7 +906,7 @@ export default function RecepcaoPage() {
                     "Content-Type": "application/json"
                 },
                 body: JSON.stringify({
-                    sequencial: sequencialInput
+                    sequencial
                 })
             });
 
@@ -933,7 +966,7 @@ export default function RecepcaoPage() {
                 ...prev,
 
                 sequencial:
-                    dados.sequencial_ficha || sequencialInput,
+                    dados.sequencial_ficha || sequencial,
 
                 empresa: {
                     razao_social:
@@ -1131,6 +1164,35 @@ export default function RecepcaoPage() {
                         </div>
                     </div>
 
+                    <div className="flex h-9 w-fit items-center rounded-lg border border-gray-300 bg-white p-0.5 dark:border-gray-700 dark:bg-gray-900" role="group" aria-label="Visualização">
+                        {([
+                            ["fila", "Fila de senhas", ClipboardList],
+                            ["agendados", "Agendados do dia", CalendarClock],
+                        ] as const).map(([valor, rotulo, Icone]) => (
+                            <button
+                                key={valor}
+                                type="button"
+                                onClick={() => setVisao(valor)}
+                                aria-pressed={visao === valor}
+                                className={`flex h-full items-center gap-1.5 rounded-md px-3 text-[10px] font-black uppercase tracking-widest transition-colors ${visao === valor ? "bg-blue-600 text-white" : "text-slate-500 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-gray-800"}`}
+                            >
+                                <Icone className="h-3.5 w-3.5" />
+                                {rotulo}
+                            </button>
+                        ))}
+                    </div>
+
+                    {visao === "agendados" && (
+                        <AgendadosDoDia
+                            unidadeId={unidadeId}
+                            onAbrirAtendimento={(id) => {
+                                setVisao("fila");
+                                router.replace(`${pathname}?atendimento=${encodeURIComponent(id)}`, { scroll: false });
+                            }}
+                        />
+                    )}
+
+                    {visao === "fila" && (
                     <Card className="border-none shadow-2xl overflow-hidden bg-gray-100 dark:bg-gray-900 p-0">
                         <CardContent className="p-0">
                             <div className="overflow-x-auto">
@@ -1511,6 +1573,7 @@ export default function RecepcaoPage() {
                             </div>
                         </CardContent>
                     </Card>
+                    )}
                 </div>
             </div >
 
@@ -1535,6 +1598,13 @@ export default function RecepcaoPage() {
                     </DialogHeader>
 
                     <div className="p-6 space-y-8">
+                        {/* 0. AGENDADO DO DIA (SOC) */}
+                        <BuscaAgendado
+                            unidadeId={unidadeId}
+                            onSelecionar={handleSelecionarAgendado}
+                            desabilitado={loadingAction === "processing_sequencial"}
+                        />
+
                         {/* 1. UPLOAD E BOTÃO DE IMPORTAÇÃO */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
@@ -1549,14 +1619,14 @@ export default function RecepcaoPage() {
                                         onChange={(e) => setSequencialInput(somenteDigitos(e.target.value))}
                                         onKeyDown={(e) => {
                                             if (e.key === "Enter") {
-                                                handleBuscarSequencial();
+                                                void handleBuscarSequencial();
                                             }
                                         }}
                                     />
 
                                     <Button
                                         type="button"
-                                        onClick={handleBuscarSequencial}
+                                        onClick={() => void handleBuscarSequencial()}
                                         disabled={loadingAction === "processing_sequencial"}
                                         className="h-11 px-5 bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase"
                                     >

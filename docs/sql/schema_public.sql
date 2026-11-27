@@ -5867,6 +5867,598 @@ COMMENT ON FUNCTION public.gerar_alertas_tempo(uuid) IS 'Grava alertas de pacien
 REVOKE ALL ON FUNCTION public.gerar_alertas_tempo(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.gerar_alertas_tempo(uuid) TO authenticated;
 
+--
+-- Integrações com o SOC (migração 2026-11-27_integracoes_soc.sql)
+--
+
+-- 1. Configuração do web service ----------------------------------------------
+CREATE TABLE IF NOT EXISTS public.integracao_soc (
+    unidade_id uuid NOT NULL PRIMARY KEY REFERENCES public.unidades(id) ON DELETE CASCADE,
+    empresa_principal text,
+    codigo_responsavel text,
+    codigo_usuario text,
+    ws_username text,
+    ws_url text,
+    ws_urls jsonb DEFAULT '{}'::jsonb NOT NULL,
+    ws_senha text,
+    ws_security boolean DEFAULT true NOT NULL,
+    codigo_usuario_agenda text,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid REFERENCES auth.users(id) ON DELETE SET NULL
+);
+
+COMMENT ON TABLE public.integracao_soc IS 'Configuração do web service do SOC por unidade (Configurações > Integrações). Lida pelo n8n com service_role.';
+COMMENT ON COLUMN public.integracao_soc.empresa_principal IS 'Código da empresa principal no SOC (parâmetro "empresa" dos Exporta Dados).';
+COMMENT ON COLUMN public.integracao_soc.codigo_responsavel IS 'codigoResponsavel: código do responsável da empresa principal no SOC.';
+COMMENT ON COLUMN public.integracao_soc.codigo_usuario IS 'codigoUsuario: código do usuário do web service na conta do SOC (identificacaoWsVo).';
+COMMENT ON COLUMN public.integracao_soc.ws_username IS 'Username da autenticação WS-Security (ex.: U + código, conforme a configuração de integração do SOC).';
+COMMENT ON COLUMN public.integracao_soc.ws_url IS 'URL do web service Exporta Dados.';
+COMMENT ON COLUMN public.integracao_soc.ws_urls IS 'URL (WSDL) dos demais web services do SOC, por identificador (ex.: {"socged": "...", "download_arquivos": "..."}).';
+COMMENT ON COLUMN public.integracao_soc.ws_senha IS 'Chave de acesso (password) da autenticação WS-Security. Segredo: não é devolvida ao navegador.';
+COMMENT ON COLUMN public.integracao_soc.ws_security IS 'Envia o cabeçalho WS-Security (ws_username e chave de acesso em PasswordDigest) nas chamadas ao SOC. Padrão: ligado. Não aparece na tela.';
+COMMENT ON COLUMN public.integracao_soc.codigo_usuario_agenda IS 'Código do usuário Agenda da unidade (ED de agendados). Vazio = unidade fora da sincronização de agendamentos.';
+
+-- 2. Exporta Dados ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.integracao_soc_exporta_dados (
+    id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
+    unidade_id uuid NOT NULL REFERENCES public.unidades(id) ON DELETE CASCADE,
+    identificador text NOT NULL,
+    nome text NOT NULL,
+    codigo text,
+    chave text,
+    ativo boolean DEFAULT true NOT NULL,
+    observacao text,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+    CONSTRAINT integracao_soc_exporta_dados_unidade_identificador_key UNIQUE (unidade_id, identificador),
+    CONSTRAINT integracao_soc_exporta_dados_identificador_check CHECK (identificador ~ '^[a-z0-9_]{2,60}$')
+);
+
+COMMENT ON TABLE public.integracao_soc_exporta_dados IS 'Código e chave de cada Exporta Dados do SOC por unidade. Os fluxos do n8n buscam pelo identificador.';
+COMMENT ON COLUMN public.integracao_soc_exporta_dados.identificador IS 'Nome técnico usado pelos fluxos (ex.: agendados_agenda, agendamentos_funcionario, pedido_exame).';
+COMMENT ON COLUMN public.integracao_soc_exporta_dados.chave IS 'Chave do Exporta Dados. Segredo: não é devolvida ao navegador.';
+
+-- Sem acesso direto para usuários: só pelas funções abaixo e pelo service_role.
+ALTER TABLE public.integracao_soc ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.integracao_soc_exporta_dados ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.integracao_soc FROM anon, authenticated;
+REVOKE ALL ON public.integracao_soc_exporta_dados FROM anon, authenticated;
+GRANT ALL ON public.integracao_soc TO service_role;
+GRANT ALL ON public.integracao_soc_exporta_dados TO service_role;
+
+-- 3. Leitura pela tela (sem segredos) -----------------------------------------
+CREATE OR REPLACE FUNCTION public.get_integracao_soc() RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path = public
+    AS $$
+DECLARE
+    v_unidade uuid := public.get_my_unit();
+    v_config jsonb;
+    v_eds jsonb;
+BEGIN
+    IF v_unidade IS NULL OR NOT COALESCE(public.check_is_admin(), false) THEN
+        RAISE EXCEPTION 'Acesso permitido apenas ao administrador da unidade';
+    END IF;
+
+    SELECT jsonb_build_object(
+        'empresa_principal', c.empresa_principal,
+        'codigo_responsavel', c.codigo_responsavel,
+        'codigo_usuario', c.codigo_usuario,
+        'ws_username', c.ws_username,
+        'ws_url', c.ws_url,
+        'ws_urls', c.ws_urls,
+        'ws_senha_definida', COALESCE(c.ws_senha, '') <> '',
+        'ws_senha_final', CASE WHEN COALESCE(c.ws_senha, '') <> '' THEN right(c.ws_senha, 4) END,
+        'codigo_usuario_agenda', c.codigo_usuario_agenda,
+        'updated_at', c.updated_at
+    )
+    INTO v_config
+    FROM public.integracao_soc c
+    WHERE c.unidade_id = v_unidade;
+
+    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+        'id', e.id,
+        'identificador', e.identificador,
+        'nome', e.nome,
+        'codigo', e.codigo,
+        'chave_definida', COALESCE(e.chave, '') <> '',
+        'chave_final', CASE WHEN COALESCE(e.chave, '') <> '' THEN right(trim(e.chave), 4) END,
+        'ativo', e.ativo,
+        'observacao', e.observacao,
+        'updated_at', e.updated_at
+    ) ORDER BY e.nome), '[]'::jsonb)
+    INTO v_eds
+    FROM public.integracao_soc_exporta_dados e
+    WHERE e.unidade_id = v_unidade;
+
+    RETURN jsonb_build_object('config', v_config, 'exporta_dados', v_eds);
+END;
+$$;
+
+COMMENT ON FUNCTION public.get_integracao_soc() IS 'Configuração do SOC da unidade do admin, sem segredos (só se estão definidos e os 4 últimos caracteres).';
+
+-- 4. Gravação pela tela ---------------------------------------------------------
+-- p_config: { empresa_principal, codigo_responsavel, codigo_usuario, ws_username, ws_url, ws_urls,
+--   ws_senha?, limpar_ws_senha?, codigo_usuario_agenda } (ws_security não é alterado pela tela)
+-- p_exporta_dados: [{ identificador, nome, codigo, chave?, limpar_chave?, ativo, observacao }]
+-- Segredo vazio ou ausente = mantém o atual; limpar_* = apaga.
+-- p_remover: identificadores a excluir.
+CREATE OR REPLACE FUNCTION public.salvar_integracao_soc(
+    p_config jsonb,
+    p_exporta_dados jsonb DEFAULT '[]'::jsonb,
+    p_remover text[] DEFAULT '{}'::text[]
+) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path = public
+    AS $$
+DECLARE
+    v_unidade uuid := public.get_my_unit();
+    v_item jsonb;
+BEGIN
+    IF v_unidade IS NULL OR NOT COALESCE(public.check_is_admin(), false) THEN
+        RAISE EXCEPTION 'Acesso permitido apenas ao administrador da unidade';
+    END IF;
+
+    IF p_config IS NOT NULL THEN
+        INSERT INTO public.integracao_soc AS c (
+            unidade_id, empresa_principal, codigo_responsavel, codigo_usuario, ws_username, ws_url, ws_urls, ws_senha,
+            codigo_usuario_agenda, updated_at, updated_by
+        )
+        VALUES (
+            v_unidade,
+            NULLIF(trim(p_config->>'empresa_principal'), ''),
+            NULLIF(trim(p_config->>'codigo_responsavel'), ''),
+            NULLIF(trim(p_config->>'codigo_usuario'), ''),
+            NULLIF(trim(p_config->>'ws_username'), ''),
+            NULLIF(trim(p_config->>'ws_url'), ''),
+            -- Só textos não vazios; vazio remove a URL.
+            COALESCE((
+                SELECT jsonb_object_agg(k, trim(v))
+                FROM jsonb_each_text(CASE WHEN jsonb_typeof(p_config->'ws_urls') = 'object' THEN p_config->'ws_urls' ELSE '{}'::jsonb END) AS u(k, v)
+                WHERE k ~ '^[a-z0-9_]{2,60}$' AND NULLIF(trim(v), '') IS NOT NULL
+            ), '{}'::jsonb),
+            NULLIF(trim(p_config->>'ws_senha'), ''),
+            NULLIF(trim(p_config->>'codigo_usuario_agenda'), ''),
+            now(),
+            auth.uid()
+        )
+        ON CONFLICT (unidade_id) DO UPDATE SET
+            empresa_principal = EXCLUDED.empresa_principal,
+            codigo_responsavel = EXCLUDED.codigo_responsavel,
+            codigo_usuario = EXCLUDED.codigo_usuario,
+            ws_username = EXCLUDED.ws_username,
+            ws_url = EXCLUDED.ws_url,
+            ws_urls = EXCLUDED.ws_urls,
+            ws_senha = CASE
+                WHEN COALESCE((p_config->>'limpar_ws_senha')::boolean, false) THEN NULL
+                ELSE COALESCE(EXCLUDED.ws_senha, c.ws_senha)
+            END,
+            codigo_usuario_agenda = EXCLUDED.codigo_usuario_agenda,
+            updated_at = now(),
+            updated_by = auth.uid();
+    END IF;
+
+    FOR v_item IN SELECT * FROM jsonb_array_elements(COALESCE(p_exporta_dados, '[]'::jsonb))
+    LOOP
+        IF NULLIF(trim(v_item->>'identificador'), '') IS NULL OR NULLIF(trim(v_item->>'nome'), '') IS NULL THEN
+            RAISE EXCEPTION 'Exporta Dados sem identificador ou nome';
+        END IF;
+
+        INSERT INTO public.integracao_soc_exporta_dados AS e (unidade_id, identificador, nome, codigo, chave, ativo, observacao, updated_at, updated_by)
+        VALUES (
+            v_unidade,
+            lower(trim(v_item->>'identificador')),
+            trim(v_item->>'nome'),
+            NULLIF(trim(v_item->>'codigo'), ''),
+            NULLIF(trim(v_item->>'chave'), ''),
+            COALESCE((v_item->>'ativo')::boolean, true),
+            NULLIF(trim(v_item->>'observacao'), ''),
+            now(),
+            auth.uid()
+        )
+        ON CONFLICT (unidade_id, identificador) DO UPDATE SET
+            nome = EXCLUDED.nome,
+            codigo = EXCLUDED.codigo,
+            chave = CASE
+                WHEN COALESCE((v_item->>'limpar_chave')::boolean, false) THEN NULL
+                ELSE COALESCE(EXCLUDED.chave, e.chave)
+            END,
+            ativo = EXCLUDED.ativo,
+            observacao = EXCLUDED.observacao,
+            updated_at = now(),
+            updated_by = auth.uid();
+    END LOOP;
+
+    IF array_length(p_remover, 1) > 0 THEN
+        DELETE FROM public.integracao_soc_exporta_dados
+        WHERE unidade_id = v_unidade
+          AND identificador = ANY (p_remover);
+    END IF;
+END;
+$$;
+
+COMMENT ON FUNCTION public.salvar_integracao_soc(jsonb, jsonb, text[]) IS 'Grava a configuração do SOC e os Exporta Dados da unidade do admin; segredo vazio mantém o atual.';
+
+REVOKE ALL ON FUNCTION public.get_integracao_soc() FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.salvar_integracao_soc(jsonb, jsonb, text[]) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_integracao_soc() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.salvar_integracao_soc(jsonb, jsonb, text[]) TO authenticated;
+
+--
+-- Agendamentos do SOC (migração 2026-11-27_agendamentos_soc.sql)
+--
+
+-- 1. Agendamentos ---------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.agendamentos (
+    id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
+    unidade_id uuid NOT NULL REFERENCES public.unidades(id) ON DELETE CASCADE,
+    data date NOT NULL,
+    horario time without time zone,
+    codigo_agendamento text,
+    codigo_usuario_agenda text,
+    codigo_empresa text NOT NULL,
+    nome_empresa text,
+    codigo_funcionario text NOT NULL,
+    nome text,
+    cpf text,
+    tipo_compromisso smallint,
+    sequencial_ficha text,
+    atendido_soc boolean,
+    atendimento_id uuid REFERENCES public.atendimentos(id) ON DELETE SET NULL,
+    vinculado_em timestamp with time zone,
+    removido_soc_em timestamp with time zone,
+    primeira_sincronizacao_em timestamp with time zone DEFAULT now() NOT NULL,
+    sincronizado_em timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT agendamentos_unidade_data_funcionario_key UNIQUE (unidade_id, data, codigo_empresa, codigo_funcionario)
+);
+
+CREATE INDEX IF NOT EXISTS agendamentos_unidade_data_idx ON public.agendamentos (unidade_id, data);
+CREATE INDEX IF NOT EXISTS agendamentos_unidade_cpf_idx ON public.agendamentos (unidade_id, cpf);
+CREATE INDEX IF NOT EXISTS agendamentos_atendimento_idx ON public.agendamentos (atendimento_id);
+
+COMMENT ON TABLE public.agendamentos IS 'Agendados do SOC por dia (sincronizados pelo n8n). Base da lista de agendados, da ordem das filas e dos indicadores de comparecimento e encaixe.';
+COMMENT ON COLUMN public.agendamentos.horario IS 'Horário agendado (ED2). Nulo quando o agendamento foi feito no próprio dia (o ED2 só traz agendamentos futuros).';
+COMMENT ON COLUMN public.agendamentos.cpf IS 'CPF só com dígitos; usado para ligar o agendamento ao atendimento.';
+COMMENT ON COLUMN public.agendamentos.tipo_compromisso IS 'TIPOCOMPROMISSO do SOC: 1 Periódico, 2 Admissional, 3 Retorno ao Trabalho, 4 Mudança de Função, 5 Demissional, 6 Monitoramento Pontual, 10 Consulta, 12 Acidente, 13 Licença Médica, 14 Enfermagem, 20 Terceiros, 30 Consulta Assistencial, 50 Odontológica, >900 Ficha Personalizada.';
+COMMENT ON COLUMN public.agendamentos.atendimento_id IS 'Atendimento do sistema ligado a este agendamento (preenchido na recepção, fase 2).';
+COMMENT ON COLUMN public.agendamentos.removido_soc_em IS 'O agendamento deixou de vir do SOC (cancelado ou remarcado). Nulo enquanto continuar na agenda.';
+COMMENT ON COLUMN public.agendamentos.primeira_sincronizacao_em IS 'Quando o agendamento apareceu pela primeira vez (antecedência do agendamento nos indicadores).';
+
+-- RLS: leitura da própria unidade; gravação só pela função (n8n).
+ALTER TABLE public.agendamentos ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS agendamentos_leitura_unidade ON public.agendamentos;
+CREATE POLICY agendamentos_leitura_unidade ON public.agendamentos
+    FOR SELECT TO authenticated
+    USING (unidade_id = public.get_my_unit());
+
+REVOKE ALL ON public.agendamentos FROM anon;
+GRANT SELECT ON public.agendamentos TO authenticated;
+GRANT ALL ON public.agendamentos TO service_role;
+
+-- 2. Sincronização ------------------------------------------------------------
+-- p_itens: [{ data, horario, codigo_agendamento, codigo_usuario_agenda,
+--   codigo_empresa, nome_empresa, codigo_funcionario, nome, cpf,
+--   tipo_compromisso, sequencial_ficha, atendido_soc }]
+-- Horário, código do agendamento e sequencial já conhecidos não são apagados
+-- quando vêm vazios (o ED2 deixa de trazer o agendamento no próprio dia).
+-- Agendamento do período que não veio mais e ainda não foi atendido recebe
+-- removido_soc_em; se voltar, o campo é limpo.
+CREATE OR REPLACE FUNCTION public.sincronizar_agendamentos(
+    p_unidade_id uuid,
+    p_data_inicio date,
+    p_data_fim date,
+    p_itens jsonb
+) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path = public
+    AS $$
+DECLARE
+    v_gravados integer := 0;
+    v_removidos integer := 0;
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM public.unidades WHERE id = p_unidade_id) THEN
+        RAISE EXCEPTION 'Unidade não encontrada';
+    END IF;
+    IF p_data_inicio IS NULL OR p_data_fim IS NULL OR p_data_fim < p_data_inicio THEN
+        RAISE EXCEPTION 'Período inválido';
+    END IF;
+
+    WITH itens AS (
+        SELECT DISTINCT ON (x.data, x.codigo_empresa, x.codigo_funcionario)
+            x.data,
+            x.horario,
+            NULLIF(TRIM(x.codigo_agendamento), '') AS codigo_agendamento,
+            NULLIF(TRIM(x.codigo_usuario_agenda), '') AS codigo_usuario_agenda,
+            TRIM(x.codigo_empresa) AS codigo_empresa,
+            NULLIF(TRIM(x.nome_empresa), '') AS nome_empresa,
+            TRIM(x.codigo_funcionario) AS codigo_funcionario,
+            NULLIF(TRIM(x.nome), '') AS nome,
+            NULLIF(regexp_replace(COALESCE(x.cpf, ''), '\D', '', 'g'), '') AS cpf,
+            x.tipo_compromisso,
+            NULLIF(TRIM(x.sequencial_ficha), '') AS sequencial_ficha,
+            x.atendido_soc
+        FROM jsonb_to_recordset(COALESCE(p_itens, '[]'::jsonb)) AS x(
+            data date,
+            horario time,
+            codigo_agendamento text,
+            codigo_usuario_agenda text,
+            codigo_empresa text,
+            nome_empresa text,
+            codigo_funcionario text,
+            nome text,
+            cpf text,
+            tipo_compromisso smallint,
+            sequencial_ficha text,
+            atendido_soc boolean
+        )
+        WHERE x.data BETWEEN p_data_inicio AND p_data_fim
+          AND NULLIF(TRIM(x.codigo_empresa), '') IS NOT NULL
+          AND NULLIF(TRIM(x.codigo_funcionario), '') IS NOT NULL
+        ORDER BY x.data, x.codigo_empresa, x.codigo_funcionario, x.horario NULLS LAST
+    ),
+    gravados AS (
+        INSERT INTO public.agendamentos AS a (
+            unidade_id, data, horario, codigo_agendamento, codigo_usuario_agenda,
+            codigo_empresa, nome_empresa, codigo_funcionario, nome, cpf,
+            tipo_compromisso, sequencial_ficha, atendido_soc
+        )
+        SELECT
+            p_unidade_id, i.data, i.horario, i.codigo_agendamento, i.codigo_usuario_agenda,
+            i.codigo_empresa, i.nome_empresa, i.codigo_funcionario, i.nome, i.cpf,
+            i.tipo_compromisso, i.sequencial_ficha, i.atendido_soc
+        FROM itens i
+        ON CONFLICT (unidade_id, data, codigo_empresa, codigo_funcionario) DO UPDATE SET
+            horario = COALESCE(EXCLUDED.horario, a.horario),
+            codigo_agendamento = COALESCE(EXCLUDED.codigo_agendamento, a.codigo_agendamento),
+            codigo_usuario_agenda = COALESCE(EXCLUDED.codigo_usuario_agenda, a.codigo_usuario_agenda),
+            nome_empresa = COALESCE(EXCLUDED.nome_empresa, a.nome_empresa),
+            nome = COALESCE(EXCLUDED.nome, a.nome),
+            cpf = COALESCE(EXCLUDED.cpf, a.cpf),
+            tipo_compromisso = COALESCE(EXCLUDED.tipo_compromisso, a.tipo_compromisso),
+            sequencial_ficha = COALESCE(EXCLUDED.sequencial_ficha, a.sequencial_ficha),
+            atendido_soc = COALESCE(EXCLUDED.atendido_soc, a.atendido_soc),
+            removido_soc_em = NULL,
+            sincronizado_em = now()
+        RETURNING 1
+    )
+    SELECT count(*) INTO v_gravados FROM gravados;
+
+    UPDATE public.agendamentos a
+    SET removido_soc_em = now()
+    WHERE a.unidade_id = p_unidade_id
+      AND a.data BETWEEN p_data_inicio AND p_data_fim
+      AND a.removido_soc_em IS NULL
+      AND a.atendimento_id IS NULL
+      AND NOT EXISTS (
+          SELECT 1
+          FROM jsonb_to_recordset(COALESCE(p_itens, '[]'::jsonb)) AS x(data date, codigo_empresa text, codigo_funcionario text)
+          WHERE x.data = a.data
+            AND TRIM(x.codigo_empresa) = a.codigo_empresa
+            AND TRIM(x.codigo_funcionario) = a.codigo_funcionario
+      );
+    GET DIAGNOSTICS v_removidos = ROW_COUNT;
+
+    RETURN jsonb_build_object('gravados', v_gravados, 'removidos', v_removidos);
+END;
+$$;
+
+COMMENT ON FUNCTION public.sincronizar_agendamentos(uuid, date, date, jsonb) IS 'Grava os agendados do SOC de um período (chamada pelo n8n com service_role).';
+
+REVOKE ALL ON FUNCTION public.sincronizar_agendamentos(uuid, date, date, jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.sincronizar_agendamentos(uuid, date, date, jsonb) TO service_role;
+
+-- 3. Log das sincronizações (entrada do n8n) ------------------------------------
+-- situacao: 'ok' (gravado), 'falha_consulta' (o SOC falhou para a unidade; nada
+-- gravado), 'erro' (falha ao gravar; ver erro).
+CREATE TABLE IF NOT EXISTS public.agendamentos_sincronizacoes (
+    id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
+    unidade_id uuid NOT NULL REFERENCES public.unidades(id) ON DELETE CASCADE,
+    data_inicio date,
+    data_fim date,
+    itens jsonb,
+    quantidade integer,
+    resumo jsonb,
+    erros jsonb,
+    resultado jsonb,
+    situacao text,
+    erro text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS agendamentos_sincronizacoes_unidade_idx
+    ON public.agendamentos_sincronizacoes (unidade_id, created_at DESC);
+
+COMMENT ON TABLE public.agendamentos_sincronizacoes IS 'Execuções da sincronização de agendamentos (n8n). itens é processado pelo trigger e descartado.';
+
+DROP TRIGGER IF EXISTS tr_processar_sincronizacao_agendamentos ON public.agendamentos_sincronizacoes;
+CREATE TRIGGER tr_processar_sincronizacao_agendamentos
+    BEFORE INSERT ON public.agendamentos_sincronizacoes
+    FOR EACH ROW EXECUTE FUNCTION public.fn_processar_sincronizacao_agendamentos();
+
+ALTER TABLE public.agendamentos_sincronizacoes ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS agendamentos_sincronizacoes_leitura_admin ON public.agendamentos_sincronizacoes;
+CREATE POLICY agendamentos_sincronizacoes_leitura_admin ON public.agendamentos_sincronizacoes
+    FOR SELECT TO authenticated
+    USING (unidade_id = public.get_my_unit() AND COALESCE(public.check_is_admin(), false));
+
+REVOKE ALL ON public.agendamentos_sincronizacoes FROM anon, authenticated;
+GRANT SELECT ON public.agendamentos_sincronizacoes TO authenticated;
+GRANT ALL ON public.agendamentos_sincronizacoes TO service_role;
+
+--
+-- Vínculo atendimento x agendamento (migração 2026-11-27_agendamentos_vinculo.sql)
+--
+
+-- 1. Liga um atendimento ao agendamento correspondente ---------------------------
+CREATE OR REPLACE FUNCTION public.vincular_agendamento_atendimento(p_atendimento_id uuid) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path = public
+    AS $$
+DECLARE
+    v_at public.atendimentos%ROWTYPE;
+    v_pac public.pacientes%ROWTYPE;
+    v_data date;
+    v_seq text;
+    v_cpf text;
+    v_agendamento uuid;
+BEGIN
+    SELECT * INTO v_at FROM public.atendimentos WHERE id = p_atendimento_id;
+    IF NOT FOUND OR v_at.unidade_id IS NULL THEN
+        RETURN NULL;
+    END IF;
+
+    -- Já ligado: mantém.
+    SELECT id INTO v_agendamento FROM public.agendamentos WHERE atendimento_id = p_atendimento_id LIMIT 1;
+    IF v_agendamento IS NOT NULL THEN
+        RETURN v_agendamento;
+    END IF;
+
+    IF v_at.paciente_id IS NOT NULL THEN
+        SELECT * INTO v_pac FROM public.pacientes WHERE id = v_at.paciente_id;
+    END IF;
+
+    v_data := (COALESCE(v_at.created_at, now()) AT TIME ZONE 'America/Sao_Paulo')::date;
+    v_seq := NULLIF(trim(COALESCE(v_at.ficha_sequencial, '')), '');
+    v_cpf := NULLIF(regexp_replace(COALESCE(v_pac.cpf, ''), '\D', '', 'g'), '');
+
+    IF v_seq IS NULL AND v_cpf IS NULL AND v_pac.codigo_funcionario IS NULL THEN
+        RETURN NULL;
+    END IF;
+
+    SELECT a.id INTO v_agendamento
+    FROM public.agendamentos a
+    WHERE a.unidade_id = v_at.unidade_id
+      AND a.data = v_data
+      AND a.atendimento_id IS NULL
+      AND (
+          (v_seq IS NOT NULL AND a.sequencial_ficha = v_seq)
+          OR (v_cpf IS NOT NULL AND a.cpf = v_cpf)
+          OR (
+              NULLIF(trim(COALESCE(v_pac.codigo_funcionario, '')), '') IS NOT NULL
+              AND a.codigo_funcionario = trim(v_pac.codigo_funcionario)
+              AND a.codigo_empresa = trim(COALESCE(v_pac.codigo_empresa, ''))
+          )
+      )
+    ORDER BY
+        COALESCE(v_seq IS NOT NULL AND a.sequencial_ficha = v_seq, false) DESC,
+        COALESCE(v_cpf IS NOT NULL AND a.cpf = v_cpf, false) DESC,
+        a.removido_soc_em NULLS FIRST,
+        a.horario NULLS LAST
+    LIMIT 1;
+
+    IF v_agendamento IS NOT NULL THEN
+        UPDATE public.agendamentos
+        SET atendimento_id = p_atendimento_id,
+            vinculado_em = now()
+        WHERE id = v_agendamento;
+    END IF;
+
+    RETURN v_agendamento;
+END;
+$$;
+
+COMMENT ON FUNCTION public.vincular_agendamento_atendimento(uuid) IS 'Liga o atendimento ao agendamento do SOC do mesmo dia (sequencial, CPF ou empresa + funcionário). Devolve o agendamento ligado.';
+
+REVOKE ALL ON FUNCTION public.vincular_agendamento_atendimento(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.vincular_agendamento_atendimento(uuid) TO service_role;
+
+-- 2. Liga os agendamentos pendentes de um período -----------------------------
+CREATE OR REPLACE FUNCTION public.vincular_agendamentos_pendentes(p_unidade_id uuid, p_data_inicio date, p_data_fim date) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path = public
+    AS $$
+DECLARE
+    v_at record;
+    v_qtd integer := 0;
+BEGIN
+    FOR v_at IN
+        SELECT at.id
+        FROM public.atendimentos at
+        WHERE at.unidade_id = p_unidade_id
+          AND (at.created_at AT TIME ZONE 'America/Sao_Paulo')::date BETWEEN p_data_inicio AND p_data_fim
+          AND NOT EXISTS (SELECT 1 FROM public.agendamentos a WHERE a.atendimento_id = at.id)
+        ORDER BY at.created_at
+    LOOP
+        IF public.vincular_agendamento_atendimento(v_at.id) IS NOT NULL THEN
+            v_qtd := v_qtd + 1;
+        END IF;
+    END LOOP;
+    RETURN v_qtd;
+END;
+$$;
+
+COMMENT ON FUNCTION public.vincular_agendamentos_pendentes(uuid, date, date) IS 'Liga aos agendamentos os atendimentos do período ainda sem vínculo. Devolve quantos foram ligados.';
+
+REVOKE ALL ON FUNCTION public.vincular_agendamentos_pendentes(uuid, date, date) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.vincular_agendamentos_pendentes(uuid, date, date) TO service_role;
+
+-- 3. Ao salvar a ficha --------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.fn_vincular_agendamento_atendimento() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path = public
+    AS $$
+BEGIN
+    -- Falha no vínculo nunca impede gravar a ficha.
+    BEGIN
+        PERFORM public.vincular_agendamento_atendimento(NEW.id);
+    EXCEPTION WHEN OTHERS THEN
+        RAISE WARNING 'Vínculo com agendamento não feito (%): %', NEW.id, SQLERRM;
+    END;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS tr_vincular_agendamento_atendimento ON public.atendimentos;
+CREATE TRIGGER tr_vincular_agendamento_atendimento
+    AFTER INSERT OR UPDATE OF paciente_id, ficha_sequencial ON public.atendimentos
+    FOR EACH ROW EXECUTE FUNCTION public.fn_vincular_agendamento_atendimento();
+
+-- 4. A cada sincronização do n8n ----------------------------------------------------
+CREATE OR REPLACE FUNCTION public.fn_processar_sincronizacao_agendamentos() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path = public
+    AS $$
+DECLARE
+    v_itens jsonb := NEW.itens;
+    v_vinculados integer;
+BEGIN
+    -- O node do Supabase pode mandar a lista como texto JSON.
+    IF v_itens IS NOT NULL AND jsonb_typeof(v_itens) = 'string' THEN
+        v_itens := (v_itens #>> '{}')::jsonb;
+    END IF;
+
+    IF v_itens IS NULL OR jsonb_typeof(v_itens) <> 'array' OR NEW.data_inicio IS NULL OR NEW.data_fim IS NULL THEN
+        NEW.situacao := COALESCE(NEW.situacao, 'falha_consulta');
+    ELSE
+        BEGIN
+            NEW.quantidade := jsonb_array_length(v_itens);
+            NEW.resultado := public.sincronizar_agendamentos(NEW.unidade_id, NEW.data_inicio, NEW.data_fim, v_itens);
+            -- Agendamento que chegou depois do paciente: liga agora.
+            v_vinculados := public.vincular_agendamentos_pendentes(NEW.unidade_id, NEW.data_inicio, NEW.data_fim);
+            NEW.resultado := NEW.resultado || jsonb_build_object('vinculados', v_vinculados);
+            NEW.situacao := 'ok';
+        EXCEPTION WHEN OTHERS THEN
+            NEW.situacao := 'erro';
+            NEW.erro := SQLERRM;
+        END;
+    END IF;
+
+    NEW.itens := NULL;
+
+    -- Guarda 90 dias de histórico.
+    DELETE FROM public.agendamentos_sincronizacoes
+    WHERE unidade_id = NEW.unidade_id
+      AND created_at < now() - interval '90 days';
+
+    RETURN NEW;
+END;
+$$;
+
+
+
+
 
 --
 -- Especialidade vinculada (docs/sql/migracoes/2026-11-18_especialidade_vinculada.sql)

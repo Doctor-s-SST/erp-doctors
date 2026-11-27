@@ -84,6 +84,7 @@ const navItems: NavItem[] = [
     subItems: [
       { name: "Grupos de Especialidades", path: "/configuracoes/grupos-especialidades", roles: ["admin", "operador"] },
       { name: "Definições do Painel", path: "/configuracoes/painel", roles: ["admin"] },
+      { name: "Integrações", path: "/configuracoes/integracoes", roles: ["admin"] },
       { name: "Salas e Profissionais", path: "/configuracoes/salas-profissionais", roles: ["admin"] },
       { name: "Unidade", path: "/configuracoes/unidade", roles: ["admin"] },
       { name: "Usuários", path: "/configuracoes/users", roles: ["admin"] },
