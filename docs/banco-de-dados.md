@@ -18,6 +18,9 @@ PostgreSQL do Supabase, hospedado na VPS. As tabelas da aplicação ficam no sch
 | | `profissionais`, `profissional_especialidades` | profissionais, jornada e especialidades |
 | Grupos | `grupos_especialidades`, `grupo_especialidade_itens` | grupos de filtro e papel de cada item (obrigatória, opcional, excludente); o grupo guarda também `exibir_fila`, `exibir_dashboard` e `especialidade_fila_id` (ver [filas.md](filas.md#grupos-de-especialidades)) |
 | Atendimento | `pacientes` | cadastro importado da ficha do SOC |
+| Integrações | `integracao_soc`, `integracao_soc_exporta_dados` | configuração do web service do SOC (`empresa_principal`, `codigo_responsavel`, `codigo_usuario`, `ws_username`, `ws_url`, `ws_urls` (WSDL dos demais web services), `ws_senha`, `ws_security` (padrão ligado, fora da tela), `codigo_usuario_agenda`) e código/chave de cada Exporta Dados por unidade; sem acesso direto para usuários (tela usa `get_integracao_soc`/`salvar_integracao_soc`, que não devolvem segredos); o n8n lê com service_role |
+| | `agendamentos_sincronizacoes` | log das execuções da sincronização de agendamentos; o insert do n8n dispara a gravação (trigger); leitura do admin da unidade; guarda 90 dias |
+| | `agendamentos` | agendados do SOC por dia (horário, empresa, funcionário, CPF, tipo, sequencial da ficha), gravados pelo n8n com `sincronizar_agendamentos`; `atendimento_id` liga ao atendimento; leitura da própria unidade. Ver [agendamentos.md](agendamentos.md) |
 | | `atendimentos` | senha e ciclo do paciente na unidade; `finaliza_recepcao_em` guarda o fim do contador de finalização da recepção |
 | | `atendimento_exames` | andamento de cada etapa nas especialidades |
 | | `chamadas_bloqueio` | trava de chamada: uma sala/profissional por etapa |

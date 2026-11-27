@@ -9,6 +9,7 @@ O módulo reúne configurações administrativas vinculadas à unidade do usuár
 - `painel/`: comportamento de voz e localização usado no painel de chamadas.
 - `salas-profissionais/`: salas, vínculos com especialidades, profissionais e jornadas.
 - `grupos-especialidades/`: grupos usados nos filtros de filas e relatórios.
+- `integracoes/`: web service do SOC e códigos/chaves dos Exporta Dados (lidos pelo n8n). Segredos só pelas funções `get_integracao_soc` e `salvar_integracao_soc`; a tela nunca recebe a chave.
 - `types.ts`: contratos compartilhados das entidades de configuração.
 - `utils.ts`: filtros, ordenação, mensagens e metadados de papéis.
 - `unidade/utils.ts`: validação de logos e formatação de CNPJ/CEP.

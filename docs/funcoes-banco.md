@@ -63,6 +63,17 @@ O painel de grupos do card da especialidade (em qualquer visão) não usa funç�
 | `processar_finalizacoes_vencidas(unidade)` | Chamada a cada 15 s por qualquer tela aberta do sistema (cabeçalho) e na hora pela fila e pela recepção. Recusa unidade diferente da do usuário. Conclui as etapas com `atendimento_exames.finaliza_em` vencido (via `finalizar_especialidade_novo`) e as recepções `EM_RECEPCAO` com `atendimentos.finaliza_recepcao_em` vencido (via `finalizar_recepcao_novo`, uma única vez por atendimento). Se nenhuma tela estiver aberta, conclui quando alguém abrir o sistema |
 | `formatar_duracao_alerta(segundos)` | Formata tempos das mensagens dos alertas como "3 min 36s" |
 
+### Integrações e agendamentos do SOC (n8n `sincronizar_agendamentos_soc`)
+
+| Função | O que faz |
+|---|---|
+| `get_integracao_soc()` | Admin da unidade (`check_is_admin`, `get_my_unit`). Devolve a configuração do SOC e os Exporta Dados sem segredos: só se a senha/chave está definida e os 4 últimos caracteres |
+| `salvar_integracao_soc(config, exporta_dados, remover)` | Admin da unidade. Upsert da configuração e dos Exporta Dados; senha/chave vazia mantém a atual, `limpar_*` apaga; `remover` exclui pelos identificadores |
+| `fn_processar_sincronizacao_agendamentos()` | Trigger `BEFORE INSERT` em `agendamentos_sincronizacoes`: chama `sincronizar_agendamentos` com a lista recebida do n8n, grava `situacao`/`resultado`/`erro`, descarta a lista e apaga registros com mais de 90 dias |
+| `vincular_agendamento_atendimento(atendimento)` | Liga o atendimento ao agendamento do mesmo dia e unidade: mesmo sequencial, senão CPF, senão empresa + funcionário. Chamada pelo trigger `tr_vincular_agendamento_atendimento` (`atendimentos`, ao inserir ou mudar `paciente_id`/`ficha_sequencial`); falha não impede gravar a ficha |
+| `vincular_agendamentos_pendentes(unidade, inicio, fim)` | Liga os atendimentos do período ainda sem agendamento; chamada a cada sincronização (resultado ganha `vinculados`) |
+| `sincronizar_agendamentos(unidade, inicio, fim, itens)` | Chamada pelo trigger acima (ou pelo service_role). Grava os agendados do período em `agendamentos` (upsert por unidade, data, empresa e funcionário), sem apagar horário, código e sequencial já conhecidos; marca `removido_soc_em` em quem não veio mais e ainda não tem atendimento. Devolve `{ gravados, removidos }`. Ver [agendamentos.md](agendamentos.md) |
+
 ## Funções usadas pelo aplicativo Java e pelo distribuidor SSE
 
 | Função | Quem usa | O que faz |

@@ -74,6 +74,7 @@ As rotas `/api` recebem os dados, validam a sessão, impõem a unidade e chamam 
 | Recepção | `extracao_aso_sequencial`, `extracao_aso_pdf` |
 | ASO | `consulta_asos_ged`, `altera_socged_asos`, `download_ged`, `identificar_exames` |
 | Agendados | `busca_ged_asos`, `limpa_asos_enviados_banco` |
+| Agendamentos do SOC | `sincronizar_agendamentos_soc` (agendado 7h, 12h e 17h; lê códigos e chaves de Configurações > Integrações e grava em `agendamentos_sincronizacoes`, cujo trigger atualiza `agendamentos`; ver [agendamentos.md](agendamentos.md)) |
 | Relatórios e indicadores | `relatorio_atendimento_geral_erp`, `relatorio_exames_pendentes`, `indicadores_mensais`, indicadores por especialidade |
 | Jobs | `consultar_relatorio` |
 

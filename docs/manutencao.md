@@ -6,7 +6,7 @@
 |---|---|
 | menu e papéis | `src/layout/AppSidebar.tsx`, `src/lib/proxy-supabase.ts` |
 | sessão em APIs | `src/lib/api-auth.ts`, `src/lib/server-supabase.ts` |
-| recepção/emissão | `sistema-filas/senhas-recepcao/page.tsx` |
+| recepção/emissão | `sistema-filas/senhas-recepcao/page.tsx`; agendados do dia e busca de agendado em `components/recepcao/AgendadosDoDia.tsx`, `components/recepcao/BuscaAgendado.tsx`, `lib/agendamentos.ts` |
 | lista de filas | `sistema-filas/filas/page.tsx`, `docs/filas.md` |
 | atendimento | `sistema-filas/filas/[id]/page.tsx`, `docs/filas.md` |
 | sessão de sala/profissional | `src/lib/fila-session.ts` |
@@ -18,6 +18,8 @@
 | Fluxo de salas e profissionais | `components/configuracoes/FluxoSalasProfissionais.tsx`, `configuracoes/salas-profissionais/page.tsx` |
 | Kanban e Fluxo de especialidades | `components/kanban/KanbanExames.tsx`, `components/kanban/FluxoEspecialidades.tsx` (pacote `@xyflow/react`), `components/kanban/DialogRecepcaoFluxo.tsx`; importação de exames por planilha em `components/kanban/ImportarExames.tsx` (`xlsx-js-style`) |
 | gestão de produtividade (antiga gestão de tempo) | `dashboards/atendimento/components/GestaoTempoDashboard.tsx`, `lib/gestao-tempo.ts`, `lib/exportar-gestao-tempo.ts`; meta no `components/kanban/KanbanExames.tsx` |
+| integrações (SOC) | `configuracoes/integracoes/page.tsx`, funções `get_integracao_soc` e `salvar_integracao_soc` |
+| agendamentos do SOC | fluxo n8n `docs/n8n/sincronizar_agendamentos_soc.json`, tabelas `agendamentos` e `agendamentos_sincronizacoes`, função `sincronizar_agendamentos`, `docs/agendamentos.md` |
 | relatórios | `sistema-filas/relatorios/*`, `src/app/api/relatorio*` |
 | indicadores | `analise-dados/*`, `api/indicadores*` |
 | ASO | `aso/*`, `lib/aso-assinatura.ts`, `api/enviar-asos-concluidos` |

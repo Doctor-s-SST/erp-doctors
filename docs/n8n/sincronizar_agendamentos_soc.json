@@ -1,0 +1,662 @@
+{
+  "name": "sincronizar_agendamentos_soc",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Sincronizar agendamentos do SOC\n\nGrava os agendados de hoje até o próximo dia útil (ED1), com horário (ED2, só agendamentos futuros: por isso roda no dia anterior) e sequencial da ficha (Pedido de Exame).\n\nConfiguração no banco: **Configurações > Integrações** do sistema (empresa principal, username e chave de acesso do WS-Security, URL e código/chave de cada Exporta Dados).\n\nED1 primeiro (Loop consultas); depois Pedido de Exame por empresa (o parâmetro empresa é o código da empresa cliente) e ED2 por funcionário (Loop por empresa). Cada chamada ao SOC passa por **Prepara segurança → Crypto (SHA1) → Monta SOAP → HTTP**, uma por vez (Loop com lote 1): o SOC não aceita paralelismo e o timestamp do WS-Security vale 1 minuto.\n\n**Antes de ativar:** escolha a credencial do Supabase (service_role) nos quatro nodes do Supabase.",
+        "height": 440,
+        "width": 560,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1500,
+        -560
+      ],
+      "id": "93203f82-9fad-4fd9-a618-152ffa72bf3f",
+      "name": "Leia antes"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 7,12,17 * * 1-6"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1500,
+        0
+      ],
+      "id": "2bc8e047-1c57-4849-b0dd-9e747abcdaea",
+      "name": "Agendado (7h, 12h e 17h, seg–sáb)"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1500,
+        180
+      ],
+      "id": "3f7486a0-3cbc-4440-925c-a001bd4ab5fe",
+      "name": "Executar manualmente"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "integracao_soc",
+        "returnAll": true,
+        "filterType": "string",
+        "filterString": "codigo_usuario_agenda=not.is.null"
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -1260,
+        80
+      ],
+      "id": "8547d00d-ec63-460c-8aae-98640e29015f",
+      "name": "Integração SOC"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "integracao_soc_exporta_dados",
+        "returnAll": true,
+        "filterType": "string",
+        "filterString": "ativo=eq.true"
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -1040,
+        80
+      ],
+      "id": "78751e18-f748-4217-89c9-70ce1532d24b",
+      "name": "Exporta Dados",
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "agendamentos",
+        "returnAll": true,
+        "filterType": "string",
+        "filterString": "=horario=not.is.null&data=gte.{{ $now.setZone('America/Sao_Paulo').toFormat('yyyy-MM-dd') }}"
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -820,
+        80
+      ],
+      "id": "1220da5f-e5e9-4235-a319-5bc954b7a657",
+      "name": "Agendamentos conhecidos",
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Uma consulta por unidade ao ED1 (agendados da agenda). Pedido de Exame e ED2\n// dependem do ED1 e são montados depois, em \"Monta consultas por empresa\".\n// Período: de hoje até o próximo dia útil (na sexta, até segunda).\nconst DIAS_UTEIS_A_FRENTE = 1;\n\nconst FUSO = 'America/Sao_Paulo';\nconst hojeIso = () => new Intl.DateTimeFormat('en-CA', { timeZone: FUSO, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());\nconst paraData = (iso) => { const [a, m, d] = iso.split('-').map(Number); return new Date(Date.UTC(a, m - 1, d)); };\nconst somarDias = (iso, n) => { const d = paraData(iso); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };\nconst br = (iso) => { const [a, m, d] = iso.split('-'); return `${d}/${m}/${a}`; };\n\nconst hoje = hojeIso();\nlet fim = hoje;\nfor (let uteis = 0; uteis < DIAS_UTEIS_A_FRENTE;) {\n    fim = somarDias(fim, 1);\n    const ds = paraData(fim).getUTCDay();\n    if (ds !== 0 && ds !== 6) uteis++;\n}\n\nconst integracoes = $('Integração SOC').all().map((i) => i.json).filter((u) => u && u.unidade_id && u.codigo_usuario_agenda);\nconst exportaDados = $('Exporta Dados').all().map((i) => i.json).filter((e) => e && e.unidade_id && e.ativo !== false);\n\nconst saida = [];\nfor (const u of integracoes) {\n    const ed = (identificador) => exportaDados.find((e) => e.unidade_id === u.unidade_id && e.identificador === identificador);\n    const base = {\n        unidade_id: u.unidade_id,\n        data_inicio: hoje,\n        data_fim: fim,\n        empresa_principal: u.empresa_principal,\n        ws_url: u.ws_url,\n        ws_username: u.ws_username,\n        ws_senha: u.ws_senha,\n        ws_security: u.ws_security,\n    };\n\n    const ed1 = ed('agendados_agenda');\n    if (ed1) {\n        saida.push({\n            json: {\n                ...base,\n                etapa: 'ED1',\n                ed_codigo: ed1.codigo,\n                ed_chave: ed1.chave,\n                parametros: {\n                    tipoSaida: 'xml', // o ED1 não aceita json (só html, txt, csv e xml)\n                    codigoUsuarioAgenda: String(u.codigo_usuario_agenda),\n                    dataInicial: br(hoje),\n                    dataFinal: br(fim),\n                },\n            },\n        });\n    }\n}\n\n// Sem ED1 configurado em nenhuma unidade: ainda grava a falha no log.\nif (!saida.length) return [{ json: { sem_consultas: true } }];\nreturn saida;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -600,
+        80
+      ],
+      "id": "04326cdc-0844-4ea7-bb80-f06161303405",
+      "name": "Monta consultas iniciais"
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -380,
+        80
+      ],
+      "id": "17ad42cb-8e35-4f98-8860-65087cbf2cae",
+      "name": "Loop consultas"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Dados do WS-Security, gerados logo antes de cada chamada (o timestamp vale 1 minuto).\n// PasswordDigest = Base64(SHA1(nonce + created + chave de acesso)); o SHA1 é feito\n// no node Crypto a seguir, a partir do binário digestInput.\nreturn $input.all().map((item) => {\n    const j = item.json;\n\n    const nonceBytes = Buffer.from(Array.from({ length: 16 }, () => Math.floor(Math.random() * 256)));\n    const agora = new Date();\n    const tokenCreated = agora.toISOString();\n    const timestampCreated = tokenCreated.replace(/\\.\\d{3}Z$/, 'Z');\n    const expires = new Date(agora.getTime() + 60000).toISOString().replace(/\\.\\d{3}Z$/, 'Z');\n    const wsId = Math.random().toString(36).substring(2, 18).toUpperCase();\n\n    const digestInput = Buffer.concat([\n        nonceBytes,\n        Buffer.from(tokenCreated, 'utf8'),\n        Buffer.from(String(j.ws_senha ?? '').trim(), 'utf8'),\n    ]);\n\n    return {\n        json: {\n            ...j,\n            nonce: nonceBytes.toString('base64'),\n            tokenCreated,\n            timestampCreated,\n            expires,\n            wsId,\n        },\n        binary: {\n            digestInput: {\n                data: digestInput.toString('base64'),\n                mimeType: 'application/octet-stream',\n                fileName: 'digest-input.bin',\n            },\n        },\n    };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -160,
+        260
+      ],
+      "id": "5d8a63c6-b376-4d10-968d-83696fc660b0",
+      "name": "Prepara segurança"
+    },
+    {
+      "parameters": {
+        "binaryData": true,
+        "binaryPropertyName": "digestInput",
+        "type": "SHA1",
+        "encoding": "base64"
+      },
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [
+        60,
+        260
+      ],
+      "id": "670c3b64-03ba-4db8-9cf5-94fc2273e06f",
+      "name": "Crypto"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Envelope SOAP do Exporta Dados com o cabeçalho WS-Security.\n// $json.data = PasswordDigest calculado pelo node Crypto.\n// Segredos (chave de acesso e chave do ED) não seguem para os próximos nodes.\nconst escaparXml = (t) => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\n\nreturn $input.all().map((item) => {\n    const {\n        ws_senha, ed_chave, nonce, tokenCreated, timestampCreated, expires, wsId, data: passwordDigest,\n        ...meta\n    } = item.json;\n\n    let erro_config = null;\n    if (!meta.ws_url) erro_config = 'URL do web service não informada em Integrações';\n    else if (!meta.ed_codigo || !ed_chave) erro_config = 'Exporta Dados sem código ou chave em Integrações';\n    else if (meta.ws_security !== false && (!meta.ws_username || !ws_senha)) erro_config = 'Informe o username e a chave de acesso em Integrações';\n\n    const cabecalho = meta.ws_security === false\n        ? '<soapenv:Header/>'\n        : '<soapenv:Header>'\n            + '<wsse:Security soapenv:mustUnderstand=\"1\" xmlns:wsse=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd\" xmlns:wsu=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd\">'\n            + `<wsu:Timestamp wsu:Id=\"TS-${wsId}\"><wsu:Created>${timestampCreated}</wsu:Created><wsu:Expires>${expires}</wsu:Expires></wsu:Timestamp>`\n            + `<wsse:UsernameToken wsu:Id=\"UsernameToken-${wsId}\">`\n            + `<wsse:Username>${escaparXml(String(meta.ws_username ?? '').trim())}</wsse:Username>`\n            + `<wsse:Password Type=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordDigest\">${passwordDigest}</wsse:Password>`\n            + `<wsse:Nonce EncodingType=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-soap-message-security-1.0#Base64Binary\">${nonce}</wsse:Nonce>`\n            + `<wsu:Created>${tokenCreated}</wsu:Created>`\n            + '</wsse:UsernameToken></wsse:Security></soapenv:Header>';\n\n    const parametros = JSON.stringify({\n        empresa: String(meta.empresa_principal ?? ''),\n        codigo: String(meta.ed_codigo ?? '').trim(),\n        chave: String(ed_chave ?? '').trim(),\n        tipoSaida: 'json',\n        ...(meta.parametros || {}),\n    });\n\n    const soapXml = '<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:ser=\"http://services.soc.age.com/\">'\n        + cabecalho\n        + '<soapenv:Body><ser:exportaDadosWs><arg0>'\n        + `<parametros>${escaparXml(parametros)}</parametros>`\n        + '</arg0></ser:exportaDadosWs></soapenv:Body></soapenv:Envelope>';\n\n    return {\n        json: {\n            ...meta,\n            erro_config,\n            // Com erro de configuração, a URL vazia faz o HTTP falhar e a leitura registra o motivo.\n            ws_url: erro_config ? '' : String(meta.ws_url).trim(),\n            soapXml,\n        },\n    };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        280,
+        260
+      ],
+      "id": "7acfe3f2-008a-402d-a116-49021b3a3498",
+      "name": "Monta SOAP"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.ws_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "text/xml;charset=UTF-8"
+            },
+            {
+              "name": "SOAPAction",
+              "value": "\"\""
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "text/xml",
+        "body": "={{ $json.soapXml }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        500,
+        260
+      ],
+      "id": "6dea6e6b-f7a6-46b3-8f75-420c0e4e4075",
+      "name": "WS Exporta Dados",
+      "onError": "continueRegularOutput",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Lê a resposta do Exporta Dados (modo: uma vez por item).\n// Monta SOAP é trocado pelo nome do node \"Monta SOAP\" da etapa.\n// O retorno pode vir em json, xml ou csv, conforme o tipoSaida do ED.\nconst meta = $('Monta SOAP').item.json;\nconst base = {\n    unidade_id: meta.unidade_id,\n    etapa: meta.etapa,\n    chave_funcionario: meta.chave_funcionario ?? null,\n    codigo_empresa: meta.codigo_empresa ?? null,\n};\nconst falhou = (erro) => ({ json: { ...base, ok: false, erro, dados: [] } });\n\nconst desescapar = (t) => String(t ?? '')\n    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '\"').replace(/&apos;/g, \"'\")\n    .replace(/&#(\\d+);/g, (_, n) => String.fromCharCode(Number(n)))\n    .replace(/&amp;/g, '&');\nconst tag = (xml, nome) => {\n    const m = xml.match(new RegExp(`<(?:[\\\\w-]+:)?${nome}>([\\\\s\\\\S]*?)</(?:[\\\\w-]+:)?${nome}>`));\n    if (!m) return null;\n    const cdata = m[1].match(/^<!\\[CDATA\\[([\\s\\S]*)\\]\\]>$/);\n    return cdata ? cdata[1] : desescapar(m[1]);\n};\n\n// XML: cada elemento que só tem campos simples é um registro.\nfunction registrosXml(xml) {\n    const limpo = xml.replace(/<\\?xml[^>]*\\?>/g, '').replace(/<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>/g, (_, t) => t.replace(/</g, '&lt;'));\n    const registros = [];\n    const reRegistro = /<([\\w.-]+)>((?:\\s*<([\\w.-]+)(?:\\s*\\/>|>[^<]*<\\/\\3>))+)\\s*<\\/\\1>/g;\n    let m;\n    while ((m = reRegistro.exec(limpo))) {\n        const registro = {};\n        const reCampo = /<([\\w.-]+)(?:\\s*\\/>|>([^<]*)<\\/\\1>)/g;\n        let c;\n        while ((c = reCampo.exec(m[2]))) registro[c[1]] = desescapar(c[2] ?? '').trim();\n        registros.push(registro);\n    }\n    return registros;\n}\n\n// CSV: primeira linha é o cabeçalho; separador \";\" ou \",\".\nfunction registrosCsv(texto) {\n    const linhas = texto.split(/\\r?\\n/).filter((l) => l.trim());\n    if (linhas.length < 2) return [];\n    const sep = (linhas[0].match(/;/g) || []).length >= (linhas[0].match(/,/g) || []).length ? ';' : ',';\n    const limpar = (v) => String(v ?? '').replace(/^\"|\"$/g, '').trim();\n    const cabecalho = linhas[0].split(sep).map(limpar);\n    return linhas.slice(1).map((linha) => {\n        const valores = linha.split(sep);\n        return Object.fromEntries(cabecalho.map((h, i) => [h, limpar(valores[i])]));\n    });\n}\n\nif (meta.erro_config) return falhou(meta.erro_config);\nif ($json.error) {\n    const e = $json.error;\n    return falhou(String(e.message ?? e.description ?? JSON.stringify(e)));\n}\n\nconst bruto = $json.data ?? $json.body ?? $json;\nif (typeof bruto !== 'string') {\n    return falhou('Resposta do HTTP em formato inesperado: deixe o \"Response Format\" do node HTTP no padrão');\n}\nconst xml = bruto;\n\nconst falhaSoap = tag(xml, 'faultstring');\nif (falhaSoap) return falhou(falhaSoap);\nif (String(tag(xml, 'erro') ?? '').trim() === 'true') return falhou(tag(xml, 'mensagemErro') || 'Erro no Exporta Dados');\n\nconst retorno = (tag(xml, 'retorno') ?? '').trim();\nif (!retorno) return { json: { ...base, ok: true, dados: [] } };\n\ntry {\n    let dados;\n    if (retorno.startsWith('[') || retorno.startsWith('{')) dados = JSON.parse(retorno);\n    else if (retorno.startsWith('<')) dados = registrosXml(retorno);\n    else dados = registrosCsv(retorno);\n    return { json: { ...base, ok: true, dados: Array.isArray(dados) ? dados : [dados] } };\n} catch (e) {\n    return falhou(`Resposta inválida do SOC: ${e.message}`);\n}\n",
+        "mode": "runOnceForEachItem"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        260
+      ],
+      "id": "08573966-9dd9-4321-9e66-39775d5314f2",
+      "name": "Interpreta resposta"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Consultas que dependem do ED1:\n//  - Pedido de Exame: uma por empresa com agendado (o parâmetro \"empresa\" é o\n//    código da empresa cliente, não o da principal); traz o sequencial da ficha;\n//  - ED2 (agendamentos futuros do funcionário): uma por funcionário com\n//    agendamento em data futura que ainda não tem horário no banco.\nconst MAX_CONSULTAS_PEDIDO = 200;\nconst MAX_CONSULTAS_ED2 = 300;\nconst DIAS_PEDIDO_ATRAS = 1;\n// Pedido de Exame: faixa de códigos de funcionário (todos os funcionários da empresa).\nconst FUNCIONARIO_INICIO = '1';\nconst FUNCIONARIO_FIM = '9999';\n\nconst isoDeBr = (txt) => { const m = String(txt || '').trim().match(/^(\\d{2})\\/(\\d{2})\\/(\\d{4})/); return m ? `${m[3]}-${m[2]}-${m[1]}` : null; };\nconst paraData = (iso) => { const [a, m, d] = iso.split('-').map(Number); return new Date(Date.UTC(a, m - 1, d)); };\nconst somarDias = (iso, n) => { const d = paraData(iso); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };\nconst br = (iso) => { const [a, m, d] = iso.split('-'); return `${d}/${m}/${a}`; };\nfunction campo(obj, ...nomes) {\n    const mapa = {};\n    for (const k of Object.keys(obj || {})) mapa[k.replace(/\\s+/g, '').toUpperCase()] = obj[k];\n    for (const n of nomes) {\n        const v = mapa[n.replace(/\\s+/g, '').toUpperCase()];\n        if (v !== undefined && v !== null && String(v).trim() !== '') return String(v).trim();\n    }\n    return null;\n}\n\nconst resultados = $input.all().map((i) => i.json);\nconst integracoes = $('Integração SOC').all().map((i) => i.json);\nconst exportaDados = $('Exporta Dados').all().map((i) => i.json).filter((e) => e && e.unidade_id && e.ativo !== false);\nconst conhecidos = $('Agendamentos conhecidos').all().map((i) => i.json).filter((a) => a && a.unidade_id && a.horario);\nconst comHorario = new Set(conhecidos.map((a) => `${a.unidade_id}|${a.data}|${a.codigo_empresa}|${a.codigo_funcionario}`));\n\nconst consultaInicial = $('Monta consultas iniciais').first().json;\nconst hoje = consultaInicial.data_inicio;\nconst fim = consultaInicial.data_fim;\n\nconst pedidos = [];\nconst ed2s = [];\nfor (const r of resultados.filter((x) => x.etapa === 'ED1' && x.ok)) {\n    const u = integracoes.find((x) => x.unidade_id === r.unidade_id);\n    if (!u) continue;\n    const comum = {\n        unidade_id: r.unidade_id,\n        empresa_principal: u.empresa_principal,\n        ws_url: u.ws_url,\n        ws_username: u.ws_username,\n        ws_senha: u.ws_senha,\n        ws_security: u.ws_security,\n    };\n    const edPedido = exportaDados.find((e) => e.unidade_id === r.unidade_id && e.identificador === 'pedido_exame');\n    const ed2 = exportaDados.find((e) => e.unidade_id === r.unidade_id && e.identificador === 'agendamentos_funcionario');\n\n    const empresas = new Set();\n    const funcionarios = new Set();\n    for (const linha of r.dados) {\n        const data = isoDeBr(campo(linha, 'DATACOMPROMISSO'));\n        const empresa = campo(linha, 'CODIGOEMPRESA');\n        const funcionario = campo(linha, 'CODIGOFUNCIONARIO');\n        if (!data || !empresa || !funcionario) continue;\n\n        // Pedido de Exame: uma consulta por empresa.\n        if (edPedido && hoje && fim && !empresas.has(empresa) && pedidos.length < MAX_CONSULTAS_PEDIDO) {\n            empresas.add(empresa);\n            pedidos.push({\n                json: {\n                    ...comum,\n                    etapa: 'PEDIDO',\n                    chave_funcionario: null,\n                    codigo_empresa: empresa,\n                    ed_codigo: edPedido.codigo,\n                    ed_chave: edPedido.chave,\n                    // Só estes parâmetros (os demais, mesmo vazios, fazem o SOC não devolver nada).\n                    parametros: {\n                        empresa,\n                        funcionarioInicio: FUNCIONARIO_INICIO,\n                        funcionarioFim: FUNCIONARIO_FIM,\n                        paramData: '1',\n                        dataInicio: br(somarDias(hoje, -DIAS_PEDIDO_ATRAS)),\n                        dataFim: br(fim),\n                    },\n                },\n            });\n        }\n\n        // ED2: só datas futuras e sem horário no banco; uma consulta por funcionário.\n        if (!ed2 || !hoje || data <= hoje) continue;\n        if (comHorario.has(`${r.unidade_id}|${data}|${empresa}|${funcionario}`)) continue;\n        const chave = `${empresa}|${funcionario}`;\n        if (funcionarios.has(chave) || ed2s.length >= MAX_CONSULTAS_ED2) continue;\n        funcionarios.add(chave);\n        ed2s.push({\n            json: {\n                ...comum,\n                etapa: 'ED2',\n                chave_funcionario: chave,\n                codigo_empresa: empresa,\n                ed_codigo: ed2.codigo,\n                ed_chave: ed2.chave,\n                parametros: {\n                    empresaTrabalho: empresa,\n                    codigoFuncionario: funcionario,\n                    matriculaFuncionario: '',\n                    tipoBuscaFuncionario: '1',\n                },\n            },\n        });\n    }\n}\n\nconst saida = [...pedidos, ...ed2s];\nreturn saida.length ? saida : [{ json: { sem_consultas: true } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -160,
+        -120
+      ],
+      "id": "d021d52a-baf6-426b-a6cb-f78905d23d08",
+      "name": "Monta consultas por empresa"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "12a0de3b-919b-4289-b208-921c4f7a2770",
+              "leftValue": "={{ $json.sem_consultas === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        60,
+        -120
+      ],
+      "id": "5bce4479-f6fc-494a-98c8-ea7c89b012f3",
+      "name": "Há consultas por empresa?"
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        280,
+        -200
+      ],
+      "id": "33adb608-1dca-44ae-bc8e-1eed197d1ebf",
+      "name": "Loop por empresa"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Dados do WS-Security, gerados logo antes de cada chamada (o timestamp vale 1 minuto).\n// PasswordDigest = Base64(SHA1(nonce + created + chave de acesso)); o SHA1 é feito\n// no node Crypto a seguir, a partir do binário digestInput.\nreturn $input.all().map((item) => {\n    const j = item.json;\n\n    const nonceBytes = Buffer.from(Array.from({ length: 16 }, () => Math.floor(Math.random() * 256)));\n    const agora = new Date();\n    const tokenCreated = agora.toISOString();\n    const timestampCreated = tokenCreated.replace(/\\.\\d{3}Z$/, 'Z');\n    const expires = new Date(agora.getTime() + 60000).toISOString().replace(/\\.\\d{3}Z$/, 'Z');\n    const wsId = Math.random().toString(36).substring(2, 18).toUpperCase();\n\n    const digestInput = Buffer.concat([\n        nonceBytes,\n        Buffer.from(tokenCreated, 'utf8'),\n        Buffer.from(String(j.ws_senha ?? '').trim(), 'utf8'),\n    ]);\n\n    return {\n        json: {\n            ...j,\n            nonce: nonceBytes.toString('base64'),\n            tokenCreated,\n            timestampCreated,\n            expires,\n            wsId,\n        },\n        binary: {\n            digestInput: {\n                data: digestInput.toString('base64'),\n                mimeType: 'application/octet-stream',\n                fileName: 'digest-input.bin',\n            },\n        },\n    };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        -380
+      ],
+      "id": "75ae2875-441e-4f22-a148-5f2f602b513c",
+      "name": "Prepara segurança por empresa"
+    },
+    {
+      "parameters": {
+        "binaryData": true,
+        "binaryPropertyName": "digestInput",
+        "type": "SHA1",
+        "encoding": "base64"
+      },
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [
+        720,
+        -380
+      ],
+      "id": "9dda8387-f6f4-450a-a8ea-920dfd063ba0",
+      "name": "Crypto por empresa"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Envelope SOAP do Exporta Dados com o cabeçalho WS-Security.\n// $json.data = PasswordDigest calculado pelo node Crypto.\n// Segredos (chave de acesso e chave do ED) não seguem para os próximos nodes.\nconst escaparXml = (t) => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\n\nreturn $input.all().map((item) => {\n    const {\n        ws_senha, ed_chave, nonce, tokenCreated, timestampCreated, expires, wsId, data: passwordDigest,\n        ...meta\n    } = item.json;\n\n    let erro_config = null;\n    if (!meta.ws_url) erro_config = 'URL do web service não informada em Integrações';\n    else if (!meta.ed_codigo || !ed_chave) erro_config = 'Exporta Dados sem código ou chave em Integrações';\n    else if (meta.ws_security !== false && (!meta.ws_username || !ws_senha)) erro_config = 'Informe o username e a chave de acesso em Integrações';\n\n    const cabecalho = meta.ws_security === false\n        ? '<soapenv:Header/>'\n        : '<soapenv:Header>'\n            + '<wsse:Security soapenv:mustUnderstand=\"1\" xmlns:wsse=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd\" xmlns:wsu=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd\">'\n            + `<wsu:Timestamp wsu:Id=\"TS-${wsId}\"><wsu:Created>${timestampCreated}</wsu:Created><wsu:Expires>${expires}</wsu:Expires></wsu:Timestamp>`\n            + `<wsse:UsernameToken wsu:Id=\"UsernameToken-${wsId}\">`\n            + `<wsse:Username>${escaparXml(String(meta.ws_username ?? '').trim())}</wsse:Username>`\n            + `<wsse:Password Type=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordDigest\">${passwordDigest}</wsse:Password>`\n            + `<wsse:Nonce EncodingType=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-soap-message-security-1.0#Base64Binary\">${nonce}</wsse:Nonce>`\n            + `<wsu:Created>${tokenCreated}</wsu:Created>`\n            + '</wsse:UsernameToken></wsse:Security></soapenv:Header>';\n\n    const parametros = JSON.stringify({\n        empresa: String(meta.empresa_principal ?? ''),\n        codigo: String(meta.ed_codigo ?? '').trim(),\n        chave: String(ed_chave ?? '').trim(),\n        tipoSaida: 'json',\n        ...(meta.parametros || {}),\n    });\n\n    const soapXml = '<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:ser=\"http://services.soc.age.com/\">'\n        + cabecalho\n        + '<soapenv:Body><ser:exportaDadosWs><arg0>'\n        + `<parametros>${escaparXml(parametros)}</parametros>`\n        + '</arg0></ser:exportaDadosWs></soapenv:Body></soapenv:Envelope>';\n\n    return {\n        json: {\n            ...meta,\n            erro_config,\n            // Com erro de configuração, a URL vazia faz o HTTP falhar e a leitura registra o motivo.\n            ws_url: erro_config ? '' : String(meta.ws_url).trim(),\n            soapXml,\n        },\n    };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        940,
+        -380
+      ],
+      "id": "2990ca22-bce6-4c03-86c9-9e6be386648b",
+      "name": "Monta SOAP por empresa"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.ws_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "text/xml;charset=UTF-8"
+            },
+            {
+              "name": "SOAPAction",
+              "value": "\"\""
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "text/xml",
+        "body": "={{ $json.soapXml }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1160,
+        -380
+      ],
+      "id": "d60eb077-2d81-4a28-938d-e99251ffa804",
+      "name": "WS Exporta Dados por empresa",
+      "onError": "continueRegularOutput",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Lê a resposta do Exporta Dados (modo: uma vez por item).\n// Monta SOAP por empresa é trocado pelo nome do node \"Monta SOAP\" da etapa.\n// O retorno pode vir em json, xml ou csv, conforme o tipoSaida do ED.\nconst meta = $('Monta SOAP por empresa').item.json;\nconst base = {\n    unidade_id: meta.unidade_id,\n    etapa: meta.etapa,\n    chave_funcionario: meta.chave_funcionario ?? null,\n    codigo_empresa: meta.codigo_empresa ?? null,\n};\nconst falhou = (erro) => ({ json: { ...base, ok: false, erro, dados: [] } });\n\nconst desescapar = (t) => String(t ?? '')\n    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '\"').replace(/&apos;/g, \"'\")\n    .replace(/&#(\\d+);/g, (_, n) => String.fromCharCode(Number(n)))\n    .replace(/&amp;/g, '&');\nconst tag = (xml, nome) => {\n    const m = xml.match(new RegExp(`<(?:[\\\\w-]+:)?${nome}>([\\\\s\\\\S]*?)</(?:[\\\\w-]+:)?${nome}>`));\n    if (!m) return null;\n    const cdata = m[1].match(/^<!\\[CDATA\\[([\\s\\S]*)\\]\\]>$/);\n    return cdata ? cdata[1] : desescapar(m[1]);\n};\n\n// XML: cada elemento que só tem campos simples é um registro.\nfunction registrosXml(xml) {\n    const limpo = xml.replace(/<\\?xml[^>]*\\?>/g, '').replace(/<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>/g, (_, t) => t.replace(/</g, '&lt;'));\n    const registros = [];\n    const reRegistro = /<([\\w.-]+)>((?:\\s*<([\\w.-]+)(?:\\s*\\/>|>[^<]*<\\/\\3>))+)\\s*<\\/\\1>/g;\n    let m;\n    while ((m = reRegistro.exec(limpo))) {\n        const registro = {};\n        const reCampo = /<([\\w.-]+)(?:\\s*\\/>|>([^<]*)<\\/\\1>)/g;\n        let c;\n        while ((c = reCampo.exec(m[2]))) registro[c[1]] = desescapar(c[2] ?? '').trim();\n        registros.push(registro);\n    }\n    return registros;\n}\n\n// CSV: primeira linha é o cabeçalho; separador \";\" ou \",\".\nfunction registrosCsv(texto) {\n    const linhas = texto.split(/\\r?\\n/).filter((l) => l.trim());\n    if (linhas.length < 2) return [];\n    const sep = (linhas[0].match(/;/g) || []).length >= (linhas[0].match(/,/g) || []).length ? ';' : ',';\n    const limpar = (v) => String(v ?? '').replace(/^\"|\"$/g, '').trim();\n    const cabecalho = linhas[0].split(sep).map(limpar);\n    return linhas.slice(1).map((linha) => {\n        const valores = linha.split(sep);\n        return Object.fromEntries(cabecalho.map((h, i) => [h, limpar(valores[i])]));\n    });\n}\n\nif (meta.erro_config) return falhou(meta.erro_config);\nif ($json.error) {\n    const e = $json.error;\n    return falhou(String(e.message ?? e.description ?? JSON.stringify(e)));\n}\n\nconst bruto = $json.data ?? $json.body ?? $json;\nif (typeof bruto !== 'string') {\n    return falhou('Resposta do HTTP em formato inesperado: deixe o \"Response Format\" do node HTTP no padrão');\n}\nconst xml = bruto;\n\nconst falhaSoap = tag(xml, 'faultstring');\nif (falhaSoap) return falhou(falhaSoap);\nif (String(tag(xml, 'erro') ?? '').trim() === 'true') return falhou(tag(xml, 'mensagemErro') || 'Erro no Exporta Dados');\n\nconst retorno = (tag(xml, 'retorno') ?? '').trim();\nif (!retorno) return { json: { ...base, ok: true, dados: [] } };\n\ntry {\n    let dados;\n    if (retorno.startsWith('[') || retorno.startsWith('{')) dados = JSON.parse(retorno);\n    else if (retorno.startsWith('<')) dados = registrosXml(retorno);\n    else dados = registrosCsv(retorno);\n    return { json: { ...base, ok: true, dados: Array.isArray(dados) ? dados : [dados] } };\n} catch (e) {\n    return falhou(`Resposta inválida do SOC: ${e.message}`);\n}\n",
+        "mode": "runOnceForEachItem"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1380,
+        -380
+      ],
+      "id": "140deb02-be63-4322-9076-e91f0bcdfebb",
+      "name": "Interpreta resposta por empresa"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Junta ED1, Pedido de Exame e ED2 e monta uma linha por unidade para\n// agendamentos_sincronizacoes (o trigger do banco grava os agendamentos).\nconst isoDeBr = (txt) => { const m = String(txt || '').trim().match(/^(\\d{2})\\/(\\d{2})\\/(\\d{4})/); return m ? `${m[3]}-${m[2]}-${m[1]}` : null; };\nconst hora = (txt) => { const m = String(txt || '').match(/(\\d{1,2}):(\\d{2})/); return m ? `${m[1].padStart(2, '0')}:${m[2]}` : null; };\nfunction campo(obj, ...nomes) {\n    const mapa = {};\n    for (const k of Object.keys(obj || {})) mapa[k.replace(/\\s+/g, '').toUpperCase()] = obj[k];\n    for (const n of nomes) {\n        const v = mapa[n.replace(/\\s+/g, '').toUpperCase()];\n        if (v !== undefined && v !== null && String(v).trim() !== '') return String(v).trim();\n    }\n    return null;\n}\n\nconst consultas = $('Monta consultas iniciais').all().map((i) => i.json);\nconst periodo = consultas.find((c) => c.data_inicio) || {};\nconst iniciais = consultas.some((c) => c.sem_consultas) ? [] : $('Loop consultas').all(0).map((i) => i.json);\nlet porEmpresa = [];\ntry {\n    porEmpresa = $('Loop por empresa').all(0).map((i) => i.json).filter((r) => r.etapa);\n} catch (e) {\n    porEmpresa = []; // nenhuma consulta por empresa nesta execução\n}\nconst respostasEd2 = porEmpresa.filter((r) => r.etapa === 'ED2');\nconst respostasPedido = porEmpresa.filter((r) => r.etapa === 'PEDIDO');\n\nconst integracoes = $('Integração SOC').all().map((i) => i.json).filter((u) => u && u.unidade_id && u.codigo_usuario_agenda);\nconst saida = [];\n\nfor (const u of integracoes) {\n    const doUnidade = iniciais.filter((r) => r.unidade_id === u.unidade_id);\n    const ed1 = doUnidade.find((r) => r.etapa === 'ED1');\n    const pedidos = respostasPedido.filter((r) => r.unidade_id === u.unidade_id);\n    const erros = [];\n    for (const p of pedidos.filter((x) => !x.ok)) erros.push({ etapa: 'Pedido de Exame', empresa: p.codigo_empresa, erro: p.erro });\n\n    // Sem ED1 não grava nada (evita marcar todos como removidos).\n    if (!ed1 || !ed1.ok) {\n        erros.push({ etapa: 'ED1 agendados_agenda', erro: ed1 ? ed1.erro : 'Exporta Dados agendados_agenda não configurado em Integrações' });\n        saida.push({ json: { unidade_id: u.unidade_id, data_inicio: periodo.data_inicio ?? null, data_fim: periodo.data_fim ?? null, itens: null, resumo: null, erros, situacao: 'falha_consulta' } });\n        continue;\n    }\n\n    // Sequencial da ficha: a da mesma data do agendamento; senão, a mais recente até essa data.\n    const fichas = new Map();\n    for (const p of pedidos.filter((x) => x.ok).flatMap((x) => x.dados)) {\n        const seq = campo(p, 'SEQUENCIAFICHA');\n        if (!seq) continue;\n        const chave = `${campo(p, 'CODIGOEMPRESA')}|${campo(p, 'CODIGOFUNCIONARIO')}`;\n        const lista = fichas.get(chave) || [];\n        if (!lista.some((f) => f.seq === seq)) lista.push({ seq, data: isoDeBr(campo(p, 'DATAFICHA', 'DATACRIACAOPEDIDOEXAMES')) });\n        fichas.set(chave, lista);\n    }\n    const fichaDo = (a) => {\n        const lista = fichas.get(`${a.codigo_empresa}|${a.codigo_funcionario}`) || [];\n        const mesmaData = lista.find((f) => f.data === a.data);\n        if (mesmaData) return mesmaData.seq;\n        const anteriores = lista.filter((f) => f.data && f.data <= a.data).sort((x, y) => y.data.localeCompare(x.data));\n        return anteriores[0]?.seq ?? null;\n    };\n\n    const ed2PorFuncionario = new Map(\n        respostasEd2.filter((r) => r.unidade_id === u.unidade_id).map((r) => [r.chave_funcionario, r])\n    );\n    for (const r of ed2PorFuncionario.values()) {\n        if (!r.ok) erros.push({ etapa: 'ED2 agendamentos_funcionario', funcionario: r.chave_funcionario, erro: r.erro });\n    }\n\n    const itens = [];\n    for (const linha of ed1.dados) {\n        const data = isoDeBr(campo(linha, 'DATACOMPROMISSO'));\n        const codigoEmpresa = campo(linha, 'CODIGOEMPRESA');\n        const codigoFuncionario = campo(linha, 'CODIGOFUNCIONARIO');\n        if (!data || !codigoEmpresa || !codigoFuncionario) continue;\n\n        const a = {\n            data,\n            horario: hora(campo(linha, 'DATACOMPROMISSO')),\n            codigo_agendamento: null,\n            codigo_usuario_agenda: campo(linha, 'CODIGOUSUARIOAGENDA'),\n            codigo_empresa: codigoEmpresa,\n            nome_empresa: campo(linha, 'NOMEEMPRESA'),\n            codigo_funcionario: codigoFuncionario,\n            nome: campo(linha, 'NOMEFUNCIONARIO'),\n            cpf: (campo(linha, 'CPFFUNCIONARIO') || '').replace(/\\D/g, '') || null,\n            tipo_compromisso: Number(campo(linha, 'TIPOCOMPROMISSO')) || null,\n            sequencial_ficha: null,\n            atendido_soc: null,\n        };\n\n        const ed2 = ed2PorFuncionario.get(`${codigoEmpresa}|${codigoFuncionario}`);\n        if (ed2 && ed2.ok) {\n            const doDia = ed2.dados.filter((f) => isoDeBr(campo(f, 'DATA')) === data);\n            const nomeAgenda = campo(linha, 'NOMEAGENDA');\n            const escolhido = doDia.find((f) => nomeAgenda && campo(f, 'AGENDA') === nomeAgenda) || doDia[0];\n            if (escolhido) {\n                a.horario = hora(campo(escolhido, 'HORARIO'));\n                a.codigo_agendamento = campo(escolhido, 'CODIGOAGENDAMENTO', 'CODIGO AGENDAMENTO');\n                const atendido = campo(escolhido, 'ATENDIDO');\n                a.atendido_soc = atendido === null ? null : /^(s|sim|true|1)$/i.test(atendido);\n            }\n        }\n\n        a.sequencial_ficha = fichaDo(a);\n        itens.push(a);\n    }\n\n    saida.push({\n        json: {\n            unidade_id: u.unidade_id,\n            data_inicio: periodo.data_inicio,\n            data_fim: periodo.data_fim,\n            itens,\n            resumo: {\n                agendados: itens.length,\n                consultas_ed2: ed2PorFuncionario.size,\n                com_horario: itens.filter((i) => i.horario).length,\n            },\n            erros: erros.length ? erros : null,\n            situacao: null,\n        },\n    });\n}\n\nreturn saida;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        -60
+      ],
+      "id": "894a740a-fd18-4e94-ba35-0599e0c4dc3c",
+      "name": "Monta sincronização"
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "tableId": "agendamentos_sincronizacoes",
+        "dataToSend": "autoMapInputData"
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        940,
+        -60
+      ],
+      "id": "f164c193-66dd-427c-a231-d6da8dbb6c5e",
+      "name": "Gravar sincronização"
+    }
+  ],
+  "connections": {
+    "Loop consultas": {
+      "main": [
+        [
+          {
+            "node": "Monta consultas por empresa",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepara segurança",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepara segurança": {
+      "main": [
+        [
+          {
+            "node": "Crypto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crypto": {
+      "main": [
+        [
+          {
+            "node": "Monta SOAP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Monta SOAP": {
+      "main": [
+        [
+          {
+            "node": "WS Exporta Dados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WS Exporta Dados": {
+      "main": [
+        [
+          {
+            "node": "Interpreta resposta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Interpreta resposta": {
+      "main": [
+        [
+          {
+            "node": "Loop consultas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop por empresa": {
+      "main": [
+        [
+          {
+            "node": "Monta sincronização",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepara segurança por empresa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepara segurança por empresa": {
+      "main": [
+        [
+          {
+            "node": "Crypto por empresa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crypto por empresa": {
+      "main": [
+        [
+          {
+            "node": "Monta SOAP por empresa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Monta SOAP por empresa": {
+      "main": [
+        [
+          {
+            "node": "WS Exporta Dados por empresa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WS Exporta Dados por empresa": {
+      "main": [
+        [
+          {
+            "node": "Interpreta resposta por empresa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Interpreta resposta por empresa": {
+      "main": [
+        [
+          {
+            "node": "Loop por empresa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agendado (7h, 12h e 17h, seg–sáb)": {
+      "main": [
+        [
+          {
+            "node": "Integração SOC",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Executar manualmente": {
+      "main": [
+        [
+          {
+            "node": "Integração SOC",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Integração SOC": {
+      "main": [
+        [
+          {
+            "node": "Exporta Dados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Exporta Dados": {
+      "main": [
+        [
+          {
+            "node": "Agendamentos conhecidos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agendamentos conhecidos": {
+      "main": [
+        [
+          {
+            "node": "Monta consultas iniciais",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Monta consultas iniciais": {
+      "main": [
+        [
+          {
+            "node": "Loop consultas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Monta consultas por empresa": {
+      "main": [
+        [
+          {
+            "node": "Há consultas por empresa?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Há consultas por empresa?": {
+      "main": [
+        [
+          {
+            "node": "Loop por empresa",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Monta sincronização",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Monta sincronização": {
+      "main": [
+        [
+          {
+            "node": "Gravar sincronização",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Sao_Paulo"
+  },
+  "pinData": {}
+}
